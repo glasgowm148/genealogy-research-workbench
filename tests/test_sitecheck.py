@@ -8,7 +8,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from genealogy.case import CaseStore
 from genealogy.cli import main
+from genealogy.config import ProjectConfig
+from genealogy.site import build_site
 from genealogy.sitecheck import LinkCheckOptions, check_site, pairs_of, ratchet, resolve
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +39,21 @@ class LinkCheckTests(unittest.TestCase):
             self.assertEqual(resolve("//elsewhere.invalid/x", frozenset()), (None, "outside-site"))
             absolute = check_site(root, LinkCheckOptions(host="example.invalid"))
             self.assertEqual(len(absolute["broken"]), 3)
+
+    def test_cli_on_the_fictional_demo_and_baseline_update(self):
+        with tempfile.TemporaryDirectory() as temporary, redirect_stdout(io.StringIO()) as output:
+            site = Path(temporary) / "site"
+            config = ProjectConfig.load(ROOT / "examples/demo/genealogy.toml")
+            build_site(CaseStore(ROOT / "examples/demo/cases").load(config.default_case), config, site)
+            self.assertEqual(main(["--project", str(ROOT / "examples/demo"), "check-links", str(site)]), 0)
+            (site / "index.html").write_text((site / "index.html").read_text() + '<a href="lost.html">x</a>')
+            baseline = Path(temporary) / "baseline.json"
+            self.assertEqual(main(["--project", str(ROOT / "examples/demo"), "check-links", str(site), "--baseline", str(baseline)]), 1)
+            self.assertEqual(main(["--project", str(ROOT / "examples/demo"), "check-links", str(site), "--baseline", str(baseline), "--update-baseline"]), 0)
+            self.assertEqual(json.loads(baseline.read_text())["count"], 1)
+            self.assertEqual(main(["--project", str(ROOT / "examples/demo"), "check-links", str(site), "--baseline", str(baseline)]), 0)
+        self.assertIn("0 broken links", output.getvalue())
+
 
     def test_cli_exit_status_and_baseline_update(self):
         with tempfile.TemporaryDirectory() as temporary, redirect_stdout(io.StringIO()) as output:

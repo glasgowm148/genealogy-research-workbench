@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from .case import ResearchCase, validate_case
-from .models import AccessLevel, LivingStatus, Person, Record, Sensitivity, Source, access_level, is_raw_dna
+from .markup import references
+from .models import AccessLevel, LivingStatus, Person, Record, Sensitivity, Source, Study, access_level, is_raw_dna
 
 
 class PrivacyViolation(ValueError):
@@ -78,6 +79,10 @@ class PrivacyPolicy:
                 "related_ids", "evidence_ids",
             ):
                 values.update(value for value in getattr(record, field, []) if value)
+            if isinstance(record, Study):
+                # A study naming a withheld record in its prose is withheld too.
+                for text in (record.summary, record.rationale, record.body, record.conclusion):
+                    values.update(references(text))
             return values
         # Remove dependent records to a fixed point.  This prevents an otherwise
         # public evidence record from exposing the id of a claim removed because

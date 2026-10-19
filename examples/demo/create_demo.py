@@ -12,7 +12,7 @@ from genealogy.case import CaseStore, ResearchCase
 from genealogy.models import (
     AccessLevel, Claim, ClaimStatus, Citation, Confidence, Event, Evidence,
     Finding, Hypothesis, Name, Person, Place, Relationship, ResearchQuestion,
-    Source, LivingStatus,
+    Source, Study, LivingStatus,
 )
 
 STAMP = "2026-01-01T00:00:00+00:00"
@@ -22,7 +22,7 @@ SURNAMES = ["Alder", "Bell", "Cairn", "Dale", "Ember", "Firth", "Grove", "Hale"]
 def build() -> ResearchCase:
     c = ResearchCase("demo", "The Alderwick Family | Fictional Research Case", "A fully invented four-generation family created to demonstrate people, relationships, places, citations, maps, timelines and research review. Every record is public and every person is deceased.", created_at=STAMP, updated_at=STAMP)
     access = AccessLevel.PUBLIC
-    places = [Place("place:lantern", "Lanternford (fictional)", latitude=55.86, longitude=-4.25, sensitivity=access), Place("place:willow", "Willowmere (fictional)", latitude=55.95, longitude=-3.19, sensitivity=access), Place("place:reed", "Reedhaven (fictional)", latitude=56.12, longitude=-4.76, sensitivity=access)]
+    places = [Place("place:lantern", "Lanternford (fictional)", latitude=55.86, longitude=-4.25, sensitivity=access, precision="settlement"), Place("place:willow", "Willowmere (fictional)", latitude=55.95, longitude=-3.19, sensitivity=access, precision="settlement"), Place("place:reed", "Reedhaven (fictional)", latitude=56.12, longitude=-4.76, sensitivity=access, precision="parish")]
     for p in places: c.add(p)
     source_defs = [
         ("src:register", "The Lanternford Parish Register, 1750–1899 (invented)", "fictional parish register", "folio 14, entry 3"),
@@ -70,7 +70,15 @@ def build() -> ResearchCase:
     c.add(Hypothesis("hypothesis:42", "Person 42 may be the child of Person 41; the supplied family sketch is suggestive but no independent matching entry is represented.",[nodes[40]["id"],nodes[41]["id"]],status="open",confidence=Confidence.POSSIBLE,sensitivity=access))
     c.add(ResearchQuestion("question:parentage", "Can the probable parent link for person 10 be distinguished from another same-named adult?",[nodes[8]["id"],nodes[9]["id"]],priority="high",sensitivity=access))
     c.add(ResearchQuestion("question:household", "Which invented household return best connects the Willowmere branch to Lanternford?",[nodes[10]["id"],nodes[18]["id"]],sensitivity=access))
-    c.add(Finding("finding:overview", "The demo models a 42-person, four-generation Alderwick family across three fictional locations; parentage is mostly documented in the invented evidence model, with two explicitly uncertain links.",[nodes[0]["id"],nodes[41]["id"]],["evidence:parent:5"],status="reviewed",confidence=Confidence.PROBABLE,sensitivity=access))
+    c.add(Finding("finding:overview", "The demo models a 42-person, four-generation Alderwick family across three fictional locations; parentage is mostly documented in the invented evidence model, with two explicitly uncertain links.",[nodes[0]["id"],nodes[41]["id"]],["evidence:parent:5"],status="reviewed",confidence=Confidence.PROBABLE,sensitivity=access,recorded_on="2026-09-14"))
+    c.add(Finding("finding:willowmere-household", "The invented Willowmere household return names Elara Cairn beside Mara Grove, consistent with their recorded marriage; it does not by itself prove which Cairn household she came from.",[nodes[4]["id"],nodes[12]["id"],"place:willow"],["evidence:parent:5"],status="draft",confidence=Confidence.POSSIBLE,sensitivity=access,recorded_on="2026-10-02"))
+    c.add(Study("study:households", "Two households, one family: Lanternford and Willowmere",
+        summary="How the invented Lanternford register and Willowmere returns connect Ada Alder's children to the Willowmere branch.",
+        rationale="Several children share given names across the two places. This study sets out which records tie each child to Ada Alder and which links remain uncertain.",
+        body="## What the records say\n\nThe invented register names [[person:05]] and her siblings in one household entry. The Willowmere return lists [[person:05|Elara]] with [[person:13]] after 1802.\n\n- **Documented:** the register entry for the four children of [[person:01]].\n- *Probable:* the link for person 10, because a second adult shares the given name.\n\n> Every source in this study is invented for demonstration.\n\n## Still to check\n\nWhether [[question:household]] can be answered from the household returns alone.",
+        conclusion="The Lanternford children are documented as Ada Alder's; the Willowmere household is a probable continuation of Elara Cairn's line, pending [[finding:willowmere-household]].",
+        related_ids=[nodes[0]["id"],nodes[4]["id"],nodes[12]["id"],"place:lantern","place:willow","src:register","src:returns","finding:overview","finding:willowmere-household","question:household"],
+        status="draft",updated_on="2026-10-02",sensitivity=access))
     c.created_at=c.updated_at=STAMP
     return c
 

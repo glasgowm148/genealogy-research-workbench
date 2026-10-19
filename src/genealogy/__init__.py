@@ -12,7 +12,7 @@ from .graph import Generation, RelationshipGraph
 from .models import (
     AccessLevel, Citation, Claim, ClaimStatus, Evidence, Event, ExternalIdentifier, Finding,
     Hypothesis, ImportProvenance, LivingStatus, Name, Person, Place, Relationship,
-    ResearchQuestion, Source,
+    ResearchQuestion, Source, Study,
 )
 from .privacy import PrivacyPolicy, PrivacyViolation
 from .research import EvidenceCompleteness, ResearchService, SearchResult, UnresolvedWork
@@ -24,6 +24,6 @@ __all__ = [
     "Person", "Place", "PrivacyPolicy", "project_for_public_export",
     "PrivacyViolation", "ProjectConfig", "read_case_artifact_bundle", "Relationship",
     "RelationshipGraph", "ResearchCase",
-    "ResearchQuestion", "safe_output_path", "Source", "write_case_artifact_bundle", "write_public_export",
+    "ResearchQuestion", "safe_output_path", "Source", "Study", "write_case_artifact_bundle", "write_public_export",
     "EvidenceCompleteness", "ResearchService", "SearchResult", "UnresolvedWork",
 ]

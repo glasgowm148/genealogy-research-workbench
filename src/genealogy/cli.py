@@ -240,6 +240,7 @@ def parser() -> argparse.ArgumentParser:
     add_finding.add_argument("--related", action="append", default=[])
     add_finding.add_argument("--evidence", action="append", default=[])
     add_finding.add_argument("--status", default="draft")
+    add_finding.add_argument("--recorded-on", help="ISO date the finding was reached (YYYY, YYYY-MM or YYYY-MM-DD); dates the findings log")
     add_finding.add_argument("--confidence", choices=tuple(Confidence), default=Confidence.UNKNOWN)
     add_finding.add_argument(
         "--sensitivity",
@@ -329,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
                 status=args.status,
                 confidence=Confidence(args.confidence),
                 sensitivity=AccessLevel(args.sensitivity),
+                recorded_on=args.recorded_on,
             ))
             print(f"Recorded finding {args.finding_id} in case {case.id}.")
             return 0

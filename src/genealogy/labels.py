@@ -28,6 +28,7 @@ PEDIGREE = {
 RESEARCH_STATUS = {
     "open": "Open", "draft": "Draft", "closed": "Closed", "resolved": "Resolved", "final": "Final",
     "abandoned": "Set aside", "superseded": "Superseded", "confirmed": "Confirmed", "rejected": "Rejected",
+    "reviewed": "Reviewed", "published": "Published", "in progress": "In progress", "in-progress": "In progress",
 }
 
 
@@ -76,12 +77,30 @@ def status_label(value: Any) -> str:
     return CLAIM_STATUS.get(key, (RESEARCH_STATUS.get(key, str(value or "")), ""))[0]
 
 
+RESEARCH_MEANINGS = {
+    "open": "Still being researched; no answer has been reached.",
+    "draft": "A provisional conclusion, recorded before review.",
+    "reviewed": "A conclusion that has been checked against its evidence.",
+    "final": "A settled conclusion, revisited only if new evidence appears.",
+    "resolved": "The question has been answered; see the linked finding or study.",
+    "closed": "No longer pursued; the reason is recorded with the question.",
+}
+
+
+def status_anchor(value: Any) -> str:
+    """The guide entry for a stored claim or research status."""
+    key = str(value or "").casefold()
+    return f"status-{key}" if key in CLAIM_STATUS or key in RESEARCH_MEANINGS else "research-status"
+
+
 def guide_entries() -> list[tuple[str, str, str, str]]:
     """(anchor, label, meaning, group) rows for a reader's evidence guide."""
     rows = [(f"confidence-{key}", label, meaning, "Confidence") for key, (label, meaning) in CONFIDENCE.items()]
     rows.append(("confidence-tree-link", "Unassessed tree link", "A relationship copied from a family tree or export. It is a research lead until records are assessed.", "Confidence"))
     rows.append(("tree-marked", "Tree-marked …", "The supplying tree's own mark, such as uncertain or confident. It is shown as that tree's statement, never as this project's assessment.", "Confidence"))
     rows += [(f"status-{key}", label, meaning, "Claim status") for key, (label, meaning) in CLAIM_STATUS.items()]
+    rows += [(f"status-{key}", RESEARCH_STATUS[key], meaning, "Research status") for key, meaning in RESEARCH_MEANINGS.items()]
+    rows.append(("research-status", "Other statuses", "A project's own wording for the state of a question, hypothesis, finding or study, printed as recorded.", "Research status"))
     rows.append(("pedigree", "Step, adoptive, foster, non-biological", "The supplied nature of a parent link. A link without one is a recorded parent whose nature was not stated.", "Relationship roles"))
     rows.append(("alternatives", "Competing parent records", "More recorded parents than one person can have by birth. Each is kept with its own label until research resolves it.", "Relationship roles"))
     return rows

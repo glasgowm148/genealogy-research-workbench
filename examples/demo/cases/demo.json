@@ -1,7 +1,8 @@
 {
   "created_at": "2026-01-01T00:00:00+00:00",
   "finding_ids": [
-    "finding:overview"
+    "finding:overview",
+    "finding:willowmere-household"
   ],
   "id": "demo",
   "question_ids": [
@@ -1460,12 +1461,29 @@
           "evidence:parent:5"
         ],
         "id": "finding:overview",
+        "recorded_on": "2026-09-14",
         "related_ids": [
           "person:01",
           "person:42"
         ],
         "sensitivity": "public",
         "status": "reviewed"
+      },
+      {
+        "conclusion": "The invented Willowmere household return names Elara Cairn beside Mara Grove, consistent with their recorded marriage; it does not by itself prove which Cairn household she came from.",
+        "confidence": "possible",
+        "evidence_ids": [
+          "evidence:parent:5"
+        ],
+        "id": "finding:willowmere-household",
+        "recorded_on": "2026-10-02",
+        "related_ids": [
+          "person:05",
+          "person:13",
+          "place:willow"
+        ],
+        "sensitivity": "public",
+        "status": "draft"
       }
     ],
     "Hypothesis": [
@@ -2500,6 +2518,7 @@
         "longitude": -4.25,
         "name": "Lanternford (fictional)",
         "parent_id": null,
+        "precision": "settlement",
         "sensitivity": "public"
       },
       {
@@ -2509,6 +2528,7 @@
         "longitude": -3.19,
         "name": "Willowmere (fictional)",
         "parent_id": null,
+        "precision": "settlement",
         "sensitivity": "public"
       },
       {
@@ -2518,6 +2538,7 @@
         "longitude": -4.76,
         "name": "Reedhaven (fictional)",
         "parent_id": null,
+        "precision": "parish",
         "sensitivity": "public"
       }
     ],
@@ -3106,6 +3127,31 @@
         "source_type": "fictional letter collection",
         "title": "Alderwick Family Letters (invented manuscript collection)",
         "url": null
+      }
+    ],
+    "Study": [
+      {
+        "body": "## What the records say\n\nThe invented register names [[person:05]] and her siblings in one household entry. The Willowmere return lists [[person:05|Elara]] with [[person:13]] after 1802.\n\n- **Documented:** the register entry for the four children of [[person:01]].\n- *Probable:* the link for person 10, because a second adult shares the given name.\n\n> Every source in this study is invented for demonstration.\n\n## Still to check\n\nWhether [[question:household]] can be answered from the household returns alone.",
+        "conclusion": "The Lanternford children are documented as Ada Alder's; the Willowmere household is a probable continuation of Elara Cairn's line, pending [[finding:willowmere-household]].",
+        "id": "study:households",
+        "rationale": "Several children share given names across the two places. This study sets out which records tie each child to Ada Alder and which links remain uncertain.",
+        "related_ids": [
+          "person:01",
+          "person:05",
+          "person:13",
+          "place:lantern",
+          "place:willow",
+          "src:register",
+          "src:returns",
+          "finding:overview",
+          "finding:willowmere-household",
+          "question:household"
+        ],
+        "sensitivity": "public",
+        "status": "draft",
+        "summary": "How the invented Lanternford register and Willowmere returns connect Ada Alder's children to the Willowmere branch.",
+        "title": "Two households, one family: Lanternford and Willowmere",
+        "updated_on": "2026-10-02"
       }
     ]
   },

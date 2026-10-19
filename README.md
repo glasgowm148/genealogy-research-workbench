@@ -10,7 +10,7 @@
 
 </div>
 
-Bring your own family tree. Build a site with people pages, an interactive whole tree, family branches, timelines, places, sources, comparisons and connection paths. Keep the underlying research in portable, source-aware records that distinguish an imported assertion from an assessed conclusion.
+Bring your own family tree. Build a site with people pages, an interactive whole tree, family branches, timelines, places, sources, research studies, a findings log, comparisons and connection paths. Keep the underlying research in portable, source-aware records that distinguish an imported assertion from an assessed conclusion.
 
 Run everything on your own computer. The toolkit has **no runtime dependencies**, makes **no network requests during import or builds**, and generates ordinary HTML, CSS, JavaScript and data files. You choose whether and where to publish them.
 
@@ -26,6 +26,10 @@ Run everything on your own computer. The toolkit has **no runtime dependencies**
 <tr>
 <td width="50%" valign="top"><h3>Read a family at a glance</h3><img src="docs/images/dossier.webp" alt="Person dossier with parents, spouse and marriage, children and siblings" width="100%"><p>Each dossier lists parents, partners with their marriages, children and siblings. Step, adoptive and other recorded roles stay visible. When more parents are recorded than one person can have by birth, the dossier flags them as competing parent records.</p></td>
 <td width="50%" valign="top"><h3>Follow lives through time and place</h3><img src="docs/images/places.webp" alt="Offline overview of places using coordinates supplied in the imported data" width="100%"><p>Browse a filterable event timeline and an offline coordinate map. Places without coordinates stay in the place list; the toolkit never guesses their positions.</p></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><h3>Write up what you found</h3><img src="docs/images/study.webp" alt="A research study page with rationale, linked people and a current conclusion" width="100%"><p>Studies set out why a question was investigated, what the records show and the current conclusion. They link to the people and records they concern, and those pages link back. A dated <b>Latest findings</b> log and an Atom feed follow your conclusions over time.</p></td>
+<td width="50%" valign="top"><h3>See the families at a glance</h3><img src="docs/images/branches.webp" alt="Surname groups and connected groups of recorded relatives" width="100%"><p>Surname groups show their recorded years, places and earliest people. Connected groups show who is joined by recorded relationships, with links into the catalogue and the family tree.</p></td>
 </tr>
 <tr>
 <td width="50%" valign="top"><h3>Keep the evidence in view</h3><img src="docs/images/research.webp" alt="Research notebook with claims, citations, assessments, hypotheses and open questions" width="100%"><p>Sources, claims, evidence assessments, hypotheses, questions and findings stay distinct, with outstanding work listed first.</p></td>
@@ -105,8 +109,8 @@ The demo has 42 invented people, four generations, sources, uncertainty, and res
 | From a GEDCOM or OneTree export | With additional research |
 | --- | --- |
 | People, recorded names, supported event fields, and family links | Evidence-based identity and relationship assessments |
-| Search, individual dossiers, whole tree, family focus, and branch cards | Written family studies and researched biographies |
-| Timelines and place lists; maps when coordinates are supplied | Reviewed location coordinates and archive research |
+| Search, individual dossiers, whole tree, family focus, branch cards and surname groups | Written family studies and a dated findings log, once you write them |
+| Timelines and place lists; maps when coordinates are supplied | Reviewed coordinates with their precision, and archive research |
 | Comparison and shortest recorded connection paths | Resolution of namesakes and competing hypotheses |
 | GEDCOM bibliography and citation locators after explicit review | Source transcriptions, images, and record-by-record analysis |
 | Step/adoptive roles and the tree's own uncertainty marks, shown as such | Assessed confidence for each relationship, with its reasoning |
@@ -128,9 +132,10 @@ genealogy --project my-family export csv --output dist/research.csv
 genealogy --project my-family export gedcom --output dist/public-tree.ged
 genealogy --project my-family bundle --output private/research-bundle
 genealogy --project my-family bundle --output private/research-bundle --verify
+genealogy --project my-family check-links
 ```
 
-Typed records can be added with `record add TYPE --input record.json`. Findings can link related records and evidence; [research recipes](docs/research.md) cover citations, confidence, public review, and maintaining a case. A complete research bundle includes protected content and stays **private**, unlike a filtered website or public export.
+Typed records can be added with `record add TYPE --input record.json`. Findings can link related records and evidence and carry the date they were reached. Studies hold the written account. [Research recipes](docs/research.md) cover citations, confidence, studies, place precision, public review and maintaining a case. A complete research bundle includes protected content and stays **private**, unlike a filtered website or public export.
 
 ## A portable project
 

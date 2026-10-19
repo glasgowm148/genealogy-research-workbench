@@ -128,6 +128,9 @@ class Place(Record):
     longitude: float | None = None
     external_ids: list[ExternalIdentifier] = field(default_factory=list)
     sensitivity: Sensitivity = Sensitivity.PUBLIC
+    # How exactly the coordinates locate the place, as supplied or reviewed:
+    # PLACE_PRECISIONS below. None means not stated, never "exact".
+    precision: str | None = None
 
 
 @dataclass(slots=True)
@@ -249,6 +252,29 @@ class Finding(Record):
     status: str = "draft"
     confidence: Confidence = Confidence.UNKNOWN
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    # ISO date (YYYY, YYYY-MM or YYYY-MM-DD) the finding was reached; dates a findings log.
+    recorded_on: str | None = None
+
+
+@dataclass(slots=True)
+class Study(Record):
+    """A written research study: why it was undertaken, the account and its conclusion.
+
+    ``body`` uses a small Markdown subset (headings, paragraphs, lists, emphasis,
+    http(s) links and ``[[record-id|label]]`` references). ``related_ids`` lists
+    the people, places, sources, findings and questions it concerns; a study
+    is published only when every related record is public.
+    """
+
+    title: str
+    summary: str | None = None
+    rationale: str | None = None
+    body: str | None = None
+    conclusion: str | None = None
+    related_ids: list[str] = field(default_factory=list)
+    status: str = "draft"
+    updated_on: str | None = None
+    sensitivity: Sensitivity = Sensitivity.PRIVATE
 
 
 @dataclass(slots=True)
@@ -264,8 +290,9 @@ class ImportProvenance(Record):
 MODEL_TYPES: dict[str, type[Record]] = {
     cls.__name__: cls
     for cls in (Place, Event, Person, Relationship, Source, Citation, Claim,
-                Evidence, Hypothesis, ResearchQuestion, Finding, ImportProvenance)
+                Evidence, Hypothesis, ResearchQuestion, Finding, Study, ImportProvenance)
 }
+PLACE_PRECISIONS = ("exact", "building", "street", "settlement", "parish", "district", "county", "region", "country", "approximate")
 
 
 def record_from_dict(kind: str, data: dict[str, Any]) -> Record:

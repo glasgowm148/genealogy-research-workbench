@@ -85,7 +85,9 @@ class BrowserSiteTests(unittest.TestCase):
         dossier = json.loads((self.root / 'nested' / 'data' / 'routes.json').read_text())
         routes = ['index.html', 'catalogue.html', 'tree.html', 'timeline.html', 'places.html',
                   'sources.html', 'research.html', 'compare.html', 'connections.html', 'evidence.html',
-                  'sitemap.html', next(route for route in dossier if route.startswith('people/'))]
+                  'studies.html', 'findings.html', 'branches.html', 'sitemap.html',
+                  next(route for route in dossier if route.startswith('people/')),
+                  next(route for route in dossier if route.startswith('studies/'))]
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
             for route in routes:
@@ -124,8 +126,17 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertTrue(family.is_visible())
         self.assertGreater(family.locator('a.evidence-badge').count(), 0)
         family.locator('a.evidence-badge').first.click()
-        self.assertIn('evidence.html#', self.page.url)
-        self.assertTrue(self.page.locator('dt:target').is_visible())
+        self.page.wait_for_url('**/evidence.html#*')
+        self.page.locator('dt:target').wait_for(state='visible')
+        self.page.goto((site / 'branches.html').as_uri())
+        self.page.locator('a[href="catalogue.html?surname=Cairn"]').click()
+        self.page.locator('.pagination').wait_for()
+        self.assertEqual('Cairn', self.page.get_by_label('Surname').input_value())
+        self.assertEqual(6, self.page.locator('[data-person-id]:visible').count())
+        self.page.goto((site / 'branches.html').as_uri())
+        self.page.locator('a[href^="tree.html?person="]').first.click()
+        self.page.locator('#tree-output svg').wait_for()
+        self.assertEqual('true', self.page.locator('[data-tree-view="family"]').get_attribute('aria-pressed'))
         self.page.set_viewport_size({'width': 390, 'height': 900})
         self.page.go_back()
         self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 391)

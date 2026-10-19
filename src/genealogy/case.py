@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from .markup import references as prose_references
 from .models import (
     CASE_SCHEMA_VERSION, MODEL_TYPES, Claim, ClaimStatus, Confidence, Evidence,
-    ExternalIdentifier, Finding, ImportProvenance, LivingStatus, Name,
-    Person, Record, ResearchQuestion, access_level, is_raw_dna, record_from_dict,
+    ExternalIdentifier, Finding, ImportProvenance, LivingStatus, Name, PLACE_PRECISIONS,
+    Person, Place, Record, ResearchQuestion, access_level, is_raw_dna, record_from_dict,
 )
 
 
@@ -162,6 +164,7 @@ def validate_case(case: ResearchCase) -> list[str]:
         "Hypothesis": {"related_ids": None, "evidence_ids": "Evidence"},
         "ResearchQuestion": {"related_ids": None},
         "Finding": {"related_ids": None, "evidence_ids": "Evidence"},
+        "Study": {"related_ids": None},
         "ImportProvenance": {"entity_ids": None},
     }
     for kind, records in case.record_sets.items():
@@ -178,6 +181,12 @@ def validate_case(case: ResearchCase) -> list[str]:
                         errors.append(f"{record.id}.{reference_field} references missing record: {reference}")
                     elif reference and expected_kind and id_kinds.get(reference) != expected_kind:
                         errors.append(f"{record.id}.{reference_field} must reference a {expected_kind}: {reference}")
+            if kind == "Study":
+                for text_field in ("summary", "rationale", "body", "conclusion"):
+                    text = getattr(record, text_field, None)
+                    for reference in prose_references(text if isinstance(text, str) else ""):
+                        if reference not in seen:
+                            errors.append(f"{record.id}.{text_field} refers to missing record [[{reference}]]")
             sensitivity = access_level(getattr(record, "sensitivity", None))
             if sensitivity is None:
                 errors.append(f"{record.id} has an invalid sensitivity")
@@ -218,6 +227,17 @@ def validate_case(case: ResearchCase) -> list[str]:
     return errors
 
 
+def _iso_date(value: str) -> bool:
+    match = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", value)
+    if not match:
+        return False
+    try:
+        date(int(match[1]), int(match[2] or 1), int(match[3] or 1))
+    except ValueError:
+        return False
+    return True
+
+
 def _string(value: Any, *, optional: bool = False) -> bool:
     return (optional and value is None) or isinstance(value, str)
 
@@ -255,6 +275,7 @@ def _validate_record_fields(record: Record) -> list[str]:
         "Hypothesis": ("statement", "status"),
         "ResearchQuestion": ("question", "priority", "status"),
         "Finding": ("conclusion", "status"),
+        "Study": ("title", "status"),
         "ImportProvenance": ("adapter",),
     }
     for field_name in string_fields.get(type(record).__name__, ()):
@@ -263,7 +284,8 @@ def _validate_record_fields(record: Record) -> list[str]:
     optional_strings = (
         "parent_id", "date", "place_id", "description", "notes", "repository", "url",
         "access_note", "licence", "locator", "quotation", "transcription", "accessed_on",
-        "rationale", "start_date", "end_date",
+        "rationale", "start_date", "end_date", "summary", "body", "conclusion", "pedigree", "tree_status",
+        "author", "publication",
     )
     for field_name in optional_strings:
         if hasattr(record, field_name) and not _string(getattr(record, field_name), optional=True):
@@ -291,6 +313,12 @@ def _validate_record_fields(record: Record) -> list[str]:
                     errors.append(f"{record.id}.names require a non-empty value")
                 if not isinstance(name.confidence, Confidence):
                     errors.append(f"{record.id}.names require recognised confidence")
+    for field_name in ("recorded_on", "updated_on"):
+        value = getattr(record, field_name, None)
+        if value is not None and not (isinstance(value, str) and _iso_date(value)):
+            errors.append(f"{record.id}.{field_name} must be an ISO date (YYYY, YYYY-MM or YYYY-MM-DD)")
+    if isinstance(record, Place) and record.precision is not None and record.precision not in PLACE_PRECISIONS:
+        errors.append(f"{record.id}.precision must be one of: {', '.join(PLACE_PRECISIONS)}")
     if isinstance(record, ImportProvenance):
         if not isinstance(record.observations, list) or not all(isinstance(item, dict) for item in record.observations):
             errors.append(f"{record.id}.observations must be a list of objects")

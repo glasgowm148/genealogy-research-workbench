@@ -36,6 +36,9 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `places.html` | Place/event list and supplied-coordinate map |
 | `sources.html` | Bibliography and citations |
 | `research.html` | Claims, evidence, hypotheses, questions and findings, outstanding work first |
+| `branches.html` | Surname groups and connected groups of recorded relatives, linked to the catalogue and tree |
+| `studies.html`, `studies/s-<hash>.html` | Written research studies with rationale, conclusion and linked subjects |
+| `findings.html` | Dated log of findings, newest first (`findings.xml` Atom feed when `site.base_url` is set) |
 | `compare.html` | Side-by-side person comparison |
 | `connections.html` | Shortest path through recorded relationships |
 | `evidence.html` | Reader's guide to every confidence, status and relationship label |
@@ -49,6 +52,14 @@ Every page and download is generated from the same privacy-filtered projection, 
 A connection follows stored relationships and their uncertainty; it is not proof of kinship. The coordinate map uses a bundled low-resolution Natural Earth basemap; it is not a street map. Missing coordinates remain missing. Approximate dates retain their supplied text.
 
 All site assets are local and links are relative. Test both desktop and mobile before publication. Core records remain readable without JavaScript, while filtering, graph exploration, comparison and connection tools need it. The interactive pages load one shared `data/site-data.js` script, so they also work when the folder is opened directly from disk (`file://`) and the browser caches the data once for the whole site.
+
+## Check the links before publishing
+
+```sh
+genealogy --project my-family check-links
+```
+
+This checks every internal link, image, script and `#anchor` in `dist/` the way a plain static server resolves them, and exits non-zero when something points at nothing. A link to `page` that exists only as `page.html` is reported, because many hosts do not add the extension. When you add your own hand-written pages, record any known breakage once with `--baseline known-links.json --update-baseline`. From then on only new breakage fails, and later updates only ever remove pairs. The checker is also importable as `genealogy.sitecheck` for projects with their own site builders.
 
 ## Rebuilds
 

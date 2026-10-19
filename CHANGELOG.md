@@ -22,12 +22,19 @@ Website
 - Surname filter and column in the catalogue; outstanding research listed first.
 - Public GEDCOM 5.5.1 download (`data/public-tree.ged`, `export gedcom`), and `sitemap.xml`/canonical links when `site.base_url` is set.
 
+Research and website (continued)
+- `Study` records: a written study with summary, rationale, a small escaped Markdown body with `[[record]]` references, a conclusion and linked subjects. Each study gets a page and an index entry, and dossiers link to it. A study is published only when every record it lists or references is public.
+- `Finding.recorded_on` and `finding add --recorded-on` date findings. A **Latest findings** log lists them newest first, with an Atom feed when `site.base_url` is set.
+- **Families & branches** page: surname groups with years, places and earliest people, plus connected groups of recorded relatives. The catalogue accepts `?surname=`/`?q=` and the tree accepts `?person=`.
+- `Place.precision` (exact … country, or approximate). Broad locations are drawn as dashed rings and labelled on the map and place list.
+- `genealogy check-links` and `genealogy.sitecheck`: a static-site link and anchor checker with a ratcheting baseline, extracted from the Glasgow project's release gate.
+
 Fixes
 - The fictional demo stored parent links from parent to child, contrary to the documented child → parent direction, so its tree drew descendants as ancestors. It is regenerated.
 - Browser tests no longer assume a macOS Chrome path (`GENEALOGY_BROWSER_EXECUTABLE`).
 - `genealogy.dates` adds `year_of` and `wikitree_date`; sorting understands Julian/dual years, `circa`/`c.`, interpreted dates and month names.
 
-Compatibility: cases gain optional fields (`Name.given/surname`, `Relationship.pedigree/tree_status`, `Source.author/publication`). Older 0.2 readers cannot load cases written with them. GEDCOM-imported people now record `living` as `"deceased"` rather than `false`. OneTree spouse relationship IDs are now one per couple, so re-import with `--replace` (not `--update`) if research refers to the old per-profile spouse IDs.
+Compatibility: cases gain optional fields (`Name.given/surname`, `Relationship.pedigree/tree_status`, `Source.author/publication`, `Finding.recorded_on`, `Place.precision`) and a `Study` record type. Older 0.2 readers cannot load cases written with them. GEDCOM-imported people now record `living` as `"deceased"` rather than `false`. OneTree spouse relationship IDs are now one per couple, so re-import with `--replace` (not `--update`) if research refers to the old per-profile spouse IDs.
 
 ## 0.2.0 — 19 October 2026
 
