@@ -9,6 +9,7 @@
 - Connected offline website: people dossiers/search, whole tree, family focus, branches, timeline, coordinate map, sources, research, comparisons, connections and downloads.
 - Linear-time bulk case insertion and bounded per-person pages for larger trees.
 - Synthetic 42-person example, import fixtures, browser end-to-end tests and installed-wheel verification.
+- Real-export compatibility checks; opaque external record IDs containing `VCF` no longer trigger the raw-genetic-field guard, while nested genetic payloads remain rejected.
 
 ## 0.1.0
 

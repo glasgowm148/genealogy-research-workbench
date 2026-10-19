@@ -77,7 +77,11 @@ def contains_raw_dna_material(value: Any) -> bool:
     if isinstance(value, dict):
         for name, child in value.items():
             normalised = re.sub(r"[^a-z0-9]", "", str(name).casefold())
-            if any(token in normalised for token in forbidden) or contains_raw_dna_material(child):
+            # OneTree template parameter dictionaries can use opaque
+            # FamilySearch-style IDs as keys. An ID beginning VCF is not a
+            # variant-call field; still inspect its value for genetic fields.
+            opaque_id = re.fullmatch(r"[A-Z0-9]{4}-[A-Z0-9]{3,4}", str(name))
+            if (not opaque_id and any(token in normalised for token in forbidden)) or contains_raw_dna_material(child):
                 return True
     elif isinstance(value, list):
         return any(contains_raw_dna_material(item) for item in value)

@@ -25,6 +25,11 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/glasgowm148/genealogy-research-workbench"
+Documentation = "https://github.com/glasgowm148/genealogy-research-workbench#readme"
+Issues = "https://github.com/glasgowm148/genealogy-research-workbench/issues"
+
 [project.optional-dependencies]
 dev = ["build>=1.2,<2", "ruff==0.11.13"]
 browser = ["playwright==1.61.0"]

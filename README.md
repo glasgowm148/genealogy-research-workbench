@@ -4,6 +4,8 @@
 
 **Turn a GEDCOM or OneTree export into a searchable family-history website.**
 
+[![CI](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml) · [Download v0.2.0](https://github.com/glasgowm148/genealogy-research-workbench/releases/tag/v0.2.0) · [MIT](LICENSE)
+
 [Get started](#get-started) · [Take a look](#what-you-can-build) · [Import formats](docs/imports.md) · [Privacy](docs/privacy.md) · [Developer guide](docs/development.md)
 
 </div>
@@ -34,6 +36,8 @@ The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md
 You need **Python 3.11 or later**. From a downloaded or cloned toolkit checkout:
 
 ```sh
+git clone --branch v0.2.0 https://github.com/glasgowm148/genealogy-research-workbench.git
+cd genealogy-research-workbench
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install .

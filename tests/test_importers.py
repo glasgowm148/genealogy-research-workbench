@@ -122,6 +122,13 @@ class ImporterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "raw DNA"):
             GedcomAdapter().ingest("0 @I1@ INDI\n1 _RAW_DNA ACGT")
 
+    def test_opaque_template_ids_are_not_genetic_field_names(self):
+        payload = {"id": "fictional", "Templates": [{"params": {"VCF0-XYZ": "fictional link", "0XYZ-0VCF": "fictional link"}}]}
+        self.assert_valid(OneTreeAdapter().ingest(payload))
+        payload["Templates"][0]["params"]["VCF0-XYZ"] = {"genotypes": "A/G"}
+        with self.assertRaisesRegex(ValueError, "raw DNA"):
+            OneTreeAdapter().ingest(payload)
+
     def test_private_flag_cannot_be_overridden_by_provider_public(self):
         batch = OneTreeAdapter().ingest({"Name": "Fictional-1", "Privacy": 60, "private": True, "DeathDate": "1900"})
         self.assertEqual(batch.entities[0].sensitivity, Sensitivity.PRIVATE)

@@ -96,6 +96,9 @@ class CoreTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "raw DNA"):
             ResearchCase(id="case", title="Case").add(hidden)
+        hidden.observations = [{"VCF0-XYZ": {"genotypes": "AA"}}]
+        with self.assertRaisesRegex(ValueError, "raw DNA"):
+            ResearchCase(id="case", title="Case").add(hidden)
 
     def test_duplicate_ids_and_numeric_living_values_fail_closed(self) -> None:
         case = ResearchCase(id="case", title="Case")
