@@ -4,15 +4,15 @@
 
 **Turn a GEDCOM or OneTree export into a searchable family-history website.**
 
-[![CI](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml) · [Download v0.2.0](https://github.com/glasgowm148/genealogy-research-workbench/releases/tag/v0.2.0) · [MIT](LICENSE)
+[![CI](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml) · [Releases](https://github.com/glasgowm148/genealogy-research-workbench/releases) · [MIT](LICENSE)
 
 [Get started](#get-started) · [Take a look](#what-you-can-build) · [Import formats](docs/imports.md) · [Privacy](docs/privacy.md) · [Developer guide](docs/development.md)
 
 </div>
 
-Bring your own family tree. Build a site with people pages, an interactive whole tree, family branches, timelines, places, sources, comparisons, and connection paths. Keep the underlying research in portable, source-aware records that distinguish an imported assertion from an assessed conclusion.
+Bring your own family tree. Build a site with people pages, an interactive whole tree, family branches, timelines, places, sources, comparisons and connection paths. Keep the underlying research in portable, source-aware records that distinguish an imported assertion from an assessed conclusion.
 
-Run everything on your own computer. The toolkit has **no runtime dependencies**, makes **no network requests during import or builds**, and generates ordinary HTML, CSS, JavaScript, and data files. You choose whether and where to publish them.
+Run everything on your own computer. The toolkit has **no runtime dependencies**, makes **no network requests during import or builds**, and generates ordinary HTML, CSS, JavaScript and data files. You choose whether and where to publish them.
 
 ## What you can build
 
@@ -20,23 +20,27 @@ Run everything on your own computer. The toolkit has **no runtime dependencies**
 
 <table>
 <tr>
-<td width="50%" valign="top"><h3>Explore the whole tree</h3><img src="docs/images/tree.webp" alt="Interactive family tree with whole-tree, focus-family and branch views" width="100%"><p>Pan and zoom through every public person, narrow the birth-year range, focus on a family, and inspect the confidence attached to a recorded relationship.</p></td>
-<td width="50%" valign="top"><h3>Find the person behind a name</h3><img src="docs/images/people.webp" alt="Searchable catalogue with dates, relatives, places, evidence and sorting" width="100%"><p>Search names, relatives, events, and places. Sort and paginate the catalogue, then open a dossier with family links, life events, citations, and research.</p></td>
+<td width="50%" valign="top"><h3>Explore the whole tree</h3><img src="docs/images/tree.webp" alt="Family focus view showing four generations, with descendants to the right of the selected ancestor" width="100%"><p>Pan and zoom through every public person, focus on a family or browse branch cards. Uncertain links are dashed, and every link keeps its recorded label.</p></td>
+<td width="50%" valign="top"><h3>Find the person behind a name</h3><img src="docs/images/people.webp" alt="Searchable catalogue filtered to one surname, with life dates" width="100%"><p>Search names, relatives, events and places; filter by surname, year and evidence; sort and paginate.</p></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><h3>Follow lives through time and place</h3><img src="docs/images/places.webp" alt="Offline overview of places using coordinates supplied in the imported data" width="100%"><p>Browse a filterable event timeline and an offline coordinate map. Places without coordinates remain in the place list; the toolkit does not guess their positions.</p></td>
-<td width="50%" valign="top"><h3>Keep the evidence in view</h3><img src="docs/images/research.webp" alt="Research notebook with distinct claims, citations, assessments and open questions" width="100%"><p>Sources, claims, evidence assessments, hypotheses, questions, and findings stay distinct. Compare two people or trace a recorded relationship path.</p></td>
+<td width="50%" valign="top"><h3>Read a family at a glance</h3><img src="docs/images/dossier.webp" alt="Person dossier with parents, spouse and marriage, children and siblings" width="100%"><p>Each dossier lists parents, partners with their marriages, children and siblings. Step, adoptive and other recorded roles stay visible. When more parents are recorded than one person can have by birth, the dossier flags them as competing parent records.</p></td>
+<td width="50%" valign="top"><h3>Follow lives through time and place</h3><img src="docs/images/places.webp" alt="Offline overview of places using coordinates supplied in the imported data" width="100%"><p>Browse a filterable event timeline and an offline coordinate map. Places without coordinates stay in the place list; the toolkit never guesses their positions.</p></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><h3>Keep the evidence in view</h3><img src="docs/images/research.webp" alt="Research notebook with claims, citations, assessments, hypotheses and open questions" width="100%"><p>Sources, claims, evidence assessments, hypotheses, questions and findings stay distinct, with outstanding work listed first.</p></td>
+<td width="50%" valign="top"><h3>Say exactly how sure you are</h3><img src="docs/images/evidence.webp" alt="Reader's guide to confidence, claim status and relationship-role labels" width="100%"><p>One vocabulary covers every page. An imported link reads "Unassessed tree link", and a tree's own mark reads "tree-marked uncertain". Every label links to a reader's guide.</p></td>
 </tr>
 </table>
 
-The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md), captured on 19 October 2026. They contain no real family data. Core people, source, and research content remains readable with JavaScript disabled; interactive tools use local JavaScript.
+The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md), captured on 19 October 2026 at 1440 × 1000. They contain no real family data. Core people, source, and research content remains readable with JavaScript disabled; interactive tools use local JavaScript.
 
 ## Get started
 
 You need **Python 3.11 or later**. From a downloaded or cloned toolkit checkout:
 
 ```sh
-git clone --branch v0.2.0 https://github.com/glasgowm148/genealogy-research-workbench.git
+git clone https://github.com/glasgowm148/genealogy-research-workbench.git
 cd genealogy-research-workbench
 python3 -m venv .venv
 source .venv/bin/activate
@@ -76,7 +80,14 @@ Open [localhost:8000](http://localhost:8000/). For OneTree, use the same command
 genealogy --project my-family import /path/to/one-tree.json --publish-deceased
 ```
 
-Use a separate empty project for a different export. Import refuses to overwrite a populated case unless you explicitly pass `--replace`; an identical import with the same review options is a no-op. Omitting publication options keeps the imported records private, so the public site can be empty. Your original input is preserved privately and never modified.
+Got a newer export of the same tree? `import FILE --update` refreshes the imported records and keeps the research you added: findings, questions, sources and notes. It stops, changing nothing, if that research would point at someone the new export no longer contains. `--replace` starts again from the new file. Both keep a private backup of the previous case first. An identical import with the same review options does nothing. Omitting publication options keeps the imported records private, so the public site can be empty. Your original input is preserved privately and never modified.
+
+| Supported input | Details |
+| --- | --- |
+| GEDCOM 5.5, 5.5.1 and 7 (`.ged`, `.gedcom`) | Declared UTF-8, UTF-16, ANSI, ANSEL, ASCII and Mac encodings; names with surname parts; about 40 event types; parent roles (step, adopted, foster); identifiers; sources with author, publication and repository; citations with locators; supplied coordinates |
+| WikiTree OneTree JSON (`.json`) | Profiles, parents, spouses and marriages; WikiTree `1850-00-00` dates with guess/before/after qualifiers; the tree's own parent marks; privacy levels |
+
+Everything the importer does not interpret is counted in the import report and kept in the private original. See [import formats](docs/imports.md).
 
 ### Try it before importing your family
 
@@ -98,7 +109,8 @@ The demo has 42 invented people, four generations, sources, uncertainty, and res
 | Timelines and place lists; maps when coordinates are supplied | Reviewed location coordinates and archive research |
 | Comparison and shortest recorded connection paths | Resolution of namesakes and competing hypotheses |
 | GEDCOM bibliography and citation locators after explicit review | Source transcriptions, images, and record-by-record analysis |
-| Public JSON, NDJSON/CSV exports and place GeoJSON | Derived DNA findings supplied separately and reviewed |
+| Step/adoptive roles and the tree's own uncertainty marks, shown as such | Assessed confidence for each relationship, with its reasoning |
+| Public JSON, CSV, GeoJSON and a filtered GEDCOM download | Derived DNA findings supplied separately and reviewed |
 
 An export supplies recorded tree assertions. It cannot manufacture missing sources, prove parentage, recover photographs, or infer DNA results. OneTree biography text is retained privately; arbitrary WikiTree markup is not converted into independently verified citations. [Supported formats and limitations](docs/imports.md) describe exactly what is imported.
 
@@ -113,6 +125,7 @@ genealogy --project my-family record show gedcom:person:I1
 genealogy --project my-family report --format markdown --output research-brief.md
 genealogy --project my-family export json --output dist/research.json
 genealogy --project my-family export csv --output dist/research.csv
+genealogy --project my-family export gedcom --output dist/public-tree.ged
 genealogy --project my-family bundle --output private/research-bundle
 genealogy --project my-family bundle --output private/research-bundle --verify
 ```

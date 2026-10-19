@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.3.0 — unreleased
+
+Import
+- GEDCOM follows its `HEAD.CHAR` declaration: UTF-8/UTF-16 with or without BOM, ANSI (Windows-1252), ANSEL, ASCII, MACINTOSH and ISO-8859; undecodable bytes are reported by line.
+- Raw line breaks inside long notes (as written by WikiTree's GEDCOM export) are kept as continued text and reported instead of rejecting the file.
+- Parent links keep their supplied nature (`PEDI`, `_FREL`/`_MREL`, `ADOP`, WikiTree non-biological) in `Relationship.pedigree`; the tree's own marks (WikiTree uncertain/confident/DNA confirmed, GEDCOM 7 `STAT`) in `Relationship.tree_status`, never raising confidence. `DISPROVEN` links are disproved and not published.
+- Names keep `given`/`surname` parts, nicknames, married and other names; GEDCOM identifiers (`_UID`, `REFN`, `EXID`, `_FSFTID`, `AFN`, `WWW`), source `AUTH`/`PUBL`/call numbers, citation `QUAY`, GEDCOM 7 `SNOTE` and about 40 event types are imported. Unsupported structures are counted in one warning; `SSN`/`IDNO` are never imported.
+- Burial or cremation records mark a person deceased. Invalid coordinates are reported and dropped rather than failing the import.
+- OneTree: WikiTree `YYYY-00-00` dates and DataStatus guess/before/after qualifiers, `MiddleName`, `LastNameOther`, `Nicknames`, `IsLiving`, one relationship per couple, marriage events from spouse rows, hidden spouses kept private, one summary warning for relatives outside the export.
+- `import --update` refreshes a previous import of the same tree and keeps research added to the case, refusing without changes if that research would be orphaned. `--update` and `--replace` first back up the previous case privately.
+
+Publication
+- An approximate birth (`ABT`/`EST`/`CAL`) is treated as up to ten years later for the 120-year rule; open-ended dates still need review. `genealogy.publication.is_historical_birth` exposes the rule.
+- The recorded sex of eligible people is published as an unassessed tree assertion.
+
+Website
+- Dossiers have a family section (parents, partners and marriages, children, siblings) with roles, labels and a competing-parent-records notice.
+- One labelled evidence vocabulary (`genealogy.labels`) and a reader's guide, `evidence.html`.
+- Interactive pages share one `data/site-data.js` instead of embedding the dataset in every page (works from `file://`).
+- Surname filter and column in the catalogue; outstanding research listed first.
+- Public GEDCOM 5.5.1 download (`data/public-tree.ged`, `export gedcom`), and `sitemap.xml`/canonical links when `site.base_url` is set.
+
+Fixes
+- The fictional demo stored parent links from parent to child, contrary to the documented child → parent direction, so its tree drew descendants as ancestors. It is regenerated.
+- Browser tests no longer assume a macOS Chrome path (`GENEALOGY_BROWSER_EXECUTABLE`).
+- `genealogy.dates` adds `year_of` and `wikitree_date`; sorting understands Julian/dual years, `circa`/`c.`, interpreted dates and month names.
+
+Compatibility: cases gain optional fields (`Name.given/surname`, `Relationship.pedigree/tree_status`, `Source.author/publication`). Older 0.2 readers cannot load cases written with them. GEDCOM-imported people now record `living` as `"deceased"` rather than `false`. OneTree spouse relationship IDs are now one per couple, so re-import with `--replace` (not `--update`) if research refers to the old per-profile spouse IDs.
+
 ## 0.2.0 — 19 October 2026
 
 - Standalone MIT-licensed package, Python 3.11+, wheel/source distribution metadata and CI.

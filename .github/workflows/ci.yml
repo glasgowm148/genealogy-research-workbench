@@ -31,6 +31,17 @@ jobs:
           /tmp/wheel-check/bin/genealogy --project wheel-demo build
           test -f wheel-demo/dist/index.html
           test -f wheel-demo/dist/assets/site.js
+          /tmp/wheel-check/bin/genealogy init import-demo --name "Wheel import"
+          /tmp/wheel-check/bin/genealogy --project import-demo import "$GITHUB_WORKSPACE/examples/demo/input/family.ged" --publish-deceased --publish-reviewed-sources
+          /tmp/wheel-check/bin/genealogy --project import-demo build
+          test "$(ls import-demo/dist/people | wc -l)" = 42
+          test -f import-demo/dist/data/site-data.js
+          test -f import-demo/dist/data/public-tree.ged
+      - name: Verify the source distribution ships examples and docs
+        run: |
+          tar -tzf dist/*.tar.gz | grep -q 'examples/demo/input/family.ged'
+          tar -tzf dist/*.tar.gz | grep -q 'examples/demo/cases/demo.json'
+          tar -tzf dist/*.tar.gz | grep -q 'docs/images/dossier.webp'
   browser:
     runs-on: ubuntu-latest
     steps:

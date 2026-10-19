@@ -18,7 +18,7 @@ Install a built wheel in a separate environment to test the actual distribution:
 
 ```sh
 python3 -m venv /tmp/workbench-wheel
-/tmp/workbench-wheel/bin/python -m pip install dist/genealogy_research_workbench-0.2.0-py3-none-any.whl
+/tmp/workbench-wheel/bin/python -m pip install dist/genealogy_research_workbench-0.3.0-py3-none-any.whl
 cd /tmp
 /tmp/workbench-wheel/bin/genealogy init wheel-demo --name "Wheel demonstration"
 /tmp/workbench-wheel/bin/genealogy --project wheel-demo build
@@ -34,7 +34,7 @@ python -m playwright install chromium
 make browser-check
 ```
 
-They exercise desktop/mobile routes, search, tree views, comparisons, connections, and real GEDCOM/OneTree uploads. Standard unit tests do not require a browser. CI tests Python 3.11–3.14, builds distributions, smoke-tests an installed wheel outside the source checkout, and runs the separate browser job.
+They exercise desktop/mobile routes, search and surname filters, tree views, family dossiers, the evidence guide, comparisons, connections, opening the built site directly from disk, and real GEDCOM/OneTree uploads through the local server. Set `GENEALOGY_BROWSER_EXECUTABLE` to use an installed Chromium or Chrome instead of Playwright's download. Standard unit tests do not require a browser. CI tests Python 3.11–3.14, builds distributions, smoke-tests an installed wheel outside the source checkout, and runs the separate browser job.
 
 ## Layout
 

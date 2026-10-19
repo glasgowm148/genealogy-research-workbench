@@ -9,10 +9,10 @@ High-level file imports are private by default, including provider records label
 | Option | Permits | Keeps private |
 | --- | --- | --- |
 | No publication options | A private research case | All imported records |
-| `--publish-deceased` | Adapter-vetted basic facts about deceased/historical people, safe linked events, places and relationships | Living/unknown-status people, explicit private/restricted/licensed records, notes, descriptions, source text |
-| Also `--publish-reviewed-sources` | Reviewed source titles/repositories/safe URLs and citation locators connected to eligible public facts | Quotations, transcriptions, access notes, protected/licensed sources and sources linked only to withheld people |
+| `--publish-deceased` | Adapter-vetted basic facts about deceased/historical people: names, recorded sex, safe linked events, places and relationships (with their supplied nature, such as step or adoptive) | Living/unknown-status people, explicit private/restricted/licensed records, disproved links, hidden spouses, notes, descriptions, identifiers, source text |
+| Also `--publish-reviewed-sources` | Reviewed source titles, authors, publication details, repositories, safe URLs and citation locators connected to eligible public facts | Quotations, transcriptions, access notes, quality grades, protected/licensed sources and sources linked only to withheld people |
 
-A person is eligible when explicitly deceased, or when an unambiguous supported birth-year value is more than 120 years old and no explicit living flag overrides it. Date forms the review helper cannot assess safely require manual review. This is a publication heuristic, not proof of a death date. Explicit restrictions always take precedence. Source review requires deceased-facts review.
+A person is eligible when explicitly deceased (a recorded death, burial or cremation, or the provider's flag), or when a supported birth date is assuredly more than 120 years ago and no explicit living flag overrides it. Exact dates and `BEF`/`BET … AND …`/`FROM … TO …` bounds use their upper year. An approximate birth (`ABT`, `EST`, `CAL`, `circa`) is treated as up to ten years later: "about 1800" counts as 1810. Open-ended (`AFT`) and free-text dates require manual review. This is a publication heuristic, not proof of death. Explicit restrictions always take precedence. Source review requires deceased-facts review.
 
 Imported relationships remain unassessed. A source association remains an asserted association, even when its bibliography is public. Neither import nor publication verifies genealogy.
 
