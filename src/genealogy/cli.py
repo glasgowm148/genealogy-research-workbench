@@ -41,6 +41,32 @@ def load_config(directory: Path) -> ProjectConfig:
     return ProjectConfig.load(config_path)
 
 
+def check_links(args: argparse.Namespace) -> int:
+    from .sitecheck import check_site, pairs_of, ratchet, read_baseline, write_baseline
+    site = args.site or (args.project / "dist")
+    if not site.is_dir():
+        raise ValueError(f"site folder not found: {site}; build it first")
+    result = check_site(site)
+    current = pairs_of(result["broken"])
+    baseline = read_baseline(args.baseline) if args.baseline else None
+    new, fixed = ratchet(current, baseline)
+    if args.update_baseline:
+        if not args.baseline:
+            raise ValueError("--update-baseline needs --baseline PATH")
+        write_baseline(args.baseline, current if baseline is None else baseline & current)
+        new = [] if baseline is None else new
+        fixed = []
+    print(f"Checked {result['pages']} pages and {result['internal_references']} internal references: "
+          f"{len(result['broken'])} broken links ({len(current)} page-target pairs), {len(result['missing_anchors'])} missing anchors.")
+    for row in result["broken"][:20]:
+        print(f"  broken  {row['page']} -> {row['target']} ({row['how']})")
+    for row in result["missing_anchors"][:20]:
+        print(f"  anchor  {row['page']} -> {row['target']}#{row['anchor']}")
+    if baseline is not None:
+        print(f"Baseline: {len(new)} new pairs, {len(fixed)} fixed pairs.")
+    return 1 if new or (baseline is None and result["missing_anchors"]) else 0
+
+
 def project_path(directory: Path, configured: str, setting: str) -> Path:
     """Resolve a configured path and reject traversal or symlink escapes."""
     safe_relative_path(configured, setting=setting)
@@ -177,6 +203,10 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("validate", help="validate the selected durable research case")
     build_parser = commands.add_parser("build", help="create privacy-filtered catalogue, timeline and map")
     build_parser.add_argument("--output", type=Path, default=Path("dist"))
+    links = commands.add_parser("check-links", help="report broken internal links and anchors in a built site")
+    links.add_argument("site", nargs="?", type=Path, help="site folder (default: the project's dist/)")
+    links.add_argument("--baseline", type=Path, help="JSON of known broken (page, target) pairs; new pairs fail")
+    links.add_argument("--update-baseline", action="store_true", help="create the baseline, or remove pairs that are fixed")
     export = commands.add_parser("export", help="write a privacy-filtered machine-readable export")
     export.add_argument("format", choices=("json", "ndjson", "csv", "geojson", "gedcom"))
     export.add_argument("--output", type=Path)
@@ -237,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
             from .server import serve
             serve(args.project, args.port)
             return 0
+        if args.command == "check-links":
+            return check_links(args)
         if args.command == "case":
             config = load_config(args.project)
             store = CaseStore(project_path(args.project, config.case_directory, "project.case_directory"))
