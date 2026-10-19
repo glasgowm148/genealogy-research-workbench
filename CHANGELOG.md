@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — unreleased
+## 0.3.0 — 20 October 2026
 
 Import
 - GEDCOM follows its `HEAD.CHAR` declaration: UTF-8/UTF-16 with or without BOM, ANSI (Windows-1252), ANSEL, ASCII, MACINTOSH and ISO-8859; undecodable bytes are reported by line.
