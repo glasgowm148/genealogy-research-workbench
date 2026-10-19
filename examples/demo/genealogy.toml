@@ -1,0 +1,17 @@
+[project]
+id = "fictional-alderwick-demo"
+name = "The Alderwick Family — Synthetic Demo"
+case_directory = "cases"
+default_case = "demo"
+
+[catalogue]
+format = "markdown"
+
+[maps]
+format = "geojson"
+
+[timelines]
+format = "markdown"
+
+[site]
+description = "A wholly fictional genealogy research workbench demonstration."

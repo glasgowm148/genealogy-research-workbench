@@ -1,0 +1,31 @@
+.DS_Store
+.env
+.env.*
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+*.egg-info/
+
+# Protected or provider-controlled genealogy material
+private/
+restricted/
+captures/
+sources/
+raw-dna/
+*.[gG][eE][dD]
+*.[gG][eE][dD][cC][oO][mM]
+!examples/**/*.ged
+!examples/**/*.gedcom
+*.vcf
+*.bcf
+*.bam
+*.fastq
+
+# Local tooling and demo builds
+.ruff_cache/
+output/
+.playwright-cli/
+examples/*/dist/
+examples/*/bundle/

@@ -1,0 +1,25 @@
+[project]
+name = "Untitled genealogy research case"
+case_directory = "cases"
+default_case = "research-case"
+
+[privacy]
+# Public output must exclude living, restricted, licensed and raw-DNA material.
+
+[catalogue]
+format = "html"
+enabled = true
+output = "catalogue.html"
+
+[maps]
+format = "html"
+enabled = true
+output = "places.html"
+
+[timelines]
+format = "html"
+enabled = true
+output = "timeline.html"
+
+[exports]
+directory = "dist"

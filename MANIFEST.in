@@ -1,0 +1,6 @@
+include LICENSE NOTICES.md README.md CHANGELOG.md AGENTS.md Makefile .gitignore
+recursive-include docs *.md *.svg *.webp
+recursive-include examples *.md *.toml *.json *.csv *.ged *.gedcom
+recursive-include tests *.py
+recursive-include src/genealogy/web *.css *.js *.svg
+recursive-include tools *.py

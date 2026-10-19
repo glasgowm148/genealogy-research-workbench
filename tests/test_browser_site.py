@@ -1,0 +1,179 @@
+"""Opt-in browser contract: installed site, mobile navigation, tools and real uploads."""
+from __future__ import annotations
+
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import json
+import os
+from pathlib import Path
+import tempfile
+import threading
+import unittest
+from urllib.parse import urlsplit
+
+from genealogy.case import CaseStore
+from genealogy.config import ProjectConfig
+from genealogy.server import UploadServer
+from genealogy.site import build_site
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
+@unittest.skipUnless(os.environ.get('GENEALOGY_BROWSER_TESTS') == '1',
+                     'Run make browser-check with the browser extra installed')
+class BrowserSiteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from playwright.sync_api import sync_playwright
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.temp.name)
+        config = ProjectConfig.load(ROOT / 'examples/demo/genealogy.toml')
+        case = CaseStore(ROOT / 'examples/demo/cases').load(config.default_case)
+        build_site(case, config, cls.root / 'nested')
+        cls.server = ThreadingHTTPServer(('127.0.0.1', 0),
+            partial(QuietHandler, directory=str(cls.root)))
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.base = f'http://127.0.0.1:{cls.server.server_port}/nested/'
+        cls.upload = UploadServer(cls.root / 'workspace', port=0)
+        cls.upload_thread = threading.Thread(target=cls.upload.serve_forever, daemon=True)
+        cls.upload_thread.start()
+        cls.pw = sync_playwright().start()
+        chrome = Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
+        cls.browser = cls.pw.chromium.launch(headless=True,
+            **({'executable_path': str(chrome)} if chrome.exists() else {}))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+        cls.pw.stop()
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.upload.shutdown()
+        cls.upload.server_close()
+        cls.thread.join()
+        cls.upload_thread.join()
+        cls.temp.cleanup()
+
+    def setUp(self):
+        self.context = self.browser.new_context(viewport={'width': 1440, 'height': 1000})
+        self.page = self.context.new_page()
+        self.errors = []
+        self.external = []
+        self.page.on('pageerror', lambda e: self.errors.append(str(e)))
+        def route(request):
+            if urlsplit(request.request.url).hostname not in ('127.0.0.1', None):
+                self.external.append(request.request.url)
+                request.abort()
+            else:
+                request.continue_()
+        self.page.route('**/*', route)
+
+    def tearDown(self):
+        self.context.close()
+        self.assertEqual([], self.errors, 'Browser runtime errors')
+        self.assertEqual([], self.external, 'Public site must work without outside requests')
+
+    def test_routes_images_mobile_and_no_javascript(self):
+        routes = ['index.html', 'catalogue.html', 'tree.html', 'timeline.html', 'places.html',
+                  'sources.html', 'research.html', 'compare.html', 'connections.html', 'sitemap.html']
+        for width in (1440, 390):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            for route in routes:
+                response = self.page.goto(self.base + route, wait_until='networkidle')
+                self.assertEqual(200, response.status, (width, route))
+                self.assertEqual(1, self.page.locator('h1').count(), route)
+                self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1, route)
+            if width == 390:
+                self.page.locator('#menu-toggle').click()
+                self.assertEqual('true', self.page.locator('#menu-toggle').get_attribute('aria-expanded'))
+                self.assertTrue(self.page.locator('.site-sidebar').is_visible())
+                self.page.locator('.site-sidebar a[data-view="people"]').click()
+                self.assertIn('catalogue.html', self.page.url)
+        nojs = self.browser.new_context(java_script_enabled=False)
+        try:
+            page = nojs.new_page()
+            page.goto(self.base + 'catalogue.html')
+            self.assertEqual(42, page.locator('[data-person-id]').count())
+            page.goto(self.base + 'sources.html')
+            self.assertEqual(3, page.locator('[data-source-id]').count())
+        finally:
+            nojs.close()
+
+    def test_search_pagination_tree_compare_and_connections(self):
+        self.page.goto(self.base + 'catalogue.html')
+        self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
+        self.page.get_by_role('button', name='Next').click()
+        self.assertEqual(2, self.page.locator('[data-person-id]:visible').count())
+        self.page.get_by_role('searchbox', name='Search people').fill('Ada Alder')
+        self.assertGreater(self.page.locator('[data-person-id]:visible').count(), 0)
+        self.assertLess(self.page.locator('[data-person-id]:visible').count(), 42)
+        self.page.get_by_role('searchbox', name='Search people').fill('no-such-synthetic-name')
+        self.assertEqual(0, self.page.locator('[data-person-id]:visible').count())
+        self.page.goto(self.base + 'tree.html')
+        self.assertTrue(self.page.locator('[data-whole-tree]').is_visible())
+        self.page.locator('[data-tree-view="family"]').click()
+        self.assertGreater(self.page.locator('#tree-output svg').count(), 0)
+        self.page.locator('[data-tree-view="branches"]').click()
+        self.assertGreater(self.page.locator('#tree-output a').count(), 0)
+        self.page.goto(self.base + 'compare.html')
+        self.page.locator('[data-compare-a]').select_option('person:01')
+        self.page.locator('[data-compare-b]').select_option('person:02')
+        self.assertIn('Ada Alder', self.page.locator('#compare-result').inner_text())
+        self.assertIn('Bram Alder', self.page.locator('#compare-result').inner_text())
+        self.page.goto(self.base + 'connections.html')
+        self.page.locator('[data-connection-a]').select_option('person:01')
+        self.page.locator('[data-connection-b]').select_option('person:02')
+        self.assertIn('Ada Alder', self.page.locator('#connection-result').inner_text())
+        self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
+
+    def test_map_controls_and_source_timeline_filters(self):
+        self.page.goto(self.base + 'places.html')
+        svg = self.page.locator('#map-output svg')
+        original = svg.get_attribute('viewBox')
+        self.page.locator('[data-map-fit]').click()
+        self.assertNotEqual(original, svg.get_attribute('viewBox'))
+        self.page.locator('[data-map-world]').click()
+        self.assertEqual(original, svg.get_attribute('viewBox'))
+        self.page.goto(self.base + 'timeline.html')
+        self.page.get_by_role('searchbox', name='Search timeline').fill('no-such-synthetic-event')
+        self.assertEqual(0, self.page.locator('[data-event-id]:visible').count())
+        self.page.get_by_role('searchbox', name='Search timeline').fill('')
+        self.page.get_by_role('combobox', name='Event type').select_option('death')
+        self.assertEqual(42, self.page.locator('[data-event-id]:visible').count())
+        self.page.goto(self.base + 'sources.html')
+        self.page.get_by_role('searchbox', name='Search sources').fill('no-such-synthetic-source')
+        self.assertEqual(0, self.page.locator('[data-source-id]:visible').count())
+
+    def test_upload_gedcom_and_onetree_create_private_local_projects(self):
+        for filename in ('family.ged', 'one-tree.json'):
+            path = ROOT / 'examples/demo/input' / filename
+            self.assertTrue(path.is_file(), path)
+            self.page.goto(self.upload.origin)
+            self.page.locator('#name').fill('Browser synthetic upload')
+            self.page.locator('#file').set_input_files(str(path))
+            self.page.locator('#review').check()
+            if filename.endswith('.ged'):
+                self.page.locator('#sources').check()
+            self.page.locator('#submit').click()
+            preview = self.page.locator('#result a.preview')
+            preview.wait_for(timeout=30000)
+            self.assertIn('Imported 42 people', self.page.locator('#result').inner_text())
+            preview.click()
+            self.assertIn('Browser synthetic upload', self.page.locator('h1').inner_text())
+            self.page.locator('.site-sidebar a[data-view="people"]').click()
+            self.page.locator('.pagination').wait_for()
+            self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
+            payload = json.loads(self.page.locator('#site-data').text_content())
+            self.assertEqual(42, len(payload['people']))
+            self.assertTrue(all(p['sensitivity'] == 'public' for p in payload['people']))
+            if filename.endswith('.ged'):
+                self.assertGreater(len(payload['sources']), 0)
+                self.assertTrue(all(c['status'] == 'asserted' for c in payload['claims']))
+            denied = self.page.request.get(self.upload.origin + '/private/previews/')
+            self.assertEqual(404, denied.status)

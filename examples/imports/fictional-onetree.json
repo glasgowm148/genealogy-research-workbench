@@ -1,0 +1,7 @@
+{
+  "data": {
+    "101": {"Id": 101, "Name": "Fable-101", "FirstName": "Élodie", "LastNameAtBirth": "Fable", "LastNameCurrent": "Quill", "BirthDate": "1840-00-00", "BirthLocation": "Asterhaven, Imaginary County", "BirthLatitude": 54.123, "BirthLongitude": -4.321, "DeathDate": "1908-03-04", "Gender": "Female", "Bio": {"wiki": "Synthetic biography; all people and places are fictional."}, "Spouses": {"102": {"Id": 102, "Name": "Quill-102", "confidence": "possible"}}},
+    "102": {"Id": 102, "Name": "Quill-102", "FirstName": "Rowan", "LastNameAtBirth": "Quill", "DeathDate": "1910", "Children": [{"Id": 103, "Name": "Example-103"}]},
+    "103": {"Id": 103, "Name": "Example-103", "FirstName": "Synthetic", "LastNameAtBirth": "Example", "IsLiving": true, "Privacy": 20, "Father": 102, "Mother": 101, "FatherConfidence": "probable"}
+  }
+}

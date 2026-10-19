@@ -1,0 +1,32 @@
+0 HEAD
+1 SOUR Fictional Harbour Ledger Transcription
+0 @I1@ INDI
+1 NAME Mira /Quill/
+1 BIRT
+2 DATE 3 MAR 1841
+2 PLAC Fable Quay
+1 DEAT
+2 DATE 12 OCT 1908
+2 PLAC Fable Quay
+1 SOUR @S1@
+2 PAGE folio 12
+0 @I2@ INDI
+1 NAME Orin /Quill/
+1 BIRT
+2 DATE 8 AUG 1838
+2 PLAC Lantern Bay
+0 @I3@ INDI
+1 NAME Nia /Quill/
+1 BIRT
+2 DATE 1 JAN 1870
+2 PLAC Fable Quay
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+1 CHIL @I3@
+1 MARR
+2 DATE 4 JUN 1864
+2 PLAC Fable Quay
+0 @S1@ SOUR
+1 TITL Invented Fable Quay harbour register
+0 TRLR

@@ -1,0 +1,13 @@
+[project]
+name = "Fictional Harbour Research Case"
+case_directory = "cases"
+default_case = "fictional-harbour"
+
+[catalogue]
+format = "markdown"
+
+[maps]
+format = "geojson"
+
+[timelines]
+format = "markdown"

@@ -1,0 +1,632 @@
+0 HEAD
+1 SOUR Fictional Alderwick Demo
+1 GEDC
+2 VERS 5.5.1
+0 @person:01@ INDI
+1 NAME Ada /Alder/
+1 BIRT
+2 DATE 1 JAN 1754
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 1
+1 DEAT
+2 DATE 31 DEC 1808
+2 PLAC Lanternford (fictional)
+0 @person:02@ INDI
+1 NAME Bram /Alder/
+1 BIRT
+2 DATE 1 JAN 1755
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 2
+1 DEAT
+2 DATE 31 DEC 1810
+2 PLAC Willowmere (fictional)
+0 @person:03@ INDI
+1 NAME Celia /Bell/
+1 BIRT
+2 DATE 1 JAN 1756
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 3
+1 DEAT
+2 DATE 31 DEC 1812
+2 PLAC Reedhaven (fictional)
+0 @person:04@ INDI
+1 NAME Dorian /Bell/
+1 BIRT
+2 DATE 1 JAN 1757
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 4
+1 DEAT
+2 DATE 31 DEC 1814
+2 PLAC Lanternford (fictional)
+0 @person:05@ INDI
+1 NAME Elara /Cairn/
+1 BIRT
+2 DATE 1 JAN 1784
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 5
+1 DEAT
+2 DATE 31 DEC 1842
+2 PLAC Willowmere (fictional)
+0 @person:06@ INDI
+1 NAME Felix /Cairn/
+1 BIRT
+2 DATE 1 JAN 1785
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 6
+1 DEAT
+2 DATE 31 DEC 1844
+2 PLAC Reedhaven (fictional)
+0 @person:07@ INDI
+1 NAME Greta /Dale/
+1 BIRT
+2 DATE 1 JAN 1786
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 7
+1 DEAT
+2 DATE 31 DEC 1846
+2 PLAC Lanternford (fictional)
+0 @person:08@ INDI
+1 NAME Hugo /Dale/
+1 BIRT
+2 DATE 1 JAN 1780
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 8
+1 DEAT
+2 DATE 31 DEC 1841
+2 PLAC Willowmere (fictional)
+0 @person:09@ INDI
+1 NAME Iris /Ember/
+1 BIRT
+2 DATE 1 JAN 1781
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 9
+1 DEAT
+2 DATE 31 DEC 1843
+2 PLAC Reedhaven (fictional)
+0 @person:10@ INDI
+1 NAME Jonas /Ember/
+1 BIRT
+2 DATE 1 JAN 1782
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 10
+1 DEAT
+2 DATE 31 DEC 1845
+2 PLAC Lanternford (fictional)
+0 @person:11@ INDI
+1 NAME Kezia /Firth/
+1 BIRT
+2 DATE 1 JAN 1783
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 11
+1 DEAT
+2 DATE 31 DEC 1847
+2 PLAC Willowmere (fictional)
+0 @person:12@ INDI
+1 NAME Luca /Firth/
+1 BIRT
+2 DATE 1 JAN 1784
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 12
+1 DEAT
+2 DATE 31 DEC 1849
+2 PLAC Reedhaven (fictional)
+0 @person:13@ INDI
+1 NAME Mara /Grove/
+1 BIRT
+2 DATE 1 JAN 1785
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 13
+1 DEAT
+2 DATE 31 DEC 1851
+2 PLAC Lanternford (fictional)
+0 @person:14@ INDI
+1 NAME Nico /Grove/
+1 BIRT
+2 DATE 1 JAN 1786
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 14
+1 DEAT
+2 DATE 31 DEC 1853
+2 PLAC Willowmere (fictional)
+0 @person:15@ INDI
+1 NAME Orla /Hale/
+1 BIRT
+2 DATE 1 JAN 1780
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 15
+1 DEAT
+2 DATE 31 DEC 1848
+2 PLAC Reedhaven (fictional)
+0 @person:16@ INDI
+1 NAME Pavel /Hale/
+1 BIRT
+2 DATE 1 JAN 1781
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 16
+1 DEAT
+2 DATE 31 DEC 1850
+2 PLAC Lanternford (fictional)
+0 @person:17@ INDI
+1 NAME Rhea /Alder/
+1 BIRT
+2 DATE 1 JAN 1782
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 17
+1 DEAT
+2 DATE 31 DEC 1852
+2 PLAC Willowmere (fictional)
+0 @person:18@ INDI
+1 NAME Silas /Alder/
+1 BIRT
+2 DATE 1 JAN 1783
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 18
+1 DEAT
+2 DATE 31 DEC 1854
+2 PLAC Reedhaven (fictional)
+0 @person:19@ INDI
+1 NAME Talia /Bell/
+1 BIRT
+2 DATE 1 JAN 1784
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 19
+1 DEAT
+2 DATE 31 DEC 1856
+2 PLAC Lanternford (fictional)
+0 @person:20@ INDI
+1 NAME Ulric /Bell/
+1 BIRT
+2 DATE 1 JAN 1785
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 20
+1 DEAT
+2 DATE 31 DEC 1858
+2 PLAC Willowmere (fictional)
+0 @person:21@ INDI
+1 NAME Vera /Cairn/
+1 BIRT
+2 DATE 1 JAN 1816
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 21
+1 DEAT
+2 DATE 31 DEC 1890
+2 PLAC Reedhaven (fictional)
+0 @person:22@ INDI
+1 NAME Wes /Cairn/
+1 BIRT
+2 DATE 1 JAN 1810
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 22
+1 DEAT
+2 DATE 31 DEC 1885
+2 PLAC Lanternford (fictional)
+0 @person:23@ INDI
+1 NAME Xanthe /Dale/
+1 BIRT
+2 DATE 1 JAN 1811
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 23
+1 DEAT
+2 DATE 31 DEC 1887
+2 PLAC Willowmere (fictional)
+0 @person:24@ INDI
+1 NAME Yorick /Dale/
+1 BIRT
+2 DATE 1 JAN 1812
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 24
+1 DEAT
+2 DATE 31 DEC 1889
+2 PLAC Reedhaven (fictional)
+0 @person:25@ INDI
+1 NAME Zella /Ember/
+1 BIRT
+2 DATE 1 JAN 1813
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 25
+1 DEAT
+2 DATE 31 DEC 1891
+2 PLAC Lanternford (fictional)
+0 @person:26@ INDI
+1 NAME Arden /Ember/
+1 BIRT
+2 DATE 1 JAN 1814
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 26
+1 DEAT
+2 DATE 31 DEC 1893
+2 PLAC Willowmere (fictional)
+0 @person:27@ INDI
+1 NAME Briony /Firth/
+1 BIRT
+2 DATE 1 JAN 1815
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 27
+1 DEAT
+2 DATE 31 DEC 1895
+2 PLAC Reedhaven (fictional)
+0 @person:28@ INDI
+1 NAME Cato /Firth/
+1 BIRT
+2 DATE 1 JAN 1816
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 28
+1 DEAT
+2 DATE 31 DEC 1897
+2 PLAC Lanternford (fictional)
+0 @person:29@ INDI
+1 NAME Delia /Grove/
+1 BIRT
+2 DATE 1 JAN 1810
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 29
+1 DEAT
+2 DATE 31 DEC 1892
+2 PLAC Willowmere (fictional)
+0 @person:30@ INDI
+1 NAME Emil /Grove/
+1 BIRT
+2 DATE 1 JAN 1811
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 30
+1 DEAT
+2 DATE 31 DEC 1865
+2 PLAC Reedhaven (fictional)
+0 @person:31@ INDI
+1 NAME Flora /Hale/
+1 BIRT
+2 DATE 1 JAN 1812
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 31
+1 DEAT
+2 DATE 31 DEC 1867
+2 PLAC Lanternford (fictional)
+0 @person:32@ INDI
+1 NAME Galen /Hale/
+1 BIRT
+2 DATE 1 JAN 1813
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 32
+1 DEAT
+2 DATE 31 DEC 1869
+2 PLAC Willowmere (fictional)
+0 @person:33@ INDI
+1 NAME Hester /Alder/
+1 BIRT
+2 DATE 1 JAN 1814
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 33
+1 DEAT
+2 DATE 31 DEC 1871
+2 PLAC Reedhaven (fictional)
+0 @person:34@ INDI
+1 NAME Ivo /Alder/
+1 BIRT
+2 DATE 1 JAN 1815
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 34
+1 DEAT
+2 DATE 31 DEC 1873
+2 PLAC Lanternford (fictional)
+0 @person:35@ INDI
+1 NAME June /Bell/
+1 BIRT
+2 DATE 1 JAN 1816
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 35
+1 DEAT
+2 DATE 31 DEC 1875
+2 PLAC Willowmere (fictional)
+0 @person:36@ INDI
+1 NAME Kellan /Bell/
+1 BIRT
+2 DATE 1 JAN 1810
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 36
+1 DEAT
+2 DATE 31 DEC 1870
+2 PLAC Reedhaven (fictional)
+0 @person:37@ INDI
+1 NAME Liora /Cairn/
+1 BIRT
+2 DATE 1 JAN 1842
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 37
+1 DEAT
+2 DATE 31 DEC 1899
+2 PLAC Lanternford (fictional)
+0 @person:38@ INDI
+1 NAME Milo /Cairn/
+1 BIRT
+2 DATE 1 JAN 1843
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 38
+1 DEAT
+2 DATE 31 DEC 1899
+2 PLAC Willowmere (fictional)
+0 @person:39@ INDI
+1 NAME Nessa /Dale/
+1 BIRT
+2 DATE 1 JAN 1844
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 39
+1 DEAT
+2 DATE 31 DEC 1899
+2 PLAC Reedhaven (fictional)
+0 @person:40@ INDI
+1 NAME Oren /Dale/
+1 BIRT
+2 DATE 1 JAN 1845
+2 PLAC Lanternford (fictional)
+3 MAP
+4 LATI 55.86
+4 LONG -4.25
+2 SOUR @S1@
+3 PAGE invented entry 40
+1 DEAT
+2 DATE 31 DEC 1899
+2 PLAC Lanternford (fictional)
+0 @person:41@ INDI
+1 NAME Petra /Ember/
+1 BIRT
+2 DATE 1 JAN 1846
+2 PLAC Willowmere (fictional)
+3 MAP
+4 LATI 55.95
+4 LONG -3.19
+2 SOUR @S2@
+3 PAGE invented entry 41
+1 DEAT
+2 DATE 31 DEC 1899
+2 PLAC Willowmere (fictional)
+0 @person:42@ INDI
+1 NAME Quill /Ember/
+1 BIRT
+2 DATE 1 JAN 1847
+2 PLAC Reedhaven (fictional)
+3 MAP
+4 LATI 56.12
+4 LONG -4.76
+2 SOUR @S3@
+3 PAGE invented entry 42
+1 DEAT
+2 DATE 31 DEC 1899
+2 PLAC Reedhaven (fictional)
+0 @F1@ FAM
+1 HUSB @person:01@
+1 WIFE @person:02@
+1 CHIL @person:05@
+1 CHIL @person:06@
+1 CHIL @person:07@
+1 CHIL @person:08@
+1 MARR
+2 DATE 1 JUN 1800
+2 PLAC Lanternford (fictional)
+0 @F2@ FAM
+1 HUSB @person:03@
+1 WIFE @person:04@
+1 CHIL @person:09@
+1 CHIL @person:10@
+1 CHIL @person:11@
+1 CHIL @person:12@
+1 MARR
+2 DATE 1 JUN 1800
+2 PLAC Lanternford (fictional)
+0 @F3@ FAM
+1 HUSB @person:05@
+1 WIFE @person:13@
+1 CHIL @person:21@
+1 CHIL @person:22@
+0 @F4@ FAM
+1 HUSB @person:06@
+1 WIFE @person:14@
+1 CHIL @person:23@
+1 CHIL @person:24@
+0 @F5@ FAM
+1 HUSB @person:07@
+1 WIFE @person:15@
+1 CHIL @person:25@
+1 CHIL @person:26@
+0 @F6@ FAM
+1 HUSB @person:08@
+1 WIFE @person:16@
+1 CHIL @person:27@
+1 CHIL @person:28@
+0 @F7@ FAM
+1 HUSB @person:09@
+1 WIFE @person:17@
+1 CHIL @person:29@
+1 CHIL @person:30@
+0 @F8@ FAM
+1 HUSB @person:10@
+1 WIFE @person:18@
+1 CHIL @person:31@
+1 CHIL @person:32@
+0 @F9@ FAM
+1 HUSB @person:11@
+1 WIFE @person:19@
+1 CHIL @person:33@
+1 CHIL @person:34@
+0 @F10@ FAM
+1 HUSB @person:12@
+1 WIFE @person:20@
+1 CHIL @person:35@
+1 CHIL @person:36@
+0 @F11@ FAM
+1 HUSB @person:21@
+1 CHIL @person:37@
+1 CHIL @person:38@
+0 @F12@ FAM
+1 HUSB @person:23@
+1 CHIL @person:39@
+1 CHIL @person:40@
+0 @F13@ FAM
+1 HUSB @person:25@
+1 CHIL @person:41@
+1 CHIL @person:42@
+0 @S1@ SOUR
+1 TITL The Lanternford Parish Register (invented)
+1 REPO Fictional Lanternford Archive
+0 @S2@ SOUR
+1 TITL Willowmere Household Returns (invented)
+1 REPO Fictional Lanternford Archive
+0 @S3@ SOUR
+1 TITL Alderwick Family Letters (invented)
+1 REPO Fictional Lanternford Archive
+0 TRLR

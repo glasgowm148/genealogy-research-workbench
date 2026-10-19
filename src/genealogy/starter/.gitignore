@@ -1,0 +1,16 @@
+.env
+.env.*
+dist/
+private/
+restricted/
+captures/
+sources/
+raw-dna/
+*.[gG][eE][dD]
+*.[gG][eE][dD][cC][oO][mM]
+*.vcf
+*.bcf
+*.bam
+*.fastq
+cases/
+imports/

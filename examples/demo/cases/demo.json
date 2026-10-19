@@ -1,0 +1,2946 @@
+{
+  "created_at": "2026-01-01T00:00:00+00:00",
+  "finding_ids": [
+    "finding:overview"
+  ],
+  "id": "demo",
+  "question_ids": [
+    "question:parentage",
+    "question:household"
+  ],
+  "record_sets": {
+    "Citation": [
+      {
+        "accessed_on": null,
+        "id": "cite:register",
+        "locator": "folio 14, entry 3",
+        "quotation": null,
+        "sensitivity": "public",
+        "source_id": "src:register",
+        "transcription": "Illustrative invented source reference; no quotation from a real record."
+      },
+      {
+        "accessed_on": null,
+        "id": "cite:returns",
+        "locator": "schedule 22, household 6",
+        "quotation": null,
+        "sensitivity": "public",
+        "source_id": "src:returns",
+        "transcription": "Illustrative invented source reference; no quotation from a real record."
+      },
+      {
+        "accessed_on": null,
+        "id": "cite:letters",
+        "locator": "box 2, letter 7",
+        "quotation": null,
+        "sensitivity": "public",
+        "source_id": "src:letters",
+        "transcription": "Illustrative invented source reference; no quotation from a real record."
+      }
+    ],
+    "Claim": [
+      {
+        "citation_ids": [
+          "cite:register"
+        ],
+        "confidence": "documented",
+        "id": "claim:parent:5",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:05",
+        "value": "Ada Alder"
+      },
+      {
+        "citation_ids": [
+          "cite:register"
+        ],
+        "confidence": "documented",
+        "id": "claim:parent:6",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:06",
+        "value": "Ada Alder"
+      },
+      {
+        "citation_ids": [
+          "cite:register"
+        ],
+        "confidence": "documented",
+        "id": "claim:parent:7",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:07",
+        "value": "Ada Alder"
+      },
+      {
+        "citation_ids": [
+          "cite:register"
+        ],
+        "confidence": "documented",
+        "id": "claim:parent:8",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:08",
+        "value": "Ada Alder"
+      },
+      {
+        "citation_ids": [
+          "cite:register"
+        ],
+        "confidence": "documented",
+        "id": "claim:parent:9",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:09",
+        "value": "Celia Bell"
+      },
+      {
+        "citation_ids": [
+          "cite:letters"
+        ],
+        "confidence": "probable",
+        "id": "claim:parent:10",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:10",
+        "value": "Celia Bell"
+      },
+      {
+        "citation_ids": [
+          "cite:register"
+        ],
+        "confidence": "documented",
+        "id": "claim:parent:11",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:11",
+        "value": "Celia Bell"
+      },
+      {
+        "citation_ids": [
+          "cite:register"
+        ],
+        "confidence": "documented",
+        "id": "claim:parent:12",
+        "predicate": "parent",
+        "rationale": "Register entry names the household; one link remains probable because the matching given name is shared.",
+        "sensitivity": "public",
+        "status": "supported",
+        "subject_id": "person:12",
+        "value": "Celia Bell"
+      }
+    ],
+    "Event": [
+      {
+        "date": "1754-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:01:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:01"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1808-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:01:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:01"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1755-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:02:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:02"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1810-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:02:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:02"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1756-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:03:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:03"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1812-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:03:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:03"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1757-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:04:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:04"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1814-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:04:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:04"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1784-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:05:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:05"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1842-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:05:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:05"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1785-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:06:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:06"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1844-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:06:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:06"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1786-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:07:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:07"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1846-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:07:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:07"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1780-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:08:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:08"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1841-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:08:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:08"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1781-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:09:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:09"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1843-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:09:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:09"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1782-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:10:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:10"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1845-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:10:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:10"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1783-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:11:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:11"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1847-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:11:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:11"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1784-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:12:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:12"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1849-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:12:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:12"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1785-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:13:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:13"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1851-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:13:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:13"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1786-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:14:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:14"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1853-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:14:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:14"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1780-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:15:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:15"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1848-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:15:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:15"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1781-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:16:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:16"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1850-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:16:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:16"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1782-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:17:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:17"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1852-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:17:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:17"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1783-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:18:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:18"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1854-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:18:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:18"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1784-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:19:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:19"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1856-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:19:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:19"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1785-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:20:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:20"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1858-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:20:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:20"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1816-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:21:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:21"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1890-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:21:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:21"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1810-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:22:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:22"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1885-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:22:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:22"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1811-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:23:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:23"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1887-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:23:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:23"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1812-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:24:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:24"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1889-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:24:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:24"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1813-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:25:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:25"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1891-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:25:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:25"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1814-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:26:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:26"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1893-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:26:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:26"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1815-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:27:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:27"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1895-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:27:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:27"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1816-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:28:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:28"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1897-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:28:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:28"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1810-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:29:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:29"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1892-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:29:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:29"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1811-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:30:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:30"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1865-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:30:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:30"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1812-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:31:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:31"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1867-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:31:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:31"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1813-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:32:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:32"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1869-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:32:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:32"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1814-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:33:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:33"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1871-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:33:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:33"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1815-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:34:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:34"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1873-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:34:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:34"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1816-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:35:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:35"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1875-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:35:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:35"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1810-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:36:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:36"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1870-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:36:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:36"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1842-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:37:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:37"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1899-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:37:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:37"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1843-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:38:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:38"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1899-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:38:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:38"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1844-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:39:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:39"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1899-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:39:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:39"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1845-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:40:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:40"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1899-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:40:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:40"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1846-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:41:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:41"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1899-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:41:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:41"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1847-01-01",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:42:birth",
+        "kind": "birth",
+        "participant_ids": [
+          "person:42"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1899-12-31",
+        "date_precision": "year",
+        "description": null,
+        "external_ids": [],
+        "id": "event:42:death",
+        "kind": "death",
+        "participant_ids": [
+          "person:42"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1777-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:1:2",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:01",
+          "person:02"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1779-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:3:4",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:03",
+          "person:04"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1802-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:5:13",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:05",
+          "person:13"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1804-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:6:14",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:06",
+          "person:14"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1806-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:7:15",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:07",
+          "person:15"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1808-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:8:16",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:08",
+          "person:16"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1810-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:9:17",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:09",
+          "person:17"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1812-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:10:18",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:10",
+          "person:18"
+        ],
+        "place_id": "place:reed",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1814-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:11:19",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:11",
+          "person:19"
+        ],
+        "place_id": "place:willow",
+        "sensitivity": "public"
+      },
+      {
+        "date": "1816-06-01",
+        "date_precision": "year",
+        "description": "Invented ceremony date",
+        "external_ids": [],
+        "id": "event:marriage:12:20",
+        "kind": "marriage",
+        "participant_ids": [
+          "person:12",
+          "person:20"
+        ],
+        "place_id": "place:lantern",
+        "sensitivity": "public"
+      }
+    ],
+    "Evidence": [
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:register",
+        "claim_id": "claim:parent:5",
+        "confidence": "documented",
+        "id": "evidence:parent:5",
+        "sensitivity": "public",
+        "supports": true
+      },
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:register",
+        "claim_id": "claim:parent:6",
+        "confidence": "documented",
+        "id": "evidence:parent:6",
+        "sensitivity": "public",
+        "supports": true
+      },
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:register",
+        "claim_id": "claim:parent:7",
+        "confidence": "documented",
+        "id": "evidence:parent:7",
+        "sensitivity": "public",
+        "supports": true
+      },
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:register",
+        "claim_id": "claim:parent:8",
+        "confidence": "documented",
+        "id": "evidence:parent:8",
+        "sensitivity": "public",
+        "supports": true
+      },
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:register",
+        "claim_id": "claim:parent:9",
+        "confidence": "documented",
+        "id": "evidence:parent:9",
+        "sensitivity": "public",
+        "supports": true
+      },
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:letters",
+        "claim_id": "claim:parent:10",
+        "confidence": "probable",
+        "id": "evidence:parent:10",
+        "sensitivity": "public",
+        "supports": true
+      },
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:register",
+        "claim_id": "claim:parent:11",
+        "confidence": "documented",
+        "id": "evidence:parent:11",
+        "sensitivity": "public",
+        "supports": true
+      },
+      {
+        "assessment": "The invented source entry is described as naming this parent-child link.",
+        "citation_id": "cite:register",
+        "claim_id": "claim:parent:12",
+        "confidence": "documented",
+        "id": "evidence:parent:12",
+        "sensitivity": "public",
+        "supports": true
+      }
+    ],
+    "Finding": [
+      {
+        "conclusion": "The demo models a 42-person, four-generation Alderwick family across three fictional locations; parentage is mostly documented in the invented evidence model, with two explicitly uncertain links.",
+        "confidence": "probable",
+        "evidence_ids": [
+          "evidence:parent:5"
+        ],
+        "id": "finding:overview",
+        "related_ids": [
+          "person:01",
+          "person:42"
+        ],
+        "sensitivity": "public",
+        "status": "reviewed"
+      }
+    ],
+    "Hypothesis": [
+      {
+        "confidence": "possible",
+        "evidence_ids": [],
+        "id": "hypothesis:42",
+        "related_ids": [
+          "person:41",
+          "person:42"
+        ],
+        "sensitivity": "public",
+        "statement": "Person 42 may be the child of Person 41; the supplied family sketch is suggestive but no independent matching entry is represented.",
+        "status": "open"
+      }
+    ],
+    "Person": [
+      {
+        "event_ids": [
+          "event:01:birth",
+          "event:01:death"
+        ],
+        "external_ids": [],
+        "id": "person:01",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Ada Alder"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:02:birth",
+          "event:02:death"
+        ],
+        "external_ids": [],
+        "id": "person:02",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Bram Alder"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:03:birth",
+          "event:03:death"
+        ],
+        "external_ids": [],
+        "id": "person:03",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Celia Bell"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:04:birth",
+          "event:04:death"
+        ],
+        "external_ids": [],
+        "id": "person:04",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Dorian Bell"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:05:birth",
+          "event:05:death"
+        ],
+        "external_ids": [],
+        "id": "person:05",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Elara Cairn"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:06:birth",
+          "event:06:death"
+        ],
+        "external_ids": [],
+        "id": "person:06",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Felix Cairn"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:07:birth",
+          "event:07:death"
+        ],
+        "external_ids": [],
+        "id": "person:07",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Greta Dale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:08:birth",
+          "event:08:death"
+        ],
+        "external_ids": [],
+        "id": "person:08",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Hugo Dale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:09:birth",
+          "event:09:death"
+        ],
+        "external_ids": [],
+        "id": "person:09",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Iris Ember"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:10:birth",
+          "event:10:death"
+        ],
+        "external_ids": [],
+        "id": "person:10",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Jonas Ember"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:11:birth",
+          "event:11:death"
+        ],
+        "external_ids": [],
+        "id": "person:11",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Kezia Firth"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:12:birth",
+          "event:12:death"
+        ],
+        "external_ids": [],
+        "id": "person:12",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Luca Firth"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:13:birth",
+          "event:13:death"
+        ],
+        "external_ids": [],
+        "id": "person:13",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Mara Grove"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:14:birth",
+          "event:14:death"
+        ],
+        "external_ids": [],
+        "id": "person:14",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Nico Grove"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:15:birth",
+          "event:15:death"
+        ],
+        "external_ids": [],
+        "id": "person:15",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Orla Hale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:16:birth",
+          "event:16:death"
+        ],
+        "external_ids": [],
+        "id": "person:16",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Pavel Hale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:17:birth",
+          "event:17:death"
+        ],
+        "external_ids": [],
+        "id": "person:17",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Rhea Alder"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:18:birth",
+          "event:18:death"
+        ],
+        "external_ids": [],
+        "id": "person:18",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Silas Alder"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:19:birth",
+          "event:19:death"
+        ],
+        "external_ids": [],
+        "id": "person:19",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Talia Bell"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:20:birth",
+          "event:20:death"
+        ],
+        "external_ids": [],
+        "id": "person:20",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Ulric Bell"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:21:birth",
+          "event:21:death"
+        ],
+        "external_ids": [],
+        "id": "person:21",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Vera Cairn"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:22:birth",
+          "event:22:death"
+        ],
+        "external_ids": [],
+        "id": "person:22",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Wes Cairn"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:23:birth",
+          "event:23:death"
+        ],
+        "external_ids": [],
+        "id": "person:23",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Xanthe Dale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:24:birth",
+          "event:24:death"
+        ],
+        "external_ids": [],
+        "id": "person:24",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Yorick Dale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:25:birth",
+          "event:25:death"
+        ],
+        "external_ids": [],
+        "id": "person:25",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Zella Ember"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:26:birth",
+          "event:26:death"
+        ],
+        "external_ids": [],
+        "id": "person:26",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Arden Ember"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:27:birth",
+          "event:27:death"
+        ],
+        "external_ids": [],
+        "id": "person:27",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Briony Firth"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:28:birth",
+          "event:28:death"
+        ],
+        "external_ids": [],
+        "id": "person:28",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Cato Firth"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:29:birth",
+          "event:29:death"
+        ],
+        "external_ids": [],
+        "id": "person:29",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Delia Grove"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:30:birth",
+          "event:30:death"
+        ],
+        "external_ids": [],
+        "id": "person:30",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Emil Grove"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:31:birth",
+          "event:31:death"
+        ],
+        "external_ids": [],
+        "id": "person:31",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Flora Hale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:32:birth",
+          "event:32:death"
+        ],
+        "external_ids": [],
+        "id": "person:32",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Galen Hale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:33:birth",
+          "event:33:death"
+        ],
+        "external_ids": [],
+        "id": "person:33",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Hester Alder"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:34:birth",
+          "event:34:death"
+        ],
+        "external_ids": [],
+        "id": "person:34",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Ivo Alder"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:35:birth",
+          "event:35:death"
+        ],
+        "external_ids": [],
+        "id": "person:35",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "June Bell"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:36:birth",
+          "event:36:death"
+        ],
+        "external_ids": [],
+        "id": "person:36",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Kellan Bell"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:37:birth",
+          "event:37:death"
+        ],
+        "external_ids": [],
+        "id": "person:37",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Liora Cairn"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:38:birth",
+          "event:38:death"
+        ],
+        "external_ids": [],
+        "id": "person:38",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Milo Cairn"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:39:birth",
+          "event:39:death"
+        ],
+        "external_ids": [],
+        "id": "person:39",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Nessa Dale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:40:birth",
+          "event:40:death"
+        ],
+        "external_ids": [],
+        "id": "person:40",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Oren Dale"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:41:birth",
+          "event:41:death"
+        ],
+        "external_ids": [],
+        "id": "person:41",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Petra Ember"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      },
+      {
+        "event_ids": [
+          "event:42:birth",
+          "event:42:death"
+        ],
+        "external_ids": [],
+        "id": "person:42",
+        "living": "deceased",
+        "names": [
+          {
+            "confidence": "probable",
+            "kind": "birth",
+            "language": null,
+            "script": null,
+            "valid_from": null,
+            "valid_to": null,
+            "value": "Quill Ember"
+          }
+        ],
+        "notes": "Fictional person; dates and identity are illustrative.",
+        "sensitivity": "public"
+      }
+    ],
+    "Place": [
+      {
+        "external_ids": [],
+        "id": "place:lantern",
+        "latitude": 55.86,
+        "longitude": -4.25,
+        "name": "Lanternford (fictional)",
+        "parent_id": null,
+        "sensitivity": "public"
+      },
+      {
+        "external_ids": [],
+        "id": "place:willow",
+        "latitude": 55.95,
+        "longitude": -3.19,
+        "name": "Willowmere (fictional)",
+        "parent_id": null,
+        "sensitivity": "public"
+      },
+      {
+        "external_ids": [],
+        "id": "place:reed",
+        "latitude": 56.12,
+        "longitude": -4.76,
+        "name": "Reedhaven (fictional)",
+        "parent_id": null,
+        "sensitivity": "public"
+      }
+    ],
+    "Relationship": [
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:5",
+        "kind": "parent",
+        "object_id": "person:05",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:01"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:6",
+        "kind": "parent",
+        "object_id": "person:06",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:01"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:7",
+        "kind": "parent",
+        "object_id": "person:07",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:01"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:8",
+        "kind": "parent",
+        "object_id": "person:08",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:01"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:9",
+        "kind": "parent",
+        "object_id": "person:09",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:03"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:parent:10",
+        "kind": "parent",
+        "object_id": "person:10",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:03"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:11",
+        "kind": "parent",
+        "object_id": "person:11",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:03"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:12",
+        "kind": "parent",
+        "object_id": "person:12",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:03"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:21",
+        "kind": "parent",
+        "object_id": "person:21",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:05"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:22",
+        "kind": "parent",
+        "object_id": "person:22",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:05"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:23",
+        "kind": "parent",
+        "object_id": "person:23",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:06"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:24",
+        "kind": "parent",
+        "object_id": "person:24",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:06"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:25",
+        "kind": "parent",
+        "object_id": "person:25",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:07"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:26",
+        "kind": "parent",
+        "object_id": "person:26",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:07"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:27",
+        "kind": "parent",
+        "object_id": "person:27",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:08"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:28",
+        "kind": "parent",
+        "object_id": "person:28",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:08"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:29",
+        "kind": "parent",
+        "object_id": "person:29",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:09"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:30",
+        "kind": "parent",
+        "object_id": "person:30",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:09"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:31",
+        "kind": "parent",
+        "object_id": "person:31",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:10"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:32",
+        "kind": "parent",
+        "object_id": "person:32",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:10"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:33",
+        "kind": "parent",
+        "object_id": "person:33",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:11"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:34",
+        "kind": "parent",
+        "object_id": "person:34",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:11"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:35",
+        "kind": "parent",
+        "object_id": "person:35",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:12"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:36",
+        "kind": "parent",
+        "object_id": "person:36",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:12"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:37",
+        "kind": "parent",
+        "object_id": "person:37",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:21"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:38",
+        "kind": "parent",
+        "object_id": "person:38",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:22"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:39",
+        "kind": "parent",
+        "object_id": "person:39",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:23"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:40",
+        "kind": "parent",
+        "object_id": "person:40",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:24"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "documented",
+        "end_date": null,
+        "id": "rel:parent:41",
+        "kind": "parent",
+        "object_id": "person:41",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:25"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "possible",
+        "end_date": null,
+        "id": "rel:parent:42",
+        "kind": "parent",
+        "object_id": "person:42",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:26"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:1:2",
+        "kind": "spouse",
+        "object_id": "person:02",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:01"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:3:4",
+        "kind": "spouse",
+        "object_id": "person:04",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:03"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:5:13",
+        "kind": "spouse",
+        "object_id": "person:13",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:05"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:6:14",
+        "kind": "spouse",
+        "object_id": "person:14",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:06"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:7:15",
+        "kind": "spouse",
+        "object_id": "person:15",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:07"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:8:16",
+        "kind": "spouse",
+        "object_id": "person:16",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:08"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:9:17",
+        "kind": "spouse",
+        "object_id": "person:17",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:09"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:10:18",
+        "kind": "spouse",
+        "object_id": "person:18",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:10"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:11:19",
+        "kind": "spouse",
+        "object_id": "person:19",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:11"
+      },
+      {
+        "claim_ids": [],
+        "confidence": "probable",
+        "end_date": null,
+        "id": "rel:spouse:12:20",
+        "kind": "spouse",
+        "object_id": "person:20",
+        "sensitivity": "public",
+        "start_date": null,
+        "subject_id": "person:12"
+      }
+    ],
+    "ResearchQuestion": [
+      {
+        "id": "question:parentage",
+        "priority": "high",
+        "question": "Can the probable parent link for person 10 be distinguished from another same-named adult?",
+        "related_ids": [
+          "person:09",
+          "person:10"
+        ],
+        "sensitivity": "public",
+        "status": "open"
+      },
+      {
+        "id": "question:household",
+        "priority": "normal",
+        "question": "Which invented household return best connects the Willowmere branch to Lanternford?",
+        "related_ids": [
+          "person:11",
+          "person:19"
+        ],
+        "sensitivity": "public",
+        "status": "open"
+      }
+    ],
+    "Source": [
+      {
+        "access_note": "Invented teaching source; no real archive or record.",
+        "external_ids": [],
+        "id": "src:register",
+        "licence": null,
+        "repository": "Fictional Lanternford Archive",
+        "sensitivity": "public",
+        "source_type": "fictional parish register",
+        "title": "The Lanternford Parish Register, 1750\u20131899 (invented)",
+        "url": null
+      },
+      {
+        "access_note": "Invented teaching source; no real archive or record.",
+        "external_ids": [],
+        "id": "src:returns",
+        "licence": null,
+        "repository": "Fictional Lanternford Archive",
+        "sensitivity": "public",
+        "source_type": "fictional census transcript",
+        "title": "Willowmere Household Returns, 1801\u20131891 (invented)",
+        "url": null
+      },
+      {
+        "access_note": "Invented teaching source; no real archive or record.",
+        "external_ids": [],
+        "id": "src:letters",
+        "licence": null,
+        "repository": "Fictional Lanternford Archive",
+        "sensitivity": "public",
+        "source_type": "fictional letter collection",
+        "title": "Alderwick Family Letters (invented manuscript collection)",
+        "url": null
+      }
+    ]
+  },
+  "schema_version": 1,
+  "summary": "A fully invented four-generation family created to demonstrate people, relationships, places, citations, maps, timelines and research review. Every record is public and every person is deceased.",
+  "title": "The Alderwick Family | Fictional Research Case",
+  "updated_at": "2026-01-01T00:00:00+00:00"
+}

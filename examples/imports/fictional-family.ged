@@ -1,0 +1,60 @@
+0 HEAD
+1 SOUR Fictional fixture generator
+1 GEDC
+2 VERS 7.0
+0 @S1@ SOUR
+1 TITL Invented Asterhaven civil register
+2 CONT Volume α — synthetic evidence
+1 REPO @R1@
+0 @R1@ REPO
+1 NAME Imaginary Municipal Archive
+0 @N1@ NOTE All people and places in this fixture are fictional.
+1 CONT This note is deliberately multi-line.
+1 CONC  No historical claim is intended.
+0 @I1@ INDI
+1 NAME Élodie /Fable/
+2 TYPE birth
+1 NAME Élodie /Quill/
+2 TYPE married
+1 SEX F
+1 NOTE @N1@
+1 BIRT
+2 DATE ABT 1840
+2 PLAC Asterhaven, Imaginary County
+3 MAP
+4 LATI N54.123
+4 LONG W4.321
+2 SOUR @S1@
+3 PAGE volume α, page 12
+3 DATA
+4 TEXT Élodie, fictional daughter of a fictional household.
+5 CONT The spelling includes an accented character.
+1 RESI
+2 DATE BET 1860 AND 1870
+2 PLAC Lantern Street, Asterhaven
+1 OCCU Bookbinder
+2 DATE 1865
+1 DEAT
+2 DATE 4 MAR 1908
+1 BURI
+2 DATE 7 MAR 1908
+2 PLAC Invented Garden Cemetery
+0 @I2@ INDI
+1 NAME Rowan /Quill/
+1 DEAT Y
+0 @I3@ INDI
+1 NAME Synthetic /Living Example/
+1 _LIVING Y
+1 RESN privacy
+1 BIRT
+2 DATE 2000
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I1@
+1 CHIL @I3@
+1 MARR
+2 DATE 1860
+2 PLAC Asterhaven, Imaginary County
+2 SOUR @S1@
+3 PAGE marriage entry 4
+0 TRLR

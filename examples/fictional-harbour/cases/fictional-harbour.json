@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "id": "fictional-harbour",
+  "title": "Fictional Harbour Research Case",
+  "summary": "Synthetic example for end-to-end toolkit validation.",
+  "question_ids": ["question-1"],
+  "finding_ids": [],
+  "record_sets": {
+    "Person": [
+      {"id": "person-marin", "names": [{"value": "Rowan Marin", "kind": "preferred"}], "living": false, "sensitivity": "public"},
+      {"id": "person-vale", "names": [{"value": "Tessa Vale", "kind": "preferred"}], "living": false, "sensitivity": "public"}
+    ],
+    "Event": [
+      {"id": "event-rowan-birth", "kind": "birth", "date": "1872-04-09", "place_id": "place-harbour", "participant_ids": ["person-marin"], "sensitivity": "public"},
+      {"id": "event-tessa-arrival", "kind": "arrival", "date": "1894-10", "place_id": "place-harbour", "participant_ids": ["person-vale"], "sensitivity": "public"}
+    ],
+    "Place": [{"id": "place-harbour", "name": "Fictional Harbour", "latitude": 54.75, "longitude": -4.25, "sensitivity": "public"}],
+    "Relationship": [{"id": "relationship-1", "subject_id": "person-marin", "object_id": "person-vale", "kind": "partner", "sensitivity": "public"}],
+    "Source": [{"id": "source-1", "title": "Invented harbour ledger", "source_type": "synthetic", "sensitivity": "public"}],
+    "Citation": [{"id": "citation-1", "source_id": "source-1", "locator": "folio 12", "sensitivity": "public"}],
+    "Claim": [{"id": "claim-1", "subject_id": "person-marin", "predicate": "household", "value": "possible household with Tessa Vale", "citation_ids": ["citation-1"], "sensitivity": "public"}],
+    "Evidence": [{"id": "evidence-1", "claim_id": "claim-1", "citation_id": "citation-1", "assessment": "supports", "sensitivity": "public"}],
+    "Hypothesis": [{"id": "hypothesis-1", "statement": "The household inference needs an independent source.", "sensitivity": "public"}],
+    "ResearchQuestion": [{"id": "question-1", "question": "What record could independently establish the household?", "sensitivity": "public"}]
+  }
+}
