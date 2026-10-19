@@ -66,6 +66,16 @@ def _birth_upper_year(value: str | None) -> int | None:
     return None
 
 
+def birth_upper_year(value: str | None) -> int | None:
+    """The latest year a supplied birth date allows, or None when it cannot be assessed.
+
+    Exact dates give their year; ``BEF``/``BET … AND …``/``FROM … TO …`` their
+    upper bound; ``ABT``/``EST``/``CAL`` the year plus APPROXIMATE_MARGIN_YEARS.
+    Open-ended, placeholder and free-text values return None.
+    """
+    return _birth_upper_year(value)
+
+
 def is_historical_birth(value: str | None, *, current_year: int | None = None) -> bool:
     """True when a supplied birth date is assuredly over HISTORICAL_YEARS ago.
 

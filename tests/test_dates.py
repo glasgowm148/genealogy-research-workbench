@@ -23,7 +23,9 @@ class DateOrderingTests(unittest.TestCase):
 class SharedHelperTests(unittest.TestCase):
     def test_year_wikitree_and_historical_helpers(self):
         from genealogy.dates import wikitree_date, year_of
-        from genealogy.publication import is_historical_birth
+        from genealogy.publication import birth_upper_year, is_historical_birth
+        self.assertEqual([birth_upper_year(v) for v in ("1850", "BEF 3 MAR 1850", "ABT 1850", "BET 1840 AND 1845", "AFT 1850", "about then")],
+                         [1850, 1850, 1860, 1845, None, None])
         self.assertEqual([wikitree_date(v) for v in ("1850-00-00", "1850-03-00", "1850-03-04", "0000-00-00", "", None)],
                          ["1850", "1850-03", "1850-03-04", None, None, None])
         self.assertEqual(wikitree_date("1850-00-00", "guess"), "ABT 1850")
