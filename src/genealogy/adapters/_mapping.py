@@ -150,7 +150,8 @@ def person_entities(adapter: str, external_value: str, data: Mapping[str, Any], 
     surname = text(surname) or text(value_for(data, "surname", "last_name", "lastname", "last_name_at_birth"))
     display_name = text(display_name) or text(value_for(data, "display_name", "full_name", "name"))
     joined = " ".join(part for part in (given, surname) if part)
-    person = Person(id=person_id, names=[Name(value=joined or display_name, kind="birth" if joined else "preferred")] if joined or display_name else [], external_ids=[ExternalIdentifier(system=adapter, value=external_value)], living=_living(value_for(data, "living", "is_living")), sensitivity=sensitivity)
+    names = [Name(value=joined, kind="birth", given=given, surname=surname)] if joined else [Name(value=display_name, kind="preferred")] if display_name else []
+    person = Person(id=person_id, names=names, external_ids=[ExternalIdentifier(system=adapter, value=external_value)], living=_living(value_for(data, "living", "is_living")), sensitivity=sensitivity)
     birth = place_and_event(adapter, person_id, external_value, "birth", birth_date or value_for(data, "birth_date", "birthdate"), birth_place or value_for(data, "birth_place", "birthplace"), sensitivity, birth_place_id or value_for(data, "birth_place_id", "birthplaceid"))
     death = place_and_event(adapter, person_id, external_value, "death", death_date or value_for(data, "death_date", "deathdate"), death_place or value_for(data, "death_place", "deathplace"), sensitivity, death_place_id or value_for(data, "death_place_id", "deathplaceid"))
     person.event_ids = [item.id for item in [*birth, *death] if isinstance(item, Event)]
@@ -160,6 +161,9 @@ def person_entities(adapter: str, external_value: str, data: Mapping[str, Any], 
 
 def _living(value: Any) -> LivingStatus:
     if isinstance(value, bool):
+        return LivingStatus.LIVING if value else LivingStatus.DECEASED
+    if isinstance(value, int) and value in (0, 1):
+        # WikiTree/OneTree IsLiving uses 1/0 for the provider's living flag.
         return LivingStatus.LIVING if value else LivingStatus.DECEASED
     if isinstance(value, str):
         normalised = value.strip().casefold()

@@ -160,11 +160,15 @@ class ImportWorkflowTests(unittest.TestCase):
         self.assertIn("PRIVATE QUOTATION", json.dumps(case.to_dict()))
 
     def test_textual_historical_births_publish_without_changing_supplied_dates(self):
+        from datetime import date
+        recent = date.today().year - 125
+        # An approximate birth gets a ten-year margin: about Y counts as Y + 10.
         historical = ("1 JAN 1800", "JAN 1800", "JAN1800", "1800", "1800-01-01",
-                      "BEF 1 JAN 1800", "BET 1790 AND 1800", "FROM JAN 1790 TO DEC 1800")
+                      "BEF 1 JAN 1800", "BET 1790 AND 1800", "FROM JAN 1790 TO DEC 1800",
+                      "ABT 1800", "EST 1800", "abt. 1800", str(recent), f"ABT {recent - 6}")
         protected = ("1 JAN 2000", "JAN2000", "0000", "0000-00-00", "unknown", "about 1800 maybe",
                      "31 FEB 1800", "1800-99-99", "born in 1800", "AFT 1800", "FROM 1800",
-                     "ABT 1800", "BET 1800 AND 2000", "BET 1900 AND 1800", "BEF unknown")
+                     f"ABT {recent}", "ABT 2000", "BET 1800 AND 2000", "BET 1900 AND 1800", "BEF unknown")
         for number, supplied in enumerate(historical + protected):
             with self.subTest(date=supplied):
                 self.source.write_text(f"0 HEAD\n0 @I1@ INDI\n1 NAME Invented /Historical/\n1 BIRT\n2 DATE {supplied}\n0 TRLR\n")

@@ -1,14 +1,16 @@
 """Offline mapping for OneTree profile exports and explicit relationship rows."""
 
+from collections import Counter
 from collections.abc import Mapping, Sequence
 import json
 from datetime import date
 import re
 from typing import Any
 
-from ._mapping import MappingAdapter, input_sensitivity, person_entities, record_id, reject_raw_material, supplied_coordinates, text, value_for
+from ._mapping import MappingAdapter, input_sensitivity, key, person_entities, place_and_event, record_id, reject_raw_material, supplied_coordinates, text, value_for
 from .base import AdapterBatch, AdapterRecord
-from ..models import Claim, Confidence, ExternalIdentifier, Name, Person, Place, Record, Relationship, Sensitivity
+from ..dates import wikitree_date
+from ..models import Claim, Confidence, Event, ExternalIdentifier, Name, Person, Place, Record, Relationship, Sensitivity
 
 
 class OneTreeAdapter(MappingAdapter):
@@ -64,6 +66,8 @@ class OneTreeAdapter(MappingAdapter):
                         id_to_profile[candidate] = external
             prepared.append((external, dict(row), entity_type))
         batch = AdapterBatch(adapter=self.name)
+        self._warnings: list[str] = []
+        self._hidden: set[str] = set()
         # A legacy isolated relationship row is a supported interchange API. Full
         # imports, however, must never fabricate missing profile endpoints.
         relation_only = not known_people and not explicit_collection and len(prepared) == 1
@@ -71,6 +75,12 @@ class OneTreeAdapter(MappingAdapter):
             external for external, row, kind in prepared
             if kind == "person" and not _publishable(row)
         }
+        rank = {Sensitivity.PUBLIC: 0, Sensitivity.RESTRICTED: 1, Sensitivity.LICENSED: 2, Sensitivity.PRIVATE: 3, Sensitivity.RAW_DNA: 4}
+        prefix = f"{self.name}:person:"
+        index: dict[str, Record] = {}
+        omitted: Counter[str] = Counter()
+        outside: set[str] = set()
+        examples: list[str] = []
         for number, (external, data, entity_type) in enumerate(prepared, 1):
             sensitivity = _provider_sensitivity(data, Sensitivity.PRIVATE)
             observation = AdapterRecord(self.external_id(external, text(value_for(data, "url"))), entity_type, data, sensitivity,
@@ -85,16 +95,39 @@ class OneTreeAdapter(MappingAdapter):
                     for associated in entities:
                         if getattr(associated, "place_id", None) == old_id:
                             associated.place_id = entity.id
+            for entity in entities:
+                endpoints: list[str] = []
                 if isinstance(entity, Relationship) and not relation_only and self.name == "one-tree":
-                    endpoints = [entity.subject_id.removeprefix(f"{self.name}:person:"), entity.object_id.removeprefix(f"{self.name}:person:")]
-                    missing = [item for item in endpoints if item not in known_people]
-                    if missing:
-                        batch.warnings.append(f"OneTree {external} references missing person {', '.join(missing)}; relationship omitted")
-                        continue
+                    endpoints = [entity.subject_id, entity.object_id]
+                elif isinstance(entity, Event) and self.name == "one-tree":
+                    endpoints = list(entity.participant_ids)
+                missing = [item.removeprefix(prefix) for item in endpoints if item.removeprefix(prefix) not in known_people]
+                if missing:
+                    omitted["relationships" if isinstance(entity, Relationship) else "events"] += 1
+                    outside.update(missing)
+                    if len(examples) < 5:
+                        examples.append(f"{external} → {', '.join(missing)}")
+                    continue
+                existing = index.get(entity.id)
+                if existing is not None and type(existing) is type(entity) and isinstance(entity, (Relationship, Event)):
+                    # The same couple or marriage listed from both profiles: keep the
+                    # first observation, at the more restrictive access level.
+                    if rank[entity.sensitivity] > rank[existing.sensitivity]:
+                        existing.sensitivity = entity.sensitivity
+                    continue
+                if existing is not None and isinstance(entity, Place) and entity.id in index:
+                    continue
                 batch.add_entity(entity)
-                if _publishable(data):
-                    if not isinstance(entity, Relationship) or not any(value.removeprefix(f"{self.name}:person:") in protected_people for value in (entity.subject_id, entity.object_id)):
+                index[entity.id] = entity
+                if _publishable(data) and entity.id not in self._hidden:
+                    linked = endpoints or ([entity.subject_id, entity.object_id] if isinstance(entity, Relationship) else [])
+                    if not any(value.removeprefix(prefix) in protected_people for value in linked):
                         observation.provenance["publishable_entity_ids"].append(entity.id)
+        if outside:
+            parts = " and ".join(f"{count} {noun}" for noun, count in sorted(omitted.items()))
+            batch.warnings.append(f"OneTree {parts} refer to {len(outside)} people not included in this export; "
+                                  f"they were omitted and no people were created (for example {'; '.join(examples)})")
+        batch.warnings.extend(self._warnings)
         return batch
 
     @staticmethod
@@ -118,8 +151,16 @@ class OneTreeAdapter(MappingAdapter):
     def normalise_row(self, external_value: str, data: dict, entity_type: str, sensitivity: Sensitivity, id_to_profile: Mapping[str, str] | None = None) -> list[Record]:
         id_to_profile = id_to_profile or {}
         if entity_type == "person":
-            entity_data = _with_living_from_death(data)
-            entities = person_entities(self.name, external_value, entity_data, sensitivity,
+            status = value_for(data, "data_status", "datastatus")
+            status = status if isinstance(status, Mapping) else {}
+            entity_data = dict(data)
+            for name in list(entity_data):
+                if key(str(name)) in ("birthdate", "deathdate"):
+                    field_status = value_for(status, name)
+                    entity_data[name] = wikitree_date(text(entity_data[name]), text(field_status)) or ""
+            entity_data = _with_living_from_death(entity_data)
+            given = " ".join(part for part in (text(value_for(data, "given_name", "first_name", "firstname")), text(value_for(data, "middle_name"))) if part) or None
+            entities = person_entities(self.name, external_value, entity_data, sensitivity, given=given,
                 birth_place=value_for(data, "birth_place", "birth_location"), death_place=value_for(data, "death_place", "death_location"),
                 surname=value_for(data, "surname", "last_name_at_birth", "last_name"))
             person = entities[0]
@@ -127,11 +168,17 @@ class OneTreeAdapter(MappingAdapter):
             if numeric_id and numeric_id != external_value:
                 person.external_ids.append(ExternalIdentifier(system=f"{self.name}:numeric", value=numeric_id))
             current_surname = text(value_for(data, "last_name_current"))
-            given = text(value_for(data, "given_name", "first_name"))
             if given and current_surname:
                 variant = f"{given} {current_surname}"
                 if not any(item.value == variant for item in person.names):
-                    person.names.append(Name(value=variant, kind="married"))
+                    person.names.append(Name(value=variant, kind="married", given=given, surname=current_surname))
+            for other in (text(value_for(data, "last_name_other")) or "").split(","):
+                other = other.strip()
+                if other and given and not any(item.surname == other for item in person.names):
+                    person.names.append(Name(value=f"{given} {other}", kind="alias", given=given, surname=other))
+            for nickname in (text(value_for(data, "nicknames")) or "").split(","):
+                if nickname.strip():
+                    person.names.append(Name(value=nickname.strip(), kind="nickname"))
             variants = value_for(data, "aliases", "name_variants") or []
             if isinstance(variants, str):
                 variants = [variants]
@@ -149,7 +196,11 @@ class OneTreeAdapter(MappingAdapter):
                 latitude = value_for(data, f"{kind}_latitude", f"{kind}_lat")
                 longitude = value_for(data, f"{kind}_longitude", f"{kind}_lon", f"{kind}_lng")
                 if latitude is not None or longitude is not None:
-                    coords = supplied_coordinates(latitude, longitude)
+                    try:
+                        coords = supplied_coordinates(latitude, longitude)
+                    except ValueError as error:
+                        self._warnings.append(f"OneTree {external_value} {kind} place has invalid supplied coordinates ({error}); coordinates omitted")
+                        continue
                     event = next((item for item in entities if getattr(item, "kind", None) == kind), None)
                     if event and event.place_id:
                         place = next(item for item in entities if isinstance(item, Place) and item.id == event.place_id)
@@ -159,7 +210,9 @@ class OneTreeAdapter(MappingAdapter):
             for role in ("father", "mother"):
                 related = _relative_id(value_for(data, role, f"{role}_id"), id_to_profile)
                 if related:
-                    entities.append(Relationship(id=record_id(self.name, "relationship", f"{external_value}:{role}"), subject_id=person.id, object_id=record_id(self.name, "person", related), kind="parent", confidence=_confidence(value_for(data, f"{role}_confidence")), sensitivity=sensitivity))
+                    mark = _TREE_PARENT_STATUS.get(text(value_for(status, role)) or "")
+                    entities.append(Relationship(id=record_id(self.name, "relationship", f"{external_value}:{role}"), subject_id=person.id, object_id=record_id(self.name, "person", related), kind="parent", confidence=_confidence(value_for(data, f"{role}_confidence")),
+                                                 pedigree="non-biological" if mark == "non-biological" else None, tree_status=mark, sensitivity=sensitivity))
             for collection, relation_kind in (("spouses", "spouse"), ("children", "parent")):
                 relatives = value_for(data, collection, collection.rstrip("s"))
                 if relatives is None:
@@ -170,11 +223,30 @@ class OneTreeAdapter(MappingAdapter):
                     relatives = [relatives]
                 for number, relative in enumerate(relatives, 1):
                     related = _relative_id(relative, id_to_profile)
-                    if related:
-                        subject, object_ = (person.id, record_id(self.name, "person", related))
-                        if collection == "children":
-                            subject, object_ = object_, subject
-                        entities.append(Relationship(id=record_id(self.name, "relationship", f"{external_value}:{collection}:{number}"), subject_id=subject, object_id=object_, kind=relation_kind, confidence=_confidence(value_for(relative, "confidence") if isinstance(relative, Mapping) else None), sensitivity=sensitivity))
+                    if not related:
+                        continue
+                    confidence = _confidence(value_for(relative, "confidence") if isinstance(relative, Mapping) else None)
+                    if collection == "children":
+                        entities.append(Relationship(id=record_id(self.name, "relationship", f"{external_value}:children:{number}"), subject_id=record_id(self.name, "person", related), object_id=person.id, kind="parent", confidence=confidence, sensitivity=sensitivity))
+                        continue
+                    # One couple is one relationship, whichever profile lists it.
+                    first, second = sorted((external_value, related))
+                    relation = Relationship(id=record_id(self.name, "relationship", f"{first}:spouse:{second}"), subject_id=record_id(self.name, "person", first), object_id=record_id(self.name, "person", second), kind="spouse", confidence=confidence, sensitivity=sensitivity)
+                    hidden = isinstance(relative, Mapping) and _flag(value_for(relative, "do_not_display", "donotdisplay"))
+                    entities.append(relation)
+                    if hidden:
+                        self._hidden.add(relation.id)
+                    if isinstance(relative, Mapping):
+                        date = wikitree_date(text(value_for(relative, "marriage_date")))
+                        location = text(value_for(relative, "marriage_location"))
+                        if date or location:
+                            marriage = place_and_event(self.name, record_id(self.name, "person", first), f"{first}:{second}", "marriage", date, location, sensitivity)
+                            for item in marriage:
+                                if isinstance(item, Event):
+                                    item.participant_ids = [record_id(self.name, "person", first), record_id(self.name, "person", second)]
+                                    if hidden:
+                                        self._hidden.add(item.id)
+                            entities.extend(marriage)
             return entities
         subject = text(value_for(data, "subject_id", "person_id", "child_id", "from_id"))
         object_ = text(value_for(data, "object_id", "relative_id", "parent_id", "to_id"))
@@ -182,6 +254,13 @@ class OneTreeAdapter(MappingAdapter):
         if not (subject and object_ and kind):
             raise ValueError(f"OneTree relationship {external_value} needs subject, object and kind")
         return [Relationship(id=record_id(self.name, "relationship", external_value), subject_id=record_id(self.name, "person", _profile_value(subject, id_to_profile)), object_id=record_id(self.name, "person", _profile_value(object_, id_to_profile)), kind=kind.casefold(), confidence=_confidence(value_for(data, "confidence")), sensitivity=sensitivity)]
+
+
+_TREE_PARENT_STATUS = {"5": "non-biological", "10": "uncertain", "20": "confident", "30": "DNA confirmed"}
+
+
+def _flag(value: Any) -> bool:
+    return value is True or (isinstance(value, (int, str)) and str(value).strip().casefold() in {"1", "true", "yes"})
 
 
 def _confidence(value: Any) -> Confidence:

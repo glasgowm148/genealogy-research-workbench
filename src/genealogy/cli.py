@@ -170,6 +170,8 @@ def parser() -> argparse.ArgumentParser:
     imported.add_argument("--publish-reviewed-sources", action="store_true",
                           help="with --publish-deceased, confirm linked bibliographic titles/locators are reviewed; quotations stay private")
     imported.add_argument("--replace", action="store_true", help="replace all selected case records; never merge unrelated trees")
+    imported.add_argument("--update", action="store_true",
+                          help="refresh a previous import of the same tree from a newer export, keeping research added to the case")
     serve = commands.add_parser("serve", help="open a local-only file upload and site preview server")
     serve.add_argument("--port", type=int, default=8000, help="loopback port (default: 8000)")
     commands.add_parser("validate", help="validate the selected durable research case")
@@ -260,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "import":
             from .importing import import_file
             report = import_file(args.project, case, config, args.input, format=args.format,
-                                 publish_deceased=args.publish_deceased, replace=args.replace,
+                                 publish_deceased=args.publish_deceased, replace=args.replace, update=args.update,
                                  publish_reviewed_sources=args.publish_reviewed_sources)
             for warning in report["warnings"]:
                 print(f"warning: {warning}", file=sys.stderr)

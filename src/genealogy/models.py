@@ -115,6 +115,9 @@ class Name:
     valid_from: str | None = None
     valid_to: str | None = None
     confidence: Confidence = Confidence.UNKNOWN
+    # Optional structured parts as supplied (GEDCOM GIVN/SURN or /surname/).
+    given: str | None = None
+    surname: str | None = None
 
 
 @dataclass(slots=True)
@@ -151,6 +154,12 @@ class Person(Record):
 
 @dataclass(slots=True)
 class Relationship(Record):
+    """A recorded link between two people.
+
+    ``kind="parent"`` reads "subject's parent is object": ``subject_id`` is the
+    child and ``object_id`` the parent. Spouse/partner links are symmetric.
+    """
+
     subject_id: str
     object_id: str
     kind: str
@@ -159,6 +168,12 @@ class Relationship(Record):
     start_date: str | None = None
     end_date: str | None = None
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    # Supplied nature of a parent link: birth, adopted, foster, step, sealing or
+    # another provider term. None means the input did not say; it is not "birth".
+    pedigree: str | None = None
+    # The source tree's own mark, e.g. WikiTree "uncertain" or GEDCOM "challenged".
+    # It is displayed as the tree's statement and never raises ``confidence``.
+    tree_status: str | None = None
 
 
 @dataclass(slots=True)
@@ -166,6 +181,8 @@ class Source(Record):
     title: str
     source_type: str = "unknown"
     repository: str | None = None
+    author: str | None = None
+    publication: str | None = None
     url: str | None = None
     access_note: str | None = None
     licence: str | None = None

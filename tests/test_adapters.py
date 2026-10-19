@@ -11,7 +11,7 @@ from genealogy.adapters import (
     normalise_familysearch_pid, normalise_wikitree_profile_id, wikitree_family_case,
 )
 from genealogy.case import ResearchCase, validate_case
-from genealogy.models import Citation, Claim, Evidence, Event, ImportProvenance, Person, Relationship, Source
+from genealogy.models import Citation, Claim, Evidence, Event, ImportProvenance, LivingStatus, Person, Relationship, Source
 from genealogy.privacy import PrivacyViolation
 
 
@@ -59,7 +59,7 @@ class AdapterTests(unittest.TestCase):
         )
         person = next(entity for entity in batch.entities if isinstance(entity, Person) and entity.id.endswith("I1"))
         self.assertEqual([name.kind for name in person.names], ["birth", "alias"])
-        self.assertFalse(person.living)
+        self.assertEqual(person.living, LivingStatus.DECEASED)
         self.assertTrue(any(isinstance(entity, Source) for entity in batch.entities))
         self.assertTrue(any(isinstance(entity, Citation) for entity in batch.entities))
         self.assertTrue(any(isinstance(entity, Claim) and entity.predicate == "documented-in" for entity in batch.entities))

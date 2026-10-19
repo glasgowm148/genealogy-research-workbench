@@ -94,17 +94,28 @@ class ImporterTests(unittest.TestCase):
         case = self.assert_valid(batch)
         self.assertEqual(len(case.records(Person)), 1)
         self.assertFalse(case.records(Relationship))
-        self.assertEqual(len(batch.warnings), 2)
+        self.assertEqual(len(batch.warnings), 1)
+        self.assertIn("2 relationships refer to 2 people not included in this export", batch.warnings[0])
 
     def test_onetree_rejects_invalid_json_and_rows(self):
         for payload in ("{broken", [], {"data": 2}, [None], {"people": [], "relationships": [{"id": "bad"}]}):
             with self.subTest(payload=payload), self.assertRaises((ValueError, TypeError)):
                 OneTreeAdapter().ingest(payload)
 
-    def test_coordinates_reject_nonfinite_or_outside_range(self):
+    def test_invalid_coordinates_are_omitted_with_a_warning_never_kept_or_guessed(self):
+        from genealogy.adapters._mapping import supplied_coordinates
         for coordinate in ("NaN", "Infinity", 100):
-            with self.subTest(coordinate=coordinate), self.assertRaises(ValueError):
-                OneTreeAdapter().ingest({"id": "fictional", "BirthLocation": "Imaginary", "BirthLatitude": coordinate})
+            with self.subTest(coordinate=coordinate):
+                with self.assertRaises(ValueError):
+                    supplied_coordinates(coordinate, 0)
+                batch = OneTreeAdapter().ingest({"id": "fictional", "BirthLocation": "Imaginary", "BirthLatitude": coordinate})
+                place = next(item for item in batch.entities if isinstance(item, Place))
+                self.assertEqual((place.name, place.latitude, place.longitude), ("Imaginary", None, None))
+                self.assertTrue(any("invalid supplied coordinates" in warning for warning in batch.warnings))
+        gedcom = GedcomAdapter().ingest("0 @I1@ INDI\n1 BIRT\n2 PLAC Imaginary\n3 MAP\n4 LATI N95\n4 LONG W1\n")
+        place = next(item for item in gedcom.entities if isinstance(item, Place))
+        self.assertEqual((place.latitude, place.longitude), (None, None))
+        self.assertTrue(any("invalid supplied coordinates" in warning for warning in gedcom.warnings))
 
     def test_batch_duplicate_index_preserves_conflict_checks(self):
         batch = AdapterBatch(adapter="fictional")

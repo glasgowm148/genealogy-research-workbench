@@ -10,6 +10,10 @@ from .case import ResearchCase
 from .models import AccessLevel, ClaimStatus, Confidence, ImportProvenance, LivingStatus
 
 
+# An "about 1800" birth is treated as possibly up to this many years later.
+APPROXIMATE_MARGIN_YEARS = 10
+HISTORICAL_YEARS = 120
+
 _MONTHS = {name: index for index, name in enumerate(
     ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"), 1
 )}
@@ -35,16 +39,21 @@ def _exact_date_year(value: str) -> int | None:
 def _birth_upper_year(value: str | None) -> int | None:
     """Conservative upper year for exact dates or explicitly bounded GEDCOM dates.
 
-    Approximate (ABT/CAL/EST) and open-ended (AFT/FROM) dates have no assured
-    upper bound. Unsupported calendars, placeholders and free text fail closed.
-    The original imported date remains unchanged for display and provenance.
+    Approximate dates (ABT/CAL/EST) are given a fixed margin of
+    APPROXIMATE_MARGIN_YEARS; open-ended dates (AFT/FROM) have no upper bound.
+    Unsupported calendars, placeholders and free text fail closed. The original
+    imported date remains unchanged for display and provenance.
     """
     if not isinstance(value, str):
         return None
-    normalized = " ".join(value.upper().split())
+    normalized = " ".join(value.upper().replace(".", " ").split())
     exact = _exact_date_year(normalized)
     if exact is not None:
         return exact
+    approximate = re.fullmatch(r"(?:ABT|ABOUT|CAL|EST|CIRCA|CA|C) (.+)", normalized)
+    if approximate:
+        year = _exact_date_year(approximate[1])
+        return year + APPROXIMATE_MARGIN_YEARS if year is not None else None
     upper = re.fullmatch(r"(?:BEF|TO) (.+)", normalized)
     if upper:
         return _exact_date_year(upper[1])
@@ -55,6 +64,18 @@ def _birth_upper_year(value: str | None) -> int | None:
         if lower_year is not None and upper_year is not None and lower_year <= upper_year:
             return upper_year
     return None
+
+
+def is_historical_birth(value: str | None, *, current_year: int | None = None) -> bool:
+    """True when a supplied birth date is assuredly over HISTORICAL_YEARS ago.
+
+    This is the publication heuristic used by the import review, available to
+    project tools so every surface applies one rule. WikiTree-style ``1850-00-00``
+    values should first be normalised with :func:`genealogy.dates.wikitree_date`.
+    It never proves that a person has died.
+    """
+    upper = _birth_upper_year(value)
+    return upper is not None and upper < (current_year or date.today().year) - HISTORICAL_YEARS
 
 
 def review_deceased(case: ResearchCase, batch: AdapterBatch, *, reviewed_sources: bool = False) -> int:
@@ -76,9 +97,7 @@ def review_deceased(case: ResearchCase, batch: AdapterBatch, *, reviewed_sources
         if person.living is True or person.living == LivingStatus.LIVING:
             continue
         historical = any(
-            event.kind.casefold() in ("birth", "birt")
-            and (upper_year := _birth_upper_year(event.date)) is not None
-            and upper_year < date.today().year - 120
+            event.kind.casefold() in ("birth", "birt") and is_historical_birth(event.date)
             for event in (events[eid] for eid in person.event_ids if eid in events)
         )
         if person.living is False or person.living == LivingStatus.DECEASED or historical:
@@ -108,6 +127,12 @@ def review_deceased(case: ResearchCase, batch: AdapterBatch, *, reviewed_sources
                 claim_ids.add(claim.id)
                 citation_ids.update(citation.id for citation in usable)
                 source_ids.update(citation.source_id for citation in usable)
+    # The recorded sex of an eligible historical person is a basic tree fact,
+    # published as the export's assertion so dossiers can say father/mother.
+    claim_ids.update(
+        claim.id for claim in claims.values()
+        if claim.predicate == "sex" and claim.subject_id in people and vetted(claim) and not claim.citation_ids
+    )
     originals = []
     for records in case.record_sets.values():
         for record in records:
@@ -121,6 +146,7 @@ def review_deceased(case: ResearchCase, batch: AdapterBatch, *, reviewed_sources
                 or kind == "Place" and record.id in public_places
                 or kind == "Relationship" and record.id in eligible_ids
                 and record.subject_id in people and record.object_id in people
+                and record.confidence is not Confidence.DISPROVED
             )
             if not publish or record.sensitivity not in (AccessLevel.PRIVATE, AccessLevel.PUBLIC):
                 continue
@@ -147,7 +173,8 @@ def review_deceased(case: ResearchCase, batch: AdapterBatch, *, reviewed_sources
             elif kind == "Claim":
                 record.status = ClaimStatus.ASSERTED
                 record.confidence = Confidence.UNKNOWN
-                record.rationale = "Imported source association; not independently assessed"
+                record.rationale = ("Imported tree assertion; not independently assessed" if record.predicate == "sex"
+                                    else "Imported source association; not independently assessed")
             elif kind == "Relationship":
                 record.claim_ids = []
                 record.confidence = Confidence.UNKNOWN
