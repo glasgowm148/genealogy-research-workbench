@@ -8,12 +8,14 @@ import json
 from pathlib import Path
 import re
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
+from xml.sax.saxutils import escape as xml_escape
 
 from . import exports
 from .case import ResearchCase
 from .config import ProjectConfig
-from .dates import date_sort_key
+from .dates import date_sort_key, year_of
+from .labels import child_role, confidence_label, guide_entries, parent_role, relationship_label, status_label
 from .maps import geojson
 
 ROUTES = {
@@ -21,9 +23,17 @@ ROUTES = {
     "tree.html": ("tree", "Family tree"), "timeline.html": ("timeline", "Timeline"),
     "places.html": ("map", "Places"), "sources.html": ("sources", "Sources"),
     "research.html": ("research", "Research"), "compare.html": ("compare", "Compare"),
-    "connections.html": ("connections", "Connections"), "sitemap.html": ("sitemap", "Site index"),
+    "connections.html": ("connections", "Connections"), "evidence.html": ("evidence", "Reading the evidence"),
+    "sitemap.html": ("sitemap", "Site index"),
 }
+DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
+              "data/public-tree.ged", "sitemap.xml"}
+ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
 MANIFEST = ".genealogy-site-manifest.json"
+PARENT_KINDS = {"parent", "father", "mother", "biological_parent", "adoptive_parent", "parent_child"}
+PARTNER_KINDS = {"spouse", "partner", "husband", "wife", "marriage"}
+FAMILY_EVENTS = {"marriage", "marriage banns", "marriage contract", "marriage licence", "marriage settlement",
+                 "engagement", "divorce", "divorce filed", "annulment"}
 
 
 def _text(value: Any) -> str:
@@ -56,7 +66,19 @@ def _json(value: Any) -> str:
 
 
 def _owned(name: str) -> bool:
-    return name in ROUTES or name in {"assets/site.css", "assets/site.js", "assets/favicon.svg", "assets/world.svg", "data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json"} or bool(re.fullmatch(r"people/p-[0-9a-f]{64}\.html", name))
+    return (name in ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
+            or bool(re.fullmatch(r"people/p-[0-9a-f]{64}\.html", name)))
+
+
+def _base_url(config: ProjectConfig) -> str | None:
+    site = config.raw.get("site", {})
+    value = site.get("base_url") if isinstance(site, dict) else None
+    if value is None:
+        return None
+    url = _url(value)
+    if not url:
+        raise ValueError("site.base_url must be an absolute http(s) URL without credentials")
+    return url.rstrip("/") + "/"
 
 
 def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> dict[str, Path]:
@@ -66,6 +88,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     deliberately never consulted again after that call. No network is used.
     """
     project = exports.project_for_public_export(case, config)
+    base_url = _base_url(config)
     directory = Path(directory)
     people = {p["id"]: p for p in project["people"]}
     places = {p["id"]: p for p in project["places"]}
@@ -79,6 +102,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     evidence_by_claim: dict[str, list[dict[str, Any]]] = defaultdict(list)
     citations_by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
     research_by_subject: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    parents_of: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    children_of: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    partners_of: dict[str, list[tuple[dict[str, Any], str]]] = defaultdict(list)
     event_owners: dict[str, set[str]] = defaultdict(set)
     for person in people.values():
         for eid in person.get("event_ids", []):
@@ -92,8 +118,18 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     for row in project["relationships"]:
         for pid in {row["subject_id"], row["object_id"]}:
             relationships_by_person[pid].append(row)
+        kind = str(row["kind"]).casefold()
+        if kind in PARENT_KINDS:
+            parents_of[row["subject_id"]].append(row)
+            children_of[row["object_id"]].append(row)
+        elif kind in PARTNER_KINDS:
+            partners_of[row["subject_id"]].append((row, row["object_id"]))
+            partners_of[row["object_id"]].append((row, row["subject_id"]))
+    sex = {}
     for row in project["claims"]:
         claims_by_subject[row["subject_id"]].append(row)
+        if row.get("predicate") == "sex" and row.get("status") != "rejected":
+            sex.setdefault(row["subject_id"], str(row.get("value") or "").strip())
     for row in project["evidence"]:
         evidence_by_claim[row["claim_id"]].append(row)
     for row in project["citations"]:
@@ -117,6 +153,22 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         p = people.get(pid, {})
         return next((n["value"] for n in p.get("names", []) if n.get("value")), pid)
 
+    def surname(pid: str) -> str:
+        p = people.get(pid, {})
+        return next((n["surname"] for n in p.get("names", []) if n.get("surname")), "")
+
+    def lifespan(pid: str) -> str:
+        """Recorded birth/death years, e.g. "b. 1840 – d. 1908"; approximate years keep "c."."""
+        parts = []
+        for kind, label in (("birth", "b."), ("death", "d.")):
+            event = next((e for e in events_by_person[pid] if e["kind"] == kind and e.get("date")), None)
+            year = year_of(event["date"]) if event else None
+            if year:
+                qualifier = re.match(r"\s*(ABOUT|ABT|EST|CAL|CIRCA|CA|C|BEF|BEFORE|AFT|AFTER|BET|FROM|INT)\b\.?", event["date"].upper())
+                marker = {"BEF": "bef. ", "BEFORE": "bef. ", "AFT": "aft. ", "AFTER": "aft. "}.get(qualifier[1], "c. ") if qualifier else ""
+                parts.append(f"{label} {marker}{year}")
+        return " – ".join(parts)
+
     def ref(rid: str, prefix: str = "", label: str | None = None) -> str:
         title = label or person_name(rid)
         route = record_routes.get(rid)
@@ -125,8 +177,20 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def empty(items: list[str], message: str = "No public records recorded.") -> str:
         return '<ul class="record-list">' + "".join(items) + "</ul>" if items else f'<p class="empty-state">{_text(message)}</p>'
 
-    def metadata(row: dict[str, Any]) -> str:
-        return ' <span class="badge">' + _text(" · ".join(str(row[k]) for k in ("status", "confidence") if row.get(k))) + "</span>" if row.get("status") or row.get("confidence") else ""
+    def metadata(row: dict[str, Any], prefix: str = "", *, relationship: bool = False) -> str:
+        """A labelled badge linked to the guide; stored values stay in data attributes."""
+        if not (relationship or row.get("status") or row.get("confidence")):
+            return ""
+        confidence = str(row.get("confidence") or "unknown")
+        if relationship:
+            words = relationship_label(row)
+            anchor = "confidence-tree-link" if confidence == "unknown" else f"confidence-{confidence}"
+        else:
+            words = " · ".join(value for value in (status_label(row.get("status")) if row.get("status") else "",
+                                                   confidence_label(row["confidence"]) if row.get("confidence") else "") if value)
+            anchor = f"status-{row['status']}" if row.get("status") and not row.get("confidence") else f"confidence-{confidence}"
+        stored = "".join(f' data-{name.replace("_", "-")}="{_text(row[name])}"' for name in ("status", "confidence", "tree_status") if row.get(name))
+        return f' <a class="badge evidence-badge" href="{prefix}evidence.html#{_text(anchor)}"{stored}>{_text(words)}</a>'
 
     def citation(row: dict[str, Any], prefix: str = "", *, canonical: bool = False) -> str:
         src = sources.get(row["source_id"], {})
@@ -141,28 +205,72 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return (f'<li id="{_anchor(row["id"])}" data-event-id="{_text(row["id"])}">' if canonical else "<li>") + f'<strong>{_text(row.get("date") or "Date unknown")} · {_text(row["kind"])}</strong>' + (f' — {ref(place["id"], prefix, place["name"])}' if place else "") + (f'<p>{_text(row["description"])}</p>' if row.get("description") else "") + '<p>' + ", ".join(ref(pid, prefix) for pid in row.get("participant_ids", [])) + "</p></li>"
 
     def relationship(row: dict[str, Any], prefix: str = "") -> str:
-        return f'<li id="{_anchor(row["id"])}">{ref(row["subject_id"], prefix)} — {_text(row["kind"])} → {ref(row["object_id"], prefix)}{metadata(row)}' + ("<p>Claims: " + ", ".join(ref(cid, prefix) for cid in row["claim_ids"]) + "</p>" if row.get("claim_ids") else "") + "</li>"
+        role = f' <span class="meta">({_text(row["pedigree"])})</span>' if row.get("pedigree") else ""
+        return f'<li id="{_anchor(row["id"])}">{ref(row["subject_id"], prefix)} — {_text(row["kind"])}{role} → {ref(row["object_id"], prefix)}{metadata(row, prefix, relationship=True)}' + ("<p>Claims: " + ", ".join(ref(cid, prefix) for cid in row["claim_ids"]) + "</p>" if row.get("claim_ids") else "") + "</li>"
 
     def claim(row: dict[str, Any], prefix: str = "") -> str:
         supporting = evidence_by_claim[row["id"]]
-        parts = [f'<article class="record-card card" id="{_anchor(row["id"])}"><h3>{_text(row["predicate"])}: {_text(row["value"])}</h3>{metadata(row)}', f'<p>Subject: {ref(row["subject_id"], prefix)}</p>']
+        parts = [f'<article class="record-card card" id="{_anchor(row["id"])}"><h3>{_text(row["predicate"])}: {_text(row["value"])}</h3>{metadata(row, prefix)}', f'<p>Subject: {ref(row["subject_id"], prefix)}</p>']
         if row.get("rationale"):
             parts.append(f'<p>{_text(row["rationale"])}</p>')
         parts.append("<h4>Citations</h4>" + empty(["<li>" + citation(citations[cid], prefix) + "</li>" for cid in row.get("citation_ids", []) if cid in citations]))
-        parts.append("<h4>Evidence assessments</h4>" + empty([f'<li id="{_anchor(e["id"])}"><strong>{"Supports" if e["supports"] else "Challenges"}</strong>: {_text(e["assessment"])}{metadata(e)} — {ref(e["citation_id"], prefix, "Citation")}</li>' for e in supporting]))
+        parts.append("<h4>Evidence assessments</h4>" + empty([f'<li id="{_anchor(e["id"])}"><strong>{"Supports" if e["supports"] else "Challenges"}</strong>: {_text(e["assessment"])}{metadata(e, prefix)} — {ref(e["citation_id"], prefix, "Citation")}</li>' for e in supporting]))
         return "".join(parts) + "</article>"
+
+    def person_item(pid: str, role: str, row: dict[str, Any] | None, prefix: str, extra: str = "") -> str:
+        span = lifespan(pid)
+        return (f'<li><span class="family-role">{_text(role)}</span> {ref(pid, prefix)}' + (f' <span class="meta">{_text(span)}</span>' if span else "")
+                + (metadata(row, prefix, relationship=True) if row else "") + extra + "</li>")
+
+    def family(pid: str) -> str:
+        """Parents, partners, children and siblings, each with its own recorded label."""
+        prefix = "../"
+        parents = sorted(parents_of[pid], key=lambda r: (person_name(r["object_id"]), r["id"]))
+        sections = []
+        items = [person_item(r["object_id"], parent_role(r, sex.get(r["object_id"])), r, prefix) for r in parents]
+        by_birth = [r for r in parents if str(r.get("pedigree") or "birth") == "birth" and r.get("confidence") != "disproved"]
+        fathers = {r["object_id"] for r in by_birth if sex.get(r["object_id"], "").casefold() in ("m", "male")}
+        mothers = {r["object_id"] for r in by_birth if sex.get(r["object_id"], "").casefold() in ("f", "female")}
+        competing = ""
+        if len(fathers) > 1 or len(mothers) > 1 or len({r["object_id"] for r in by_birth}) > 2:
+            competing = ('<p class="note" data-competing-parents>Competing parent records: more parents are recorded than one person can have by birth. '
+                         'Each link keeps its own label until research resolves it. <a href="../evidence.html#alternatives">About alternatives</a></p>')
+        sections.append("<h3>Parents</h3>" + competing + empty(items, "No public parents recorded."))
+        partner_items = []
+        for row, other in sorted(partners_of[pid], key=lambda item: (person_name(item[1]), item[0]["id"])):
+            shared = [e for e in events_by_person[pid] if e["kind"] in FAMILY_EVENTS and other in e.get("participant_ids", [])]
+            extra = "".join(f'<p class="meta">{_text(e["kind"].capitalize())}: {_text(e.get("date") or "date unknown")}' + (f' · {_text(places[e["place_id"]]["name"])}' if e.get("place_id") in places else "") + "</p>" for e in shared)
+            partner_items.append(person_item(other, "Spouse or partner", row, prefix, extra))
+        sections.append("<h3>Spouses and partners</h3>" + empty(partner_items, "No public spouses or partners recorded."))
+        child_rows = sorted(children_of[pid], key=lambda r: (date_sort_key(next((e.get("date") for e in events_by_person[r["subject_id"]] if e["kind"] == "birth"), None)), person_name(r["subject_id"])))
+        sections.append("<h3>Children</h3>" + empty([person_item(r["subject_id"], child_role(r, sex.get(r["subject_id"])), r, prefix) for r in child_rows], "No public children recorded."))
+        my_parents = {r["object_id"] for r in parents if r.get("confidence") != "disproved"}
+        siblings: dict[str, set[str]] = defaultdict(set)
+        for parent in my_parents:
+            for r in children_of[parent]:
+                if r["subject_id"] != pid and r.get("confidence") != "disproved":
+                    siblings[r["subject_id"]].add(parent)
+        sibling_items = []
+        for sibling in sorted(siblings, key=lambda s: (date_sort_key(next((e.get("date") for e in events_by_person[s] if e["kind"] == "birth"), None)), person_name(s))):
+            shared = siblings[sibling]
+            role = "Sibling (two recorded parents in common)" if len(shared) >= 2 else "Shares a recorded parent"
+            sibling_items.append(person_item(sibling, role, None, prefix))
+        sections.append("<h3>Siblings</h3>" + empty(sibling_items, "No public siblings recorded."))
+        return '<section class="family-summary" aria-labelledby="family-heading"><h2 id="family-heading">Family</h2>' + "".join(sections) + "</section>"
 
     options = '<option value="">Choose a person</option>' + "".join(f'<option value="{_text(pid)}">{_text(person_name(pid))}</option>' for pid in people)
     catalogue_rows = []
     for pid, person in people.items():
         events = events_by_person[pid]
         summary = "; ".join(f'{e["kind"]}: {e.get("date") or "date unknown"}' for e in events)
-        catalogue_rows.append(f'<tr data-person-id="{_text(pid)}" data-search-text="{_text(person_name(pid) + " " + pid + " " + summary)}"><td>{ref(pid)}</td><td>{_text(summary or "No events recorded.")}</td><td>{_text(pid)}</td></tr>')
+        span = lifespan(pid)
+        catalogue_rows.append(f'<tr data-person-id="{_text(pid)}" data-surname="{_text(surname(pid))}" data-search-text="{_text(person_name(pid) + " " + pid + " " + summary)}"><td>{ref(pid)}' + (f'<br><span class="meta">{_text(span)}</span>' if span else "") + f'</td><td>{_text(surname(pid) or "—")}</td><td>{_text(summary or "No events recorded.")}</td><td>{_text(pid)}</td></tr>')
     pages: dict[str, str] = {}
-    counts = [(len(project[key]), label) for key, label in (("people", "people"), ("events", "events"), ("sources", "sources"), ("questions", "research questions"))]
-    pages["index.html"] = '<p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1><p>Explore people, family connections and historical records. Claims, citations and evidence assessments remain distinct throughout this collection.</p><div class="stats stat-grid">' + "".join(f'<div class="stat-card"><strong>{n}</strong><span>{label}</span></div>' for n, label in counts) + '</div><h2>Start exploring</h2><p><a class="button" href="catalogue.html">Browse the people</a> <a href="tree.html">Explore family connections</a></p><h2>Research findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in project["findings"]])
-    pages["catalogue.html"] = '<h1>People catalogue</h1><label>Search people <input type="search" data-search placeholder="Name, ID or event"></label><p id="site-status" role="status"></p><div data-catalogue>' + ('<div class="table-wrap"><table><thead><tr><th>Person</th><th>Recorded events</th><th>Record ID</th></tr></thead><tbody>' + "".join(catalogue_rows) + '</tbody></table></div>' if catalogue_rows else '<p class="empty-state">No public people are available.</p>') + '</div>'
-    pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; confidence describes the recorded assessment.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + empty([relationship(r) for r in project["relationships"]], "No public family connections recorded.")
+    open_questions = [q for q in project["questions"] if str(q.get("status", "open")).casefold() == "open"]
+    counts = [(len(project["people"]), "people"), (len(project["events"]), "events"), (len(project["sources"]), "sources"), (len(open_questions), "open questions")]
+    pages["index.html"] = '<p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1><p>Explore people, family connections and historical records. Claims, citations and evidence assessments remain distinct throughout this collection. <a href="evidence.html">How to read the evidence labels</a>.</p><div class="stats stat-grid">' + "".join(f'<div class="stat-card"><strong>{n}</strong><span>{label}</span></div>' for n, label in counts) + '</div><h2>Start exploring</h2><p><a class="button" href="catalogue.html">Browse the people</a> <a href="tree.html">Explore family connections</a></p><h2>Research findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in project["findings"]])
+    pages["catalogue.html"] = '<h1>People catalogue</h1><label>Search people <input type="search" data-search placeholder="Name, ID or event"></label><p id="site-status" role="status"></p><div data-catalogue>' + ('<div class="table-wrap"><table><thead><tr><th>Person</th><th>Surname</th><th>Recorded events</th><th>Record ID</th></tr></thead><tbody>' + "".join(catalogue_rows) + '</tbody></table></div>' if catalogue_rows else '<p class="empty-state">No public people are available.</p>') + '</div>'
+    pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + empty([relationship(r) for r in project["relationships"]], "No public family connections recorded.")
     pages["timeline.html"] = '<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates.</p><div data-timeline>' + empty([event(e) for e in events_sorted], "No public dated events recorded.").replace('class="record-list"', 'class="record-list timeline"', 1) + '</div>'
     points, place_rows = [], []
     for p in project["places"]:
@@ -177,36 +285,68 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     source_cards = []
     for src in sources.values():
         link = _url(src.get("url"))
-        fields = "".join(f'<p><strong>{_text(k.replace("_", " ").capitalize())}:</strong> {_text(src[k])}</p>' for k in ("source_type", "repository", "access_note", "licence") if src.get(k))
+        fields = "".join(f'<p><strong>{_text(k.replace("_", " ").capitalize())}:</strong> {_text(src[k])}</p>' for k in ("author", "publication", "source_type", "repository", "access_note", "licence") if src.get(k))
         source_cards.append(f'<article class="record-card card" data-source-id="{_text(src["id"])}" id="{_anchor(src["id"])}"><h2>{_text(src["title"])}</h2>{fields}' + (f'<p><a href="{_text(link)}" rel="noreferrer">Open original source</a></p>' if link else "") + '<h3>Citations</h3>' + empty(["<li>" + citation(c, canonical=True) + "</li>" for c in citations_by_source[src["id"]]]) + '</article>')
     pages["sources.html"] = '<h1>Sources and citations</h1><p>Consult original records when assessing a claim. A citation identifies the specific record or passage.</p><div data-sources>' + ("".join(source_cards) or '<p class="empty-state">No public sources recorded.</p>') + '</div>'
-    research = ['<h1>Research notebook</h1><h2>Claims</h2>', "".join(claim(c) for c in project["claims"]) or '<p>No public claims recorded.</p>']
+    research = ['<h1>Research notebook</h1><p>Claims and their evidence first, then the work still outstanding: hypotheses, open questions and draft or reviewed findings. <a href="evidence.html">Reading the evidence</a>.</p><h2>Claims</h2>', "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex") or '<p>No public claims recorded.</p>']
     for collection, heading, field in (("hypotheses", "Hypotheses", "statement"), ("questions", "Research questions", "question"), ("findings", "Findings", "conclusion")):
-        research.append(f'<h2>{heading}</h2>' + empty([f'<li id="{_anchor(r["id"])}"><h3>{_text(r[field])}</h3>{metadata(r)}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in project[collection]]))
+        rows = sorted(project[collection], key=lambda r: (str(r.get("status", "open")).casefold() not in ("open", "draft"), r["id"]))
+        outstanding = sum(str(r.get("status", "open")).casefold() in ("open", "draft") for r in rows)
+        research.append(f'<h2>{heading}</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r[field])}</h3>{metadata(r)}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in rows]))
     pages["research.html"] = "".join(research)
     for route, heading, hook in (("compare.html", "Compare people", "compare"), ("connections.html", "Find a connection", "connection")):
         pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + empty([f'<li>{ref(pid)}</li>' for pid in people])
+    guide = ['<h1>Reading the evidence</h1><p>Every relationship, claim and finding on this site carries a label describing how far it has been assessed. Labels never claim more than the record behind them. A family-tree export supplies assertions: it cannot by itself prove parentage, supply missing sources, or establish DNA findings.</p>']
+    current_group = None
+    for anchor, label, meaning, group in guide_entries():
+        if group != current_group:
+            guide.append(("</dl>" if current_group else "") + f'<h2>{_text(group)}</h2><dl class="evidence-guide">')
+            current_group = group
+        guide.append(f'<dt id="{_text(anchor)}">{_text(label)}</dt><dd>{_text(meaning)}</dd>')
+    guide.append('</dl><h2>Privacy</h2><p>Living people, people whose status is unknown, and restricted, licensed or private material are withheld from every page, search index, map and download. A missing person or record is therefore not evidence that they did not exist.</p>')
+    pages["evidence.html"] = "".join(guide)
     for pid, person in people.items():
         related_events = events_by_person[pid]
         subject_ids = {pid, *(e["id"] for e in related_events)}
         related_rels = relationships_by_person[pid]
         subject_ids.update(r["id"] for r in related_rels)
-        personal_claims = [c for subject in sorted(subject_ids) for c in claims_by_subject[subject]]
-        name_items = [f'<li>{_text(n["value"])} — {_text(n.get("kind", "unknown"))}{metadata(n)}</li>' for n in person.get("names", [])]
+        personal_claims = [c for subject in sorted(subject_ids) for c in claims_by_subject[subject] if c.get("predicate") != "sex"]
+        name_items = [f'<li>{_text(n["value"])} — {_text(n.get("kind", "unknown"))}{metadata(n, "../")}</li>' for n in person.get("names", [])]
         external = []
         for identifier in person.get("external_ids", []):
             label = _text(identifier["system"] + ": " + identifier["value"])
             url = _url(identifier.get("url"))
             external.append("<li>" + (f'<a href="{_text(url)}" rel="noreferrer">{label}</a>' if url else label) + "</li>")
-        content = f'<p class="eyebrow">Person dossier</p><h1>{_text(person_name(pid))}</h1><p class="record-id">{_text(pid)}</p><h2>Names</h2>' + empty(name_items)
+        span = lifespan(pid)
+        recorded_sex = sex.get(pid)
+        content = f'<p class="eyebrow">Person dossier</p><h1>{_text(person_name(pid))}</h1>' + (f'<p class="lifespan">{_text(span)}</p>' if span else "") + f'<p class="record-id">{_text(pid)}</p>'
+        if recorded_sex:
+            content += f'<p class="meta">Recorded sex: {_text(recorded_sex)} <span class="badge">Unassessed tree assertion</span></p>'
+        content += '<h2>Names</h2>' + empty(name_items)
         if person.get("notes"):
             content += '<h2>Biography and notes</h2><p class="preserve-lines">' + _text(person["notes"]) + '</p>'
-        content += '<h2>Family connections</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2>Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2>Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
-        content += '<h2>Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r)}</li>' for r in research_by_subject[pid]]) + '<h2>External identifiers</h2>' + empty(external)
+        content += family(pid)
+        content += '<h2>Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2>Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
+        content += '<h2>Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}</li>' for r in research_by_subject[pid]]) + '<h2>All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2>External identifiers</h2>' + empty(external)
         pages[people_urls[pid]] = content
-    data_links = '<ul><li><a href="data/site.json">Public research JSON</a></li><li><a href="data/site.csv">Public research CSV</a></li><li><a href="data/places.geojson">Place GeoJSON</a></li><li><a href="data/routes.json">Route index JSON</a></li></ul>'
-    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul><h2>People</h2>' + empty([f'<li>{ref(pid)}</li>' for pid in people]) + '<h2>Machine-readable data</h2>' + data_links
-    outputs: dict[str, str] = {"data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project), "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n", "data/routes.json": json.dumps(sorted(pages), indent=2) + "\n"}
+    downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
+                 ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
+    if base_url:
+        downloads.append(("sitemap.xml", "XML sitemap"))
+    data_links = "<ul>" + "".join(f'<li><a href="{path}">{label}</a></li>' for path, label in downloads) + "</ul>"
+    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul><h2>People</h2>' + empty([f'<li>{ref(pid)}</li>' for pid in people]) + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
+    shared = {**project, "site": {"people_urls": people_urls}}
+    outputs: dict[str, str] = {
+        "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
+        "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n",
+        "data/public-tree.ged": exports.to_gedcom(project),
+        # One cached script shared by every interactive page; works from file:// too.
+        "data/site-data.js": "window.GENEALOGY_SITE_DATA=" + _json(shared) + ";\n",
+    }
+    outputs["data/routes.json"] = json.dumps(sorted(pages), indent=2) + "\n"
+    if base_url:
+        outputs["sitemap.xml"] = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "".join(
+            f"  <url><loc>{xml_escape(base_url + quote(path))}</loc></url>\n" for path in sorted(pages)) + "</urlset>\n"
     branding = config.raw.get("site", {})
     description = branding.get("description", "A public collection of people, records and research.") if isinstance(branding, dict) else "A public collection of people, records and research."
     person_titles = {url: person_name(pid) for pid, url in people_urls.items()}
@@ -216,13 +356,15 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         view, title = ROUTES[path] if path in ROUTES else ("person", person_titles[path])
         person_attribute = f' data-person-id="{_text(person_ids_by_path[path])}"' if path in person_ids_by_path else ""
         nav = "".join(f'<a data-view="{v}" href="{prefix}{p}"' + (' aria-current="page"' if path == p else '') + f'>{t}</a>' for p, (v, t) in ROUTES.items())
-        # Dossiers need only the menu enhancement. Embedding the whole case in
-        # each person page would make disk use quadratic in the person count.
-        interactive = view in {"people", "tree", "timeline", "map", "compare", "connections", "sources"}
-        payload = {**project, "site": {"people_urls": {pid: prefix + url for pid, url in people_urls.items()}}} if interactive else {"project": project["project"]}
-        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title><link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css"><script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a></p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
+        # Dossiers need only the menu enhancement. Interactive pages share one
+        # data script rather than embedding the whole collection in each page.
+        interactive = view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "overview"}
+        data_script = f'<script defer src="{prefix}data/site-data.js"></script>' if interactive else ""
+        payload = {"project": project["project"], "site": {"root": prefix}}
+        canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
+        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a></p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
     asset_root = Path(__file__).with_name("web")
-    for filename in ("site.css", "site.js", "favicon.svg", "world.svg"):
+    for filename in ASSETS:
         asset = asset_root / filename
         if asset.is_file():
             outputs["assets/" + filename] = asset.read_text(encoding="utf-8")

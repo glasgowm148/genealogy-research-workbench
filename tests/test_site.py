@@ -41,7 +41,7 @@ class SiteTests(unittest.TestCase):
                    notes='SECRET-NOTES', sensitivity=A.PUBLIC),
             Place('port', 'Fictional port', latitude=50, longitude=-4),
             Event('birth', 'birth', date='1840', place_id='port', participant_ids=['../traveller']),
-            Relationship('parentage', 'parent', '../traveller', 'parent', confidence=Confidence.POSSIBLE,
+            Relationship('parentage', '../traveller', 'parent', 'parent', confidence=Confidence.POSSIBLE,
                          sensitivity=A.PUBLIC),
             Source('register', 'Fictional register <b>', repository='Town archive',
                    url='javascript:alert(1)', sensitivity=A.PUBLIC),
@@ -74,7 +74,10 @@ class SiteTests(unittest.TestCase):
                 self.assertIn(value, dossier if value != 'Town archive' else paths['sources.html'].read_text())
             self.assertNotIn('href="javascript:', all_text)
             self.assertNotIn('<img src=x', dossier)
-            self.assertIn('\\u003c/script', paths['sources.html'].read_text())
+            shared = paths['data/site-data.js'].read_text()
+            self.assertIn('\\u003c/script', shared)
+            self.assertNotIn('</script', shared)
+            self.assertIn('data/site-data.js', paths['sources.html'].read_text())
             self.assertIn('Fictional &lt;study&gt;', paths['index.html'].read_text())
             for name, path in paths.items():
                 self.assertTrue(path.resolve().is_relative_to(root.resolve()))

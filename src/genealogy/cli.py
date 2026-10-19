@@ -178,7 +178,7 @@ def parser() -> argparse.ArgumentParser:
     build_parser = commands.add_parser("build", help="create privacy-filtered catalogue, timeline and map")
     build_parser.add_argument("--output", type=Path, default=Path("dist"))
     export = commands.add_parser("export", help="write a privacy-filtered machine-readable export")
-    export.add_argument("format", choices=("json", "ndjson", "csv", "geojson"))
+    export.add_argument("format", choices=("json", "ndjson", "csv", "geojson", "gedcom"))
     export.add_argument("--output", type=Path)
     bundle = commands.add_parser("bundle", help="write or verify a complete private local artifact bundle")
     bundle.add_argument("--output", type=Path, default=Path("bundle"))
@@ -371,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
                 config.exports.get("directory", "dist"),
                 "exports.directory",
             )
-            configured_name = config.exports.get(args.format, f"research.{args.format}")
+            configured_name = config.exports.get(args.format, "research.ged" if args.format == "gedcom" else f"research.{args.format}")
             output = safe_output_path(export_directory, configured_name)
         else:
             output = args.output if args.output.is_absolute() else args.project / args.output

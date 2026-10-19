@@ -44,9 +44,11 @@ class BrowserSiteTests(unittest.TestCase):
         cls.upload_thread = threading.Thread(target=cls.upload.serve_forever, daemon=True)
         cls.upload_thread.start()
         cls.pw = sync_playwright().start()
-        chrome = Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
+        # Playwright's managed Chromium by default; GENEALOGY_BROWSER_EXECUTABLE
+        # selects a locally installed Chromium/Chrome instead.
+        executable = os.environ.get('GENEALOGY_BROWSER_EXECUTABLE')
         cls.browser = cls.pw.chromium.launch(headless=True,
-            **({'executable_path': str(chrome)} if chrome.exists() else {}))
+            **({'executable_path': executable} if executable else {}))
 
     @classmethod
     def tearDownClass(cls):
@@ -80,8 +82,10 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual([], self.external, 'Public site must work without outside requests')
 
     def test_routes_images_mobile_and_no_javascript(self):
+        dossier = json.loads((self.root / 'nested' / 'data' / 'routes.json').read_text())
         routes = ['index.html', 'catalogue.html', 'tree.html', 'timeline.html', 'places.html',
-                  'sources.html', 'research.html', 'compare.html', 'connections.html', 'sitemap.html']
+                  'sources.html', 'research.html', 'compare.html', 'connections.html', 'evidence.html',
+                  'sitemap.html', next(route for route in dossier if route.startswith('people/'))]
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
             for route in routes:
@@ -104,6 +108,27 @@ class BrowserSiteTests(unittest.TestCase):
             self.assertEqual(3, page.locator('[data-source-id]').count())
         finally:
             nojs.close()
+
+    def test_offline_file_navigation_surname_filter_and_family_dossier(self):
+        site = self.root / 'nested'
+        self.page.goto((site / 'catalogue.html').as_uri())
+        self.page.locator('.pagination').wait_for()
+        surname = self.page.get_by_label('Surname')
+        options = surname.locator('option').all_inner_texts()
+        self.assertIn('Alder (6)', options)
+        surname.select_option('Alder')
+        self.assertEqual(6, self.page.locator('[data-person-id]:visible').count())
+        self.page.locator('[data-person-id]:visible a').first.click()
+        self.assertIn('/people/', self.page.url)
+        family = self.page.locator('.family-summary')
+        self.assertTrue(family.is_visible())
+        self.assertGreater(family.locator('a.evidence-badge').count(), 0)
+        family.locator('a.evidence-badge').first.click()
+        self.assertIn('evidence.html#', self.page.url)
+        self.assertTrue(self.page.locator('dt:target').is_visible())
+        self.page.set_viewport_size({'width': 390, 'height': 900})
+        self.page.go_back()
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 391)
 
     def test_search_pagination_tree_compare_and_connections(self):
         self.page.goto(self.base + 'catalogue.html')
@@ -169,7 +194,7 @@ class BrowserSiteTests(unittest.TestCase):
             self.page.locator('.site-sidebar a[data-view="people"]').click()
             self.page.locator('.pagination').wait_for()
             self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
-            payload = json.loads(self.page.locator('#site-data').text_content())
+            payload = self.page.evaluate('window.GENEALOGY_SITE_DATA')
             self.assertEqual(42, len(payload['people']))
             self.assertTrue(all(p['sensitivity'] == 'public' for p in payload['people']))
             if filename.endswith('.ged'):
