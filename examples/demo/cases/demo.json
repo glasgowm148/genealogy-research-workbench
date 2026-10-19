@@ -1494,9 +1494,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Ada",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Alder",
             "valid_from": null,
             "valid_to": null,
             "value": "Ada Alder"
@@ -1516,9 +1518,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Bram",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Alder",
             "valid_from": null,
             "valid_to": null,
             "value": "Bram Alder"
@@ -1538,9 +1542,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Celia",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Bell",
             "valid_from": null,
             "valid_to": null,
             "value": "Celia Bell"
@@ -1560,9 +1566,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Dorian",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Bell",
             "valid_from": null,
             "valid_to": null,
             "value": "Dorian Bell"
@@ -1582,9 +1590,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Elara",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Cairn",
             "valid_from": null,
             "valid_to": null,
             "value": "Elara Cairn"
@@ -1604,9 +1614,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Felix",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Cairn",
             "valid_from": null,
             "valid_to": null,
             "value": "Felix Cairn"
@@ -1626,9 +1638,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Greta",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Dale",
             "valid_from": null,
             "valid_to": null,
             "value": "Greta Dale"
@@ -1648,9 +1662,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Hugo",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Dale",
             "valid_from": null,
             "valid_to": null,
             "value": "Hugo Dale"
@@ -1670,9 +1686,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Iris",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Ember",
             "valid_from": null,
             "valid_to": null,
             "value": "Iris Ember"
@@ -1692,9 +1710,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Jonas",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Ember",
             "valid_from": null,
             "valid_to": null,
             "value": "Jonas Ember"
@@ -1714,9 +1734,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Kezia",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Firth",
             "valid_from": null,
             "valid_to": null,
             "value": "Kezia Firth"
@@ -1736,9 +1758,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Luca",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Firth",
             "valid_from": null,
             "valid_to": null,
             "value": "Luca Firth"
@@ -1758,9 +1782,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Mara",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Grove",
             "valid_from": null,
             "valid_to": null,
             "value": "Mara Grove"
@@ -1780,9 +1806,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Nico",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Grove",
             "valid_from": null,
             "valid_to": null,
             "value": "Nico Grove"
@@ -1802,9 +1830,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Orla",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Hale",
             "valid_from": null,
             "valid_to": null,
             "value": "Orla Hale"
@@ -1824,9 +1854,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Pavel",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Hale",
             "valid_from": null,
             "valid_to": null,
             "value": "Pavel Hale"
@@ -1846,9 +1878,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Rhea",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Alder",
             "valid_from": null,
             "valid_to": null,
             "value": "Rhea Alder"
@@ -1868,9 +1902,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Silas",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Alder",
             "valid_from": null,
             "valid_to": null,
             "value": "Silas Alder"
@@ -1890,9 +1926,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Talia",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Bell",
             "valid_from": null,
             "valid_to": null,
             "value": "Talia Bell"
@@ -1912,9 +1950,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Ulric",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Bell",
             "valid_from": null,
             "valid_to": null,
             "value": "Ulric Bell"
@@ -1934,9 +1974,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Vera",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Cairn",
             "valid_from": null,
             "valid_to": null,
             "value": "Vera Cairn"
@@ -1956,9 +1998,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Wes",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Cairn",
             "valid_from": null,
             "valid_to": null,
             "value": "Wes Cairn"
@@ -1978,9 +2022,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Xanthe",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Dale",
             "valid_from": null,
             "valid_to": null,
             "value": "Xanthe Dale"
@@ -2000,9 +2046,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Yorick",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Dale",
             "valid_from": null,
             "valid_to": null,
             "value": "Yorick Dale"
@@ -2022,9 +2070,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Zella",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Ember",
             "valid_from": null,
             "valid_to": null,
             "value": "Zella Ember"
@@ -2044,9 +2094,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Arden",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Ember",
             "valid_from": null,
             "valid_to": null,
             "value": "Arden Ember"
@@ -2066,9 +2118,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Briony",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Firth",
             "valid_from": null,
             "valid_to": null,
             "value": "Briony Firth"
@@ -2088,9 +2142,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Cato",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Firth",
             "valid_from": null,
             "valid_to": null,
             "value": "Cato Firth"
@@ -2110,9 +2166,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Delia",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Grove",
             "valid_from": null,
             "valid_to": null,
             "value": "Delia Grove"
@@ -2132,9 +2190,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Emil",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Grove",
             "valid_from": null,
             "valid_to": null,
             "value": "Emil Grove"
@@ -2154,9 +2214,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Flora",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Hale",
             "valid_from": null,
             "valid_to": null,
             "value": "Flora Hale"
@@ -2176,9 +2238,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Galen",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Hale",
             "valid_from": null,
             "valid_to": null,
             "value": "Galen Hale"
@@ -2198,9 +2262,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Hester",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Alder",
             "valid_from": null,
             "valid_to": null,
             "value": "Hester Alder"
@@ -2220,9 +2286,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Ivo",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Alder",
             "valid_from": null,
             "valid_to": null,
             "value": "Ivo Alder"
@@ -2242,9 +2310,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "June",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Bell",
             "valid_from": null,
             "valid_to": null,
             "value": "June Bell"
@@ -2264,9 +2334,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Kellan",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Bell",
             "valid_from": null,
             "valid_to": null,
             "value": "Kellan Bell"
@@ -2286,9 +2358,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Liora",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Cairn",
             "valid_from": null,
             "valid_to": null,
             "value": "Liora Cairn"
@@ -2308,9 +2382,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Milo",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Cairn",
             "valid_from": null,
             "valid_to": null,
             "value": "Milo Cairn"
@@ -2330,9 +2406,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Nessa",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Dale",
             "valid_from": null,
             "valid_to": null,
             "value": "Nessa Dale"
@@ -2352,9 +2430,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Oren",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Dale",
             "valid_from": null,
             "valid_to": null,
             "value": "Oren Dale"
@@ -2374,9 +2454,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Petra",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Ember",
             "valid_from": null,
             "valid_to": null,
             "value": "Petra Ember"
@@ -2396,9 +2478,11 @@
         "names": [
           {
             "confidence": "probable",
+            "given": "Quill",
             "kind": "birth",
             "language": null,
             "script": null,
+            "surname": "Ember",
             "valid_from": null,
             "valid_to": null,
             "value": "Quill Ember"
@@ -2444,10 +2528,12 @@
         "end_date": null,
         "id": "rel:parent:5",
         "kind": "parent",
-        "object_id": "person:05",
+        "object_id": "person:01",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:01"
+        "subject_id": "person:05",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2455,10 +2541,12 @@
         "end_date": null,
         "id": "rel:parent:6",
         "kind": "parent",
-        "object_id": "person:06",
+        "object_id": "person:01",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:01"
+        "subject_id": "person:06",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2466,10 +2554,12 @@
         "end_date": null,
         "id": "rel:parent:7",
         "kind": "parent",
-        "object_id": "person:07",
+        "object_id": "person:01",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:01"
+        "subject_id": "person:07",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2477,10 +2567,12 @@
         "end_date": null,
         "id": "rel:parent:8",
         "kind": "parent",
-        "object_id": "person:08",
+        "object_id": "person:01",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:01"
+        "subject_id": "person:08",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2488,10 +2580,12 @@
         "end_date": null,
         "id": "rel:parent:9",
         "kind": "parent",
-        "object_id": "person:09",
+        "object_id": "person:03",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:03"
+        "subject_id": "person:09",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2499,10 +2593,12 @@
         "end_date": null,
         "id": "rel:parent:10",
         "kind": "parent",
-        "object_id": "person:10",
+        "object_id": "person:03",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:03"
+        "subject_id": "person:10",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2510,10 +2606,12 @@
         "end_date": null,
         "id": "rel:parent:11",
         "kind": "parent",
-        "object_id": "person:11",
+        "object_id": "person:03",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:03"
+        "subject_id": "person:11",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2521,10 +2619,12 @@
         "end_date": null,
         "id": "rel:parent:12",
         "kind": "parent",
-        "object_id": "person:12",
+        "object_id": "person:03",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:03"
+        "subject_id": "person:12",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2532,10 +2632,12 @@
         "end_date": null,
         "id": "rel:parent:21",
         "kind": "parent",
-        "object_id": "person:21",
+        "object_id": "person:05",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:05"
+        "subject_id": "person:21",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2543,10 +2645,12 @@
         "end_date": null,
         "id": "rel:parent:22",
         "kind": "parent",
-        "object_id": "person:22",
+        "object_id": "person:05",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:05"
+        "subject_id": "person:22",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2554,10 +2658,12 @@
         "end_date": null,
         "id": "rel:parent:23",
         "kind": "parent",
-        "object_id": "person:23",
+        "object_id": "person:06",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:06"
+        "subject_id": "person:23",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2565,10 +2671,12 @@
         "end_date": null,
         "id": "rel:parent:24",
         "kind": "parent",
-        "object_id": "person:24",
+        "object_id": "person:06",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:06"
+        "subject_id": "person:24",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2576,10 +2684,12 @@
         "end_date": null,
         "id": "rel:parent:25",
         "kind": "parent",
-        "object_id": "person:25",
+        "object_id": "person:07",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:07"
+        "subject_id": "person:25",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2587,10 +2697,12 @@
         "end_date": null,
         "id": "rel:parent:26",
         "kind": "parent",
-        "object_id": "person:26",
+        "object_id": "person:07",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:07"
+        "subject_id": "person:26",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2598,10 +2710,12 @@
         "end_date": null,
         "id": "rel:parent:27",
         "kind": "parent",
-        "object_id": "person:27",
+        "object_id": "person:08",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:08"
+        "subject_id": "person:27",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2609,10 +2723,12 @@
         "end_date": null,
         "id": "rel:parent:28",
         "kind": "parent",
-        "object_id": "person:28",
+        "object_id": "person:08",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:08"
+        "subject_id": "person:28",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2620,10 +2736,12 @@
         "end_date": null,
         "id": "rel:parent:29",
         "kind": "parent",
-        "object_id": "person:29",
+        "object_id": "person:09",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:09"
+        "subject_id": "person:29",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2631,10 +2749,12 @@
         "end_date": null,
         "id": "rel:parent:30",
         "kind": "parent",
-        "object_id": "person:30",
+        "object_id": "person:09",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:09"
+        "subject_id": "person:30",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2642,10 +2762,12 @@
         "end_date": null,
         "id": "rel:parent:31",
         "kind": "parent",
-        "object_id": "person:31",
+        "object_id": "person:10",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:10"
+        "subject_id": "person:31",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2653,10 +2775,12 @@
         "end_date": null,
         "id": "rel:parent:32",
         "kind": "parent",
-        "object_id": "person:32",
+        "object_id": "person:10",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:10"
+        "subject_id": "person:32",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2664,10 +2788,12 @@
         "end_date": null,
         "id": "rel:parent:33",
         "kind": "parent",
-        "object_id": "person:33",
+        "object_id": "person:11",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:11"
+        "subject_id": "person:33",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2675,10 +2801,12 @@
         "end_date": null,
         "id": "rel:parent:34",
         "kind": "parent",
-        "object_id": "person:34",
+        "object_id": "person:11",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:11"
+        "subject_id": "person:34",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2686,10 +2814,12 @@
         "end_date": null,
         "id": "rel:parent:35",
         "kind": "parent",
-        "object_id": "person:35",
+        "object_id": "person:12",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:12"
+        "subject_id": "person:35",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2697,10 +2827,12 @@
         "end_date": null,
         "id": "rel:parent:36",
         "kind": "parent",
-        "object_id": "person:36",
+        "object_id": "person:12",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:12"
+        "subject_id": "person:36",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2708,10 +2840,12 @@
         "end_date": null,
         "id": "rel:parent:37",
         "kind": "parent",
-        "object_id": "person:37",
+        "object_id": "person:21",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:21"
+        "subject_id": "person:37",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2719,10 +2853,12 @@
         "end_date": null,
         "id": "rel:parent:38",
         "kind": "parent",
-        "object_id": "person:38",
+        "object_id": "person:22",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:22"
+        "subject_id": "person:38",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2730,10 +2866,12 @@
         "end_date": null,
         "id": "rel:parent:39",
         "kind": "parent",
-        "object_id": "person:39",
+        "object_id": "person:23",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:23"
+        "subject_id": "person:39",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2741,10 +2879,12 @@
         "end_date": null,
         "id": "rel:parent:40",
         "kind": "parent",
-        "object_id": "person:40",
+        "object_id": "person:24",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:24"
+        "subject_id": "person:40",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2752,10 +2892,12 @@
         "end_date": null,
         "id": "rel:parent:41",
         "kind": "parent",
-        "object_id": "person:41",
+        "object_id": "person:25",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:25"
+        "subject_id": "person:41",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2763,10 +2905,12 @@
         "end_date": null,
         "id": "rel:parent:42",
         "kind": "parent",
-        "object_id": "person:42",
+        "object_id": "person:26",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:26"
+        "subject_id": "person:42",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2775,9 +2919,11 @@
         "id": "rel:spouse:1:2",
         "kind": "spouse",
         "object_id": "person:02",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:01"
+        "subject_id": "person:01",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2786,9 +2932,11 @@
         "id": "rel:spouse:3:4",
         "kind": "spouse",
         "object_id": "person:04",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:03"
+        "subject_id": "person:03",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2797,9 +2945,11 @@
         "id": "rel:spouse:5:13",
         "kind": "spouse",
         "object_id": "person:13",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:05"
+        "subject_id": "person:05",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2808,9 +2958,11 @@
         "id": "rel:spouse:6:14",
         "kind": "spouse",
         "object_id": "person:14",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:06"
+        "subject_id": "person:06",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2819,9 +2971,11 @@
         "id": "rel:spouse:7:15",
         "kind": "spouse",
         "object_id": "person:15",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:07"
+        "subject_id": "person:07",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2830,9 +2984,11 @@
         "id": "rel:spouse:8:16",
         "kind": "spouse",
         "object_id": "person:16",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:08"
+        "subject_id": "person:08",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2841,9 +2997,11 @@
         "id": "rel:spouse:9:17",
         "kind": "spouse",
         "object_id": "person:17",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:09"
+        "subject_id": "person:09",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2852,9 +3010,11 @@
         "id": "rel:spouse:10:18",
         "kind": "spouse",
         "object_id": "person:18",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:10"
+        "subject_id": "person:10",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2863,9 +3023,11 @@
         "id": "rel:spouse:11:19",
         "kind": "spouse",
         "object_id": "person:19",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:11"
+        "subject_id": "person:11",
+        "tree_status": null
       },
       {
         "claim_ids": [],
@@ -2874,9 +3036,11 @@
         "id": "rel:spouse:12:20",
         "kind": "spouse",
         "object_id": "person:20",
+        "pedigree": null,
         "sensitivity": "public",
         "start_date": null,
-        "subject_id": "person:12"
+        "subject_id": "person:12",
+        "tree_status": null
       }
     ],
     "ResearchQuestion": [
@@ -2906,9 +3070,11 @@
     "Source": [
       {
         "access_note": "Invented teaching source; no real archive or record.",
+        "author": null,
         "external_ids": [],
         "id": "src:register",
         "licence": null,
+        "publication": null,
         "repository": "Fictional Lanternford Archive",
         "sensitivity": "public",
         "source_type": "fictional parish register",
@@ -2917,9 +3083,11 @@
       },
       {
         "access_note": "Invented teaching source; no real archive or record.",
+        "author": null,
         "external_ids": [],
         "id": "src:returns",
         "licence": null,
+        "publication": null,
         "repository": "Fictional Lanternford Archive",
         "sensitivity": "public",
         "source_type": "fictional census transcript",
@@ -2928,9 +3096,11 @@
       },
       {
         "access_note": "Invented teaching source; no real archive or record.",
+        "author": null,
         "external_ids": [],
         "id": "src:letters",
         "licence": null,
+        "publication": null,
         "repository": "Fictional Lanternford Archive",
         "sensitivity": "public",
         "source_type": "fictional letter collection",

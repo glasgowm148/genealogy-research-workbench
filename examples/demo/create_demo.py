@@ -43,24 +43,26 @@ def build() -> ResearchCase:
         place=places[i%3]
         c.add(Event(evb,"birth",f"{birth}-01-01","year",place.id,[pid],sensitivity=access))
         c.add(Event(evd,"death",f"{death}-12-31","year",places[(i+1)%3].id,[pid],sensitivity=access))
-        c.add(Person(pid,[Name(name,"birth",confidence=Confidence.PROBABLE)],[evb,evd],living=LivingStatus.DECEASED,notes="Fictional person; dates and identity are illustrative.",sensitivity=access))
+        given, surname = name.split()
+        c.add(Person(pid,[Name(name,"birth",confidence=Confidence.PROBABLE,given=given,surname=surname)],[evb,evd],living=LivingStatus.DECEASED,notes="Fictional person; dates and identity are illustrative.",sensitivity=access))
         nodes.append(dict(id=pid,name=name,birth=birth,death=death,place=place.name,placeid=place.id))
-    # Evidence and sourced, explicitly graded relationship claims.
+    # Evidence and sourced, explicitly graded relationship claims. A parent
+    # relationship points from the child (subject) to the parent (object).
     for i in range(4,12):
         parent=(i-4)//4*2
         confidence=Confidence.PROBABLE if i==9 else Confidence.DOCUMENTED
-        c.add(Relationship(f"rel:parent:{i+1}",nodes[parent]["id"],nodes[i]["id"],"parent",confidence,sensitivity=access))
+        c.add(Relationship(f"rel:parent:{i+1}",nodes[i]["id"],nodes[parent]["id"],"parent",confidence,sensitivity=access))
         claimid=f"claim:parent:{i+1}"
         cit="cite:letters" if i==9 else "cite:register"
         c.add(Claim(claimid,nodes[i]["id"],"parent",nodes[parent]["name"], [cit],ClaimStatus.SUPPORTED,confidence,"Register entry names the household; one link remains probable because the matching given name is shared.",access))
         c.add(Evidence(f"evidence:parent:{i+1}",claimid,cit,"The invented source entry is described as naming this parent-child link.",True,confidence,access))
     for i in range(20,36):
         parent=4+(i-20)//2
-        c.add(Relationship(f"rel:parent:{i+1}",nodes[parent]["id"],nodes[i]["id"],"parent",Confidence.DOCUMENTED,sensitivity=access))
+        c.add(Relationship(f"rel:parent:{i+1}",nodes[i]["id"],nodes[parent]["id"],"parent",Confidence.DOCUMENTED,sensitivity=access))
     for i in range(36,42):
         parent=20+(i-36)
         confidence=Confidence.POSSIBLE if i==41 else Confidence.DOCUMENTED
-        c.add(Relationship(f"rel:parent:{i+1}",nodes[parent]["id"],nodes[i]["id"],"parent",confidence,sensitivity=access))
+        c.add(Relationship(f"rel:parent:{i+1}",nodes[i]["id"],nodes[parent]["id"],"parent",confidence,sensitivity=access))
     # Pair spouses among each adult generation; marriage dates are illustrative.
     for a,b,yr in [(0,1,1777),(2,3,1779),(4,12,1802),(5,13,1804),(6,14,1806),(7,15,1808),(8,16,1810),(9,17,1812),(10,18,1814),(11,19,1816)]:
         c.add(Relationship(f"rel:spouse:{a+1}:{b+1}",nodes[a]["id"],nodes[b]["id"],"spouse",Confidence.PROBABLE,sensitivity=access))
