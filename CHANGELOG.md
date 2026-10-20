@@ -5,6 +5,7 @@
 - GEDCOM 7 `.gdz` archives import their `gedcom.ged` without unpacking. Media files are counted and kept only in the private archive copy.
 - The local preview server now serves the CSV, GEDCOM and XML downloads it builds (previously 404).
 - Releases publish to PyPI through a trusted-publishing workflow.
+- A step-by-step guide, [Your first site](docs/first-site.md), from a tree export to a hosted site.
 
 ## 0.3.0 — 20 October 2026
 

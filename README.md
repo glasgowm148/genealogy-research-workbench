@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml) · [Releases](https://github.com/glasgowm148/genealogy-research-workbench/releases) · [MIT](LICENSE)
 
-[Get started](#get-started) · [Take a look](#what-you-can-build) · [Import formats](docs/imports.md) · [Privacy](docs/privacy.md) · [Developer guide](docs/development.md)
+[Get started](#get-started) · [Your first site](docs/first-site.md) · [Take a look](#what-you-can-build) · [Import formats](docs/imports.md) · [Privacy](docs/privacy.md) · [Developer guide](docs/development.md)
 
 </div>
 
@@ -154,6 +154,7 @@ All generated site links are relative, so the site works under a subdirectory an
 
 | Guide | Contents |
 | --- | --- |
+| [Your first site](docs/first-site.md) | Export → import → review → research → update → publish, step by step |
 | [Import formats](docs/imports.md) | GEDCOM subset, OneTree shapes, warnings, encoding, and limitations |
 | [Privacy and publication](docs/privacy.md) | Review options, withheld content, private bundles, and local uploads |
 | [Research recipes](docs/research.md) | Cases, records, sources, claims, findings, and exports |
