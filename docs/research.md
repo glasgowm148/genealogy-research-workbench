@@ -106,6 +106,8 @@ build_site(case, config, project / "dist")
 
 `build_site` uses the same validated public projection as exports. `build_public_views` remains available for the smaller configured standalone catalogue/timeline/map renderers used by existing integrations. Platform adapters live under `genealogy.adapters`; core records do not depend on WikiTree.
 
+Sites with their own builders can reuse smaller pieces: `genealogy.labels` for the reader vocabulary, `genealogy.markup` for escaped research prose, `genealogy.sitecheck` for link checking, and `genealogy.feeds.atom_feed` for a deterministic Atom feed whose `updated` time comes from the newest entry rather than the build.
+
 ## Portable handoffs and exports
 
 ```sh

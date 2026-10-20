@@ -15,6 +15,7 @@ from . import exports
 from .case import ResearchCase
 from .config import ProjectConfig
 from .dates import date_sort_key, year_of
+from .feeds import FeedEntry, atom_feed
 from .markup import references as prose_references, render as render_prose
 from .labels import child_role, confidence_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
 from .maps import geojson
@@ -497,15 +498,13 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         outputs["sitemap.xml"] = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "".join(
             f"  <url><loc>{xml_escape(base_url + quote(path))}</loc></url>\n" for path in sorted(pages)) + "</urlset>\n"
 
-        def stamp(value: str) -> str:
-            return (value + "-01-01"[len(value) - 4:] if len(value) < 10 else value) + "T00:00:00Z"
-        updated = max((f["recorded_on"] for f in dated), default="1970-01-01")
-        outputs["findings.xml"] = ('<?xml version="1.0" encoding="UTF-8"?>\n<feed xmlns="http://www.w3.org/2005/Atom">'
-                                   f'<title>{xml_escape(config.name)}: latest findings</title><id>{xml_escape(base_url)}findings.html</id>'
-                                   f'<link rel="alternate" href="{xml_escape(base_url)}findings.html"/><updated>{stamp(updated)}</updated><author><name>{xml_escape(config.name)}</name></author>'
-                                   + "".join(f'<entry><title>{xml_escape(f["conclusion"][:150])}</title><id>{xml_escape(base_url + record_routes[f["id"]])}</id>'
-                                             f'<link href="{xml_escape(base_url + record_routes[f["id"]])}"/><updated>{stamp(f["recorded_on"])}</updated></entry>' for f in dated[:50])
-                                   + "</feed>\n")
+        outputs["findings.xml"] = atom_feed(
+            title=f"{config.name}: latest findings", feed_id=base_url + "findings.html", alternate=base_url + "findings.html",
+            self_url=base_url + "findings.xml", author=config.name,
+            updated=max((f["recorded_on"] for f in dated), default="1970-01-01"),
+            entries=[FeedEntry(id=base_url + record_routes[f["id"]], title=f["conclusion"][:150], link=base_url + record_routes[f["id"]],
+                               updated=f["recorded_on"], summary=f["conclusion"])
+                     for f in dated[:50]])
     branding = config.raw.get("site", {})
     description = branding.get("description", "A public collection of people, records and research.") if isinstance(branding, dict) else "A public collection of people, records and research."
     person_titles = {url: person_name(pid) for pid, url in people_urls.items()}

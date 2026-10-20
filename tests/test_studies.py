@@ -105,6 +105,9 @@ class StudySiteTests(unittest.TestCase):
         ns = {"a": "http://www.w3.org/2005/Atom"}
         entries = feed.findall("a:entry", ns)
         self.assertEqual([e.find("a:updated", ns).text for e in entries], ["2026-10-01T00:00:00Z", "2026-03-02T00:00:00Z"])
+        self.assertEqual(feed.find("a:updated", ns).text, "2026-10-01T00:00:00Z")
+        self.assertTrue(feed.find("a:link[@rel='self']", ns).get("href").endswith("/findings.xml"))
+        self.assertIn("Rowan is Ada's son", entries[0].find("a:summary", ns).text)
 
     def test_branches_precision_and_links(self):
         branches = self.text("branches.html")
