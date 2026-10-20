@@ -82,6 +82,17 @@ Then give a relationship, claim, evidence assessment or hypothesis a `grade` as 
 
 `genealogy validate` and every build reject a grade that `genealogy.toml` does not define, or whose `confidence` differs from the one the grade counts as.
 
+## Summarise a record
+
+A citation can carry an `abstract`: your reading of the record, in your own words. Write what the record states (who, what, when, where, and the relationships it names) and keep your interpretation for claims, evidence assessments and findings:
+
+```json
+{"id": "citation:baptism-1837", "source_id": "source:parish-register", "locator": "entry 75",
+ "abstract": "Baptism of Ann, born 17 January 1837, daughter of Robert and Mary, of Harbour Row.", "sensitivity": "public"}
+```
+
+The site shows it with the citation as "Abstract", on the source's page and wherever the citation supports a claim. Unlike a quotation or transcription, it is your own text, so a public citation publishes it.
+
 ## Write a study
 
 A study is the written account of one research question: why it was undertaken, what the records show and the current conclusion. Each study gets its own page, is listed on **Studies**, and is linked from the dossier of every person it concerns. Add one as a typed record:

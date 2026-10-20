@@ -204,6 +204,9 @@ class Source(Record):
 class Citation(Record):
     source_id: str
     locator: str | None = None
+    # Your reading of the record in your own words (a genealogical abstract):
+    # what it states, as distinct from a verbatim quotation or transcription.
+    abstract: str | None = None
     quotation: str | None = None
     transcription: str | None = None
     accessed_on: str | None = None

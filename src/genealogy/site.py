@@ -317,7 +317,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def citation(row: dict[str, Any], prefix: str = "", *, canonical: bool = False) -> str:
         src = sources.get(row["source_id"], {})
         parts = [ref(row["source_id"], prefix, src.get("title", row["source_id"]))]
-        for key in ("locator", "quotation", "transcription", "accessed_on"):
+        for key in ("locator", "abstract", "quotation", "transcription", "accessed_on"):
             if row.get(key):
                 parts.append(f'<p><strong>{_text(key.replace("_", " ").capitalize())}:</strong> {_text(row[key])}</p>')
         return ('<article id="' + _anchor(row["id"]) + '">' if canonical else "<article>") + "".join(parts) + "</article>"

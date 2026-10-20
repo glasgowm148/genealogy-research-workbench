@@ -302,7 +302,7 @@ def _validate_record_fields(record: Record) -> list[str]:
         "parent_id", "date", "place_id", "description", "notes", "repository", "url",
         "access_note", "licence", "locator", "quotation", "transcription", "accessed_on",
         "rationale", "start_date", "end_date", "summary", "body", "conclusion", "pedigree", "tree_status",
-        "author", "publication", "limitations",
+        "author", "publication", "limitations", "abstract",
     )
     for field_name in optional_strings:
         if hasattr(record, field_name) and not _string(getattr(record, field_name), optional=True):

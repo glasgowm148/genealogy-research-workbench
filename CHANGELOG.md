@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A citation can carry an `abstract`, your reading of the record in your own words; the site shows it with the citation. See [Summarise a record](docs/research.md#summarise-a-record).
 - Projects can define their own confidence grades under `[grades]` in `genealogy.toml`, each counted as a standard grade. A relationship, claim, evidence assessment or hypothesis with a `grade` shows the project's wording, and **Reading the evidence** explains each grade. See [Use your own grades](docs/research.md#use-your-own-grades).
 - Large sites stay quick: past 300 records, the catalogue, timeline, places and sources pages write one page of records and keep the rest on paged pages (`catalogue/page-<n>.html`, `timeline/<decade>s.html`, `places/<region>.html`, `sources/page-<n>.html`), while the script searches everyone from the shared data. Person menus, relationships, claims and findings no longer repeat on the tool pages. See [Large sites](docs/deployment.md#large-sites).
 - `data/site-data.js` carries only the fields the pages read: under a third of its former size on a tree of 4,800 people. `data/site.json` still has every public field.
