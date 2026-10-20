@@ -51,6 +51,8 @@ class UploadServerTests(unittest.TestCase):
         status, page = self.request("GET", report["preview"])
         self.assertEqual(200, status)
         self.assertIn(b"Invented", page)
+        for download in ("data/public-tree.ged", "data/site.csv", "data/site-data.js", "data/site.json"):
+            self.assertEqual(200, self.request("GET", report["preview"] + download)[0], download)
         for path in ("/private/imports/input.ged", "/cases/research-case.json",
                      report["preview"]+"../cases/research-case.json",
                      report["preview"]+"%2e%2e/%2e%2e/genealogy.toml"):
