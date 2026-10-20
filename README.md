@@ -41,17 +41,15 @@ The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md
 
 ## Get started
 
-You need **Python 3.11 or later**. From a downloaded or cloned toolkit checkout:
+You need **Python 3.11 or later**. Install the toolkit from [PyPI](https://pypi.org/project/genealogy-research-workbench/):
 
 ```sh
-git clone https://github.com/glasgowm148/genealogy-research-workbench.git
-cd genealogy-research-workbench
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install .
+python -m pip install genealogy-research-workbench
 ```
 
-On Windows, activate with `.venv\Scripts\activate` instead. No Node.js, database, account, browser automation, or API key is required to use the toolkit. It is also installable from a built wheel; see [installation](docs/development.md#install-and-test).
+On Windows, activate with `.venv\Scripts\activate` instead. No Node.js, database, account, browser automation, or API key is required to use the toolkit. To work on the toolkit itself, or to run the fictional demo, clone this repository and see [installation](docs/development.md#install-and-test). New here? [Your first site](docs/first-site.md) walks through every step.
 
 ### Choose a file in your browser
 
@@ -59,7 +57,7 @@ On Windows, activate with `.venv\Scripts\activate` instead. No Node.js, database
 genealogy --project my-workspace serve
 ```
 
-Open the printed **http://127.0.0.1:8000/** URL. Choose your `.ged`, `.gedcom`, or OneTree `.json` file, enter a public project title, and create a preview. The file is sent only to the local server on your computer.
+Open the printed **http://127.0.0.1:8000/** URL. Choose your `.ged`, `.gedcom`, GEDCOM 7 `.gdz` or OneTree `.json` file, enter a public project title, and create a preview. The file is sent only to the local server on your computer.
 
 ![The local GEDCOM and OneTree upload screen](docs/images/upload.webp)
 
