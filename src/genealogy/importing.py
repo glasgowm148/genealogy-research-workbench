@@ -70,7 +70,8 @@ def gedzip_gedcom(raw: bytes) -> tuple[bytes, list[str]]:
         media = [entry for entry in entries if entry is not info]
     notes = []
     if media:
-        notes.append(f"The archive's {len(media)} media files were kept only in the private copy of the archive; "
+        count = f"{len(media)} media file was" if len(media) == 1 else f"{len(media)} media files were"
+        notes.append(f"The archive's {count} kept only in the private copy of the archive; "
                      "media are not imported or published.")
     return data, notes
 
@@ -141,7 +142,9 @@ def import_file(directory: Path, case: ResearchCase, config: ProjectConfig, sour
         raise ValueError("--publish-reviewed-sources requires --publish-deceased")
     if replace and update:
         raise ValueError("choose either --replace or --update, not both")
-    if not source.is_file() or source.stat().st_size > MAX_IMPORT_BYTES:
+    if not source.is_file():
+        raise ValueError(f"No export file found at {source}")
+    if source.stat().st_size > MAX_IMPORT_BYTES:
         raise ValueError("Import requires a file of at most 32 MiB")
     raw = source.read_bytes()
     if len(raw) > MAX_IMPORT_BYTES:

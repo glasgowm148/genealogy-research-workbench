@@ -260,10 +260,19 @@ class GedzipTests(unittest.TestCase):
             case = CaseStore(root / config.case_directory).load(config.default_case)
             report = import_file(root, case, config, source, publish_deceased=True)
             self.assertEqual((report["format"], report["people"], report["published_people"]), ("gedzip", 1, 1))
-            self.assertTrue(any("1 media files were kept only in the private copy" in w for w in report["warnings"]))
+            self.assertTrue(any("1 media file was kept only in the private copy" in w for w in report["warnings"]))
             self.assertTrue((root / "private" / "imports" / f"{report['sha256']}.gdz").is_file())
             self.assertEqual(main(["--project", str(root), "build"]), 0)
             self.assertFalse(any(path.suffix == ".jpg" for path in (root / "dist").rglob("*")))
+
+    def test_a_missing_export_is_named_rather_than_called_too_large(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            self.assertEqual(main(["init", str(root), "--name", "Fictional"]), 0)
+            config = ProjectConfig.load(root / "genealogy.toml")
+            case = CaseStore(root / config.case_directory).load(config.default_case)
+            with self.assertRaisesRegex(ValueError, "No export file found at .*absent.gdz"):
+                import_file(root, case, config, Path(temporary) / "absent.gdz")
 
     def test_archives_without_one_gedcom_are_rejected(self):
         from genealogy.importing import gedzip_gedcom
