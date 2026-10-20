@@ -38,13 +38,13 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `research.html` | Claims, evidence, hypotheses, questions and findings, outstanding work first |
 | `branches.html` | Surname groups and connected groups of recorded relatives, linked to the catalogue and tree |
 | `studies.html`, `studies/s-<hash>.html` | Written research studies with rationale, conclusion and linked subjects |
-| `findings.html` | Dated log of findings, newest first (`findings.xml` Atom feed when `site.base_url` is set) |
+| `findings.html`, `findings/page-<n>.html` | Dated log of findings, newest first (`findings.xml` Atom feed when `site.base_url` is set); past 30 findings, archive pages numbered from the earliest |
 | `compare.html` | Side-by-side person comparison |
 | `connections.html` | Shortest path through recorded relationships |
 | `evidence.html` | Reader's guide to every confidence, status and relationship label |
 | `sitemap.html` | Human-readable routes, person index and downloads |
 | `sitemap.xml` | Search-engine sitemap (only when `site.base_url` is set) |
-| `data/site-data.js` | The public dataset, shared by every interactive page |
+| `data/site-data.js` | The fields of the public records that the interactive pages read, shared by every interactive page; `data/site.json` has every public field |
 | `data/` | Public JSON, CSV, GeoJSON, GEDCOM 5.5.1 (`public-tree.ged`) and route index |
 
 Every page and download is generated from the same privacy-filtered projection, so a withheld person is absent from HTML, search, maps, data files, the GEDCOM download and the sitemap alike. Labels such as "Unassessed tree link" or "tree-marked uncertain" link to `evidence.html`, which explains them.
@@ -52,6 +52,18 @@ Every page and download is generated from the same privacy-filtered projection, 
 A connection follows stored relationships and their uncertainty; it is not proof of kinship. The coordinate map uses a bundled low-resolution Natural Earth basemap; it is not a street map. Missing coordinates remain missing. Approximate dates retain their supplied text.
 
 All site assets are local and links are relative. Test both desktop and mobile before publication. Core records remain readable without JavaScript, while filtering, graph exploration, comparison and connection tools need it. The interactive pages load one shared `data/site-data.js` script, so they also work when the folder is opened directly from disk (`file://`) and the browser caches the data once for the whole site.
+
+### Large sites
+
+Past 300 people, events, places or sources (300 relationships, claims or findings for those lists), a site stops writing every record into its tool pages, so each page stays small:
+
+- The catalogue writes its first 100 people; `catalogue/page-<n>.html` holds the rest in name order. With JavaScript, search, filters and pages cover everyone from `data/site-data.js`.
+- The timeline lists its decades; `timeline/<decade>s.html` (and `timeline/undated.html`) holds each decade's events, and an event's link points there. With JavaScript, the timeline search covers every event.
+- Places lists its countries and regions; `places/<region>.html` holds each region's places, 100 to a page. The map is drawn by the script.
+- Sources writes its first 100 sources; `sources/page-<n>.html` holds the rest in title order. With JavaScript, the search covers every source.
+- Person menus on the tree, compare and connections pages are filled by the script. Relationships and claims are shown on their subject's page, and findings on the findings log and its archive.
+
+The paged pages are plain lists that need no script.
 
 ## Check the links before publishing
 

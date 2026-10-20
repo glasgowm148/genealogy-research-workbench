@@ -29,6 +29,12 @@ const relLabel=r=>[(CONFIDENCE[r?.confidence]||'Unassessed tree link')+(Number.i
 const relKind=r=>r?.pedigree&&r.pedigree!=='birth'?`${r.kind} (${r.pedigree})`:(r?.kind||'relationship');
 const pe=p=>[...(eventsByPerson.get(p.id)?.values()||[])];
 const year=v=>{const m=String(v||'').match(/\b(\d{3,4})\b/);return m?Number(m[1]):null;};
+// A person's events in date order, their surname and recorded lifespan, as the catalogue rows show them.
+const byDate=(a,b)=>(year(a.date)??Infinity)-(year(b.date)??Infinity)||String(a.date||'').localeCompare(String(b.date||''))||a.id.localeCompare(b.id);
+const surnameOf=p=>(p?.names||[]).find(n=>n.surname)?.surname||'';
+const QUALIFIER={BEF:'bef. ',BEFORE:'bef. ',AFT:'aft. ',AFTER:'aft. '};
+const lifespan=p=>{const ev=pe(p).sort(byDate);return [['birth','b.'],['death','d.']].map(([kind,label])=>{const e=ev.find(x=>x.kind===kind&&x.date);const y=e&&year(e.date);if(!y)return '';const q=/^\s*(ABOUT|ABT|EST|CAL|CIRCA|CA|C|BEF|BEFORE|AFT|AFTER|BET|FROM|INT)\b/i.exec(e.date);return `${label} ${q?(QUALIFIER[q[1].toUpperCase()]||'c. '):''}${y}`;}).filter(Boolean).join(' – ');};
+const linkTo=(id,label)=>{if(!links[id])return document.createTextNode(label);const a=el('a',label);a.href=links[id];return a;};
 const dates=p=>{const e=pe(p);return ['birth','death'].map(k=>e.find(x=>x.kind===k)?.date||'Unknown');};
 const relativeIds=id=>[...new Set((relationsByPerson.get(id)||[]).map(r=>r.subject_id===id?r.object_id:r.subject_id))];
 const personLink=p=>{const a=el('a',name(p));if(links[p.id])a.setAttribute('href',links[p.id]);return a;};
@@ -46,12 +52,16 @@ $$('.site-sidebar a[data-view]').forEach(a=>{if(a.dataset.view===view)a.setAttri
 function fillPeople(menu){if(menu.options.length>1)return;const sorted=[...people].sort((x,y)=>name(x).localeCompare(name(y))||x.id.localeCompare(y.id));const fragment=document.createDocumentFragment();sorted.forEach(p=>fragment.append(option(p.id,name(p))));menu.append(fragment);}
 function catalogue(){
  const host=$('[data-catalogue]');if(!host)return;
- let rows=$$('tbody tr',host);if(!rows.length)rows=$$('[data-person-id]',host);if(!rows.length)return;
+ let rows=$$('tbody tr',host);if(!rows.length)rows=$$('[data-person-id]',host);
+ // A large site writes out the first page only; everyone else comes from the shared data.
+ const compact=rows.length>0&&Number(host.dataset.total||0)>rows.length&&people.length>rows.length;
+ if(!rows.length)return;
+ if(compact)$('[data-catalogue-pages]')?.setAttribute('hidden','');
  const search=$('[data-search]')||el('input');search.type='search';search.placeholder='Name, place, relative or record…';search.setAttribute('aria-label','Search people');
  const bar=el('div',undefined,'toolbar');const oldLabel=search.closest('label');if(oldLabel&&oldLabel.childElementCount===1)oldLabel.remove();const queryLabel=field('Search the catalogue',search);queryLabel.className='grow';bar.append(queryLabel);
  const from=el('input');from.type='number';from.placeholder='e.g. 1750';from.min='1';from.max='9999';const to=el('input');to.type='number';to.placeholder='e.g. 1900';to.min='1';to.max='9999';
  const evidence=select([['','Any evidence'],['supported','Supported claim'],['unassessed','Unassessed / imported']]);
- const surnameCounts=new Map;rows.forEach(r=>{const s=r.dataset.surname||'';if(s)surnameCounts.set(s,(surnameCounts.get(s)||0)+1);});
+ const surnameCounts=new Map;(compact?people.map(surnameOf):rows.map(r=>r.dataset.surname||'')).forEach(s=>{if(s)surnameCounts.set(s,(surnameCounts.get(s)||0)+1);});
  const surname=select([['','All surnames'],...[...surnameCounts].sort((a,b)=>a[0].localeCompare(b[0])).map(([s,n])=>[s,`${s} (${n})`])]);
  const sort=select([['name','Name · A–Z'],['name-desc','Name · Z–A'],['birth','Birth · earliest'],['death','Death · earliest']]);
  bar.append(field('Event year from',from),field('Event year to',to));if(surnameCounts.size)bar.append(field('Surname',surname));bar.append(field('Evidence',evidence),field('Sort by',sort));
@@ -59,8 +69,12 @@ function catalogue(){
  const pager=el('div',undefined,'pagination'),info=el('span'),buttons=el('div'),prev=el('button','← Previous'),next=el('button','Next →');buttons.append(prev,next);pager.append(info,buttons);host.after(pager);
  const tbody=rows[0].parentElement;let page=0;const size=40;
  const imported=new Set(list('imports').concat(list('import_provenance')).flatMap(i=>i.entity_ids||[]));
- const records=rows.map((row,i)=>{const id=row.dataset.personId||row.dataset.id||people[i]?.id;const p=personBy.get(id);const ev=p?pe(p):[];const related=p?relativeIds(p.id).map(id=>name(personBy.get(id))).join(' '):'';const cs=claimsByPerson.get(id)||[];return{row,p,norm:norm([row.dataset.searchText,row.textContent,p?.notes,related,...ev.map(e=>[e.date,placeBy.get(e.place_id)?.name,e.description].join(' ')),...cs.map(c=>`${c.predicate} ${c.value}`)].join(' ')),years:ev.map(e=>year(e.date)).filter(n=>n!==null),supported:cs.some(c=>c.status==='supported'),imported:imported.has(id)};});
- function render(){const q=norm(search.value).trim().split(/\s+/).filter(Boolean),lo=from.value?Number(from.value):null,hi=to.value?Number(to.value):null;const filtered=records.filter(r=>q.every(v=>r.norm.includes(v))&&(lo===null&&hi===null||r.years.some(y=>(lo===null||y>=lo)&&(hi===null||y<=hi)))&&(!surname.value||r.row.dataset.surname===surname.value)&&(!evidence.value||(evidence.value==='supported'?r.supported:!r.supported)));filtered.sort((a,b)=>{if(sort.value==='birth'||sort.value==='death'){const k=sort.value==='birth'?0:1;return(year(dates(a.p||{})[k])??Infinity)-(year(dates(b.p||{})[k])??Infinity)||name(a.p).localeCompare(name(b.p));}const n=name(a.p).localeCompare(name(b.p));return sort.value==='name-desc'?-n:n;});const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,pages-1);const shown=new Set(filtered.slice(page*size,(page+1)*size));records.forEach(r=>r.row.hidden=!shown.has(r));const fragment=document.createDocumentFragment();filtered.forEach(r=>fragment.append(r.row));tbody.append(fragment);count.textContent=`${filtered.length.toLocaleString()} of ${records.length.toLocaleString()} people · search includes recorded relatives and places`;info.textContent=`Page ${page+1} of ${pages}`;prev.disabled=page===0;next.disabled=page===pages-1;}
+ const summary=p=>pe(p).sort(byDate).map(e=>`${e.kind}: ${e.date||'date unknown'}`).join('; ');
+ const rowFor=p=>{const tr=el('tr'),first=el('td'),s=surnameOf(p),span=lifespan(p);tr.dataset.personId=p.id;tr.dataset.surname=s;first.append(linkTo(p.id,name(p)));if(span)first.append(el('br'),el('span',span,'meta'));tr.append(first,el('td',s||'—'),el('td',summary(p)||'No events recorded.'),el('td',p.id));return tr;};
+ const record=(p,id,row,text)=>{const ev=p?pe(p):[];const related=p?relativeIds(p.id).map(id=>name(personBy.get(id))).join(' '):'';const cs=claimsByPerson.get(id)||[];return{row,p,surname:row?row.dataset.surname||'':surnameOf(p),norm:norm([text,p?.notes,related,...ev.map(e=>[e.date,placeBy.get(e.place_id)?.name,e.description].join(' ')),...cs.map(c=>`${c.predicate} ${c.value}`)].join(' ')),years:ev.map(e=>year(e.date)).filter(n=>n!==null),supported:cs.some(c=>c.status==='supported'),imported:imported.has(id)};};
+ const records=compact?people.map(p=>{const r=record(p,p.id,null,[name(p),...(p.names||[]).map(n=>n.value),p.id,summary(p)].join(' '));Object.defineProperty(r,'row',{get(){return this._row||(this._row=rowFor(p));}});return r;})
+  :rows.map((row,i)=>{const id=row.dataset.personId||row.dataset.id||people[i]?.id;return record(personBy.get(id),id,row,[row.dataset.searchText,row.textContent].join(' '));});
+ function render(){const q=norm(search.value).trim().split(/\s+/).filter(Boolean),lo=from.value?Number(from.value):null,hi=to.value?Number(to.value):null;const filtered=records.filter(r=>q.every(v=>r.norm.includes(v))&&(lo===null&&hi===null||r.years.some(y=>(lo===null||y>=lo)&&(hi===null||y<=hi)))&&(!surname.value||r.surname===surname.value)&&(!evidence.value||(evidence.value==='supported'?r.supported:!r.supported)));filtered.sort((a,b)=>{if(sort.value==='birth'||sort.value==='death'){const k=sort.value==='birth'?0:1;return(year(dates(a.p||{})[k])??Infinity)-(year(dates(b.p||{})[k])??Infinity)||name(a.p).localeCompare(name(b.p));}const n=name(a.p).localeCompare(name(b.p));return sort.value==='name-desc'?-n:n;});const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,pages-1);const current=filtered.slice(page*size,(page+1)*size);if(compact)tbody.replaceChildren(...current.map(r=>r.row));else{const shown=new Set(current);records.forEach(r=>r.row.hidden=!shown.has(r));const fragment=document.createDocumentFragment();filtered.forEach(r=>fragment.append(r.row));tbody.append(fragment);}count.textContent=`${filtered.length.toLocaleString()} of ${records.length.toLocaleString()} people · search includes recorded relatives and places`;info.textContent=`Page ${page+1} of ${pages}`;prev.disabled=page===0;next.disabled=page===pages-1;}
  const params=new URLSearchParams(location.search);if(params.get('q'))search.value=params.get('q');if(params.get('surname')&&surnameCounts.has(params.get('surname')))surname.value=params.get('surname');
  [search,from,to,surname,evidence,sort].forEach(n=>n.addEventListener(n.tagName==='INPUT'?'input':'change',()=>{page=0;render();}));prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});render();
 }
@@ -121,12 +135,31 @@ function connections(){
  a.addEventListener('change',draw);b.addEventListener('change',draw);draw();
 }
 function timeline(){
- const host=$('[data-timeline]');if(!host)return;const rows=$$('[data-event-id]',host);if(!rows.length)return;
+ const host=$('[data-timeline]');if(!host)return;const rows=$$('[data-event-id]',host);
+ // A large site lists its decades here; the search covers every event in the shared data.
+ const compact=!rows.length&&Number(host.dataset.total||0)>0&&events.length>0;if(!rows.length&&!compact)return;
  const search=el('input');search.type='search';search.placeholder='Person, date, event or place';const kinds=[...new Set(events.map(e=>e.kind))].sort();const kind=select([['','All event types'],...kinds.map(k=>[k,k])]);const bar=el('div',undefined,'toolbar');bar.append(field('Search timeline',search),field('Event type',kind));host.before(bar);const status=el('p',undefined,'result-count');host.before(status);
+ if(compact){const index=[...host.children],results=el('ul',undefined,'record-list timeline'),LIMIT=100;results.hidden=true;host.append(results);status.setAttribute('role','status');
+  const sorted=[...events].sort(byDate),texts=new Map;const text=e=>{if(!texts.has(e.id))texts.set(e.id,norm([e.date,e.kind,placeBy.get(e.place_id)?.name,e.description,...(e.participant_ids||[]).map(id=>name(personBy.get(id)))].join(' ')));return texts.get(e.id);};
+  const item=e=>{const li=el('li'),who=el('p'),place=placeBy.get(e.place_id);li.append(el('strong',`${e.date||'Date unknown'} · ${e.kind}`));if(place)li.append(` — ${place.name}`);if(e.description)li.append(el('p',e.description));(e.participant_ids||[]).forEach((id,i)=>{if(i)who.append(', ');who.append(linkTo(id,name(personBy.get(id))));});li.append(who);return li;};
+  const show=()=>{const words=norm(search.value).trim().split(/\s+/).filter(Boolean);if(!words.length&&!kind.value){results.hidden=true;index.forEach(n=>n.hidden=false);status.textContent=`${events.length.toLocaleString()} events, one page per decade. Search to find events across every decade.`;return;}
+   const found=sorted.filter(e=>(!kind.value||e.kind===kind.value)&&words.every(w=>text(e).includes(w)));results.replaceChildren(...found.slice(0,LIMIT).map(item));results.hidden=false;index.forEach(n=>n.hidden=true);
+   status.textContent=found.length>LIMIT?`The first ${LIMIT} of ${found.length.toLocaleString()} matching events, in date order. Refine the search to see the others.`:`${found.length.toLocaleString()} of ${events.length.toLocaleString()} events shown`;};
+  search.addEventListener('input',show);kind.addEventListener('change',show);show();return;}
  const render=()=>{let count=0;rows.forEach(row=>{const event=eventBy.get(row.dataset.eventId),text=norm([row.textContent,...(event?.participant_ids||[]).map(id=>name(personBy.get(id)))].join(' '));row.hidden=!(text.includes(norm(search.value))&&(!kind.value||event?.kind===kind.value));if(!row.hidden)count++;});status.textContent=`${count} of ${rows.length} events shown`;};search.addEventListener('input',render);kind.addEventListener('change',render);render();
 }
 function sourceSearch(){
- const host=$('[data-sources]');if(!host)return;const rows=$$('[data-source-id]',host);if(!rows.length)return;const input=el('input');input.type='search';input.placeholder='Title, repository or source type';const bar=el('div',undefined,'toolbar');bar.append(field('Search sources',input));host.before(bar);const count=el('p',undefined,'result-count');host.before(count);const draw=()=>{let shown=0;rows.forEach(r=>{r.hidden=!norm(r.textContent).includes(norm(input.value));if(!r.hidden)shown++;});count.textContent=`${shown} of ${rows.length} sources shown`;};input.addEventListener('input',draw);draw();
+ const host=$('[data-sources]');if(!host)return;const rows=$$('[data-source-id]',host);if(!rows.length)return;const input=el('input');input.type='search';input.placeholder='Title, repository or source type';const bar=el('div',undefined,'toolbar');bar.append(field('Search sources',input));host.before(bar);const count=el('p',undefined,'result-count');host.before(count);
+ // A large site writes out the first page only; the search covers every source in the shared data.
+ const all=list('sources'),urls=Object.fromEntries(Object.entries(data.site?.source_urls||{}).map(([id,url])=>[id,window.GENEALOGY_SITE_DATA?root+url:url]));
+ if(Number(host.dataset.total||0)>rows.length&&all.length>rows.length){const pages=$('[data-source-pages]'),results=el('ul',undefined,'record-list'),LIMIT=100;results.hidden=true;host.after(results);count.setAttribute('role','status');
+  const text=new Map(all.map(s=>[s.id,norm([s.title,s.author,s.publication,s.source_type,s.repository].join(' '))]));const sorted=[...all].sort((a,b)=>String(a.title).localeCompare(String(b.title))||a.id.localeCompare(b.id));
+  const item=s=>{const li=el('li'),a=el('a',s.title||s.id);if(urls[s.id])a.href=urls[s.id];li.append(a);const meta=[s.author,s.publication,s.source_type,s.repository].filter(Boolean).join(' · ');if(meta)li.append(el('p',meta,'meta'));return li;};
+  const show=()=>{const words=norm(input.value).trim().split(/\s+/).filter(Boolean);const searching=words.length>0;host.hidden=searching;if(pages)pages.hidden=searching;results.hidden=!searching;if(!searching){count.textContent=`${all.length.toLocaleString()} sources, ${rows.length} on this page. Search to find any source.`;return;}
+   const found=sorted.filter(s=>words.every(w=>text.get(s.id).includes(w)));results.replaceChildren(...found.slice(0,LIMIT).map(item));
+   count.textContent=found.length>LIMIT?`The first ${LIMIT} of ${found.length.toLocaleString()} matching sources. Refine the search to see the others.`:`${found.length.toLocaleString()} of ${all.length.toLocaleString()} sources shown`;};
+  input.addEventListener('input',show);show();return;}
+ const draw=()=>{let shown=0;rows.forEach(r=>{r.hidden=!norm(r.textContent).includes(norm(input.value));if(!r.hidden)shown++;});count.textContent=`${shown} of ${rows.length} sources shown`;};input.addEventListener('input',draw);draw();
 }
 function map(){
  const host=$('#map-output');if(!host)return;

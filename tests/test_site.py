@@ -35,7 +35,7 @@ class SiteTests(unittest.TestCase):
         case = ResearchCase('hidden-case-id', 'Hidden case title', 'Hidden case summary')
         for record in [
             Person('../traveller', names=[Name('Ada <Harbour>')], living=L.DECEASED,
-                   notes='A fictional public biography.', sensitivity=A.PUBLIC),
+                   notes='A fictional public biography </script>.', sensitivity=A.PUBLIC),
             Person('parent', names=[Name('Robin Harbour')], living=L.DECEASED, sensitivity=A.PUBLIC),
             Person('SECRET-ID', names=[Name('SECRET-NAME')], living=L.LIVING,
                    notes='SECRET-NOTES', sensitivity=A.PUBLIC),

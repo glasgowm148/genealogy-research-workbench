@@ -9,7 +9,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from genealogy.case import CaseStore
 from genealogy.config import ProjectConfig
@@ -179,7 +179,9 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertIn('Person 0003 Fable', self.page.locator('#connection-result').inner_text())
         if os.environ.get('GENEALOGY_AXE_PATH'):
             axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
-            for route in ('tree.html', 'compare.html', 'research.html', 'sitemap.html', 'findings.html', 'findings/page-1.html'):
+            for route in ('tree.html', 'compare.html', 'research.html', 'sitemap.html', 'findings.html', 'findings/page-1.html',
+                          'catalogue.html', 'catalogue/page-2.html', 'timeline.html', 'timeline/1700s.html', 'places.html', 'places/fableland.html',
+                          'sources.html', 'sources/page-2.html'):
                 with self.subTest(route=route):
                     self.page.goto(large + route, wait_until='networkidle')
                     self.page.add_script_tag(content=axe)
@@ -188,6 +190,59 @@ class BrowserSiteTests(unittest.TestCase):
                         "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
+        self.assertEqual([], self.errors)
+
+    def test_large_site_catalogue_and_timeline_search_everyone_from_the_data(self):
+        large = self.base.replace('/nested/', '/large/')
+        people = self.large_people
+        self.page.goto(large + 'catalogue.html', wait_until='networkidle')
+        rows = self.page.locator('[data-person-id]:visible')
+        self.assertEqual(40, rows.count())
+        self.assertIn(f'{people:,} of {people:,} people', self.page.locator('.result-count').inner_text())
+        self.assertFalse(self.page.locator('[data-catalogue-pages]').is_visible())
+        self.assertIn(f'Page 1 of {-(-people // 40)}', self.page.locator('.pagination').inner_text())
+        # Someone not written into the page is found, shown like the written rows, and linked.
+        self.page.get_by_role('searchbox', name='Search people').fill('Person 0399')
+        self.assertEqual(2, rows.count())  # the person, and their parent, whose search covers recorded relatives
+        row = self.page.locator('[data-person-id="p0399"]')
+        self.assertIn('b. 1799', row.inner_text())
+        self.assertIn('birth: 1799', row.inner_text())
+        row.get_by_role('link').click()
+        self.assertEqual('Person 0399 Fable', self.page.locator('h1').inner_text())
+        self.page.goto(large + 'catalogue.html?surname=Fable', wait_until='networkidle')
+        self.assertIn(f'{people:,} of {people:,} people', self.page.locator('.result-count').inner_text())
+        self.page.get_by_label('Sort by').select_option('birth')
+        self.assertIn('b. 1700', rows.first.inner_text())
+
+        self.page.goto(large + 'timeline.html', wait_until='networkidle')
+        self.assertTrue(self.page.locator('.decade-list').first.is_visible())
+        self.page.get_by_role('searchbox', name='Search timeline').fill('Person 0399')
+        found = self.page.locator('[data-timeline] ul.timeline li')
+        self.assertEqual(1, found.count())
+        self.assertIn('1799 · birth', found.first.inner_text())
+        self.assertFalse(self.page.locator('.decade-list').first.is_visible())
+        self.page.get_by_role('searchbox', name='Search timeline').fill('')
+        self.page.get_by_label('Event type').select_option('residence')
+        self.assertEqual(people // 40, found.count())
+        self.page.get_by_label('Event type').select_option('birth')
+        self.assertEqual(100, found.count())
+        self.assertIn(f'The first 100 of {people:,} matching events', self.page.locator('[data-timeline]').evaluate('n => n.previousElementSibling.textContent'))
+        found.first.get_by_role('link').click()
+        self.assertTrue(self.page.locator('h1').inner_text().startswith('Person '))
+
+        self.page.goto(large + 'places.html', wait_until='networkidle')
+        self.assertEqual(people // 2, self.page.locator('#map-output .map-point').count())
+        self.page.goto(large + 'sources.html', wait_until='networkidle')
+        self.assertIn(f'{people + 1:,} sources, 100 on this page', self.page.locator('.result-count').inner_text())
+        self.page.get_by_role('searchbox', name='Search sources').fill('volume 0390')
+        self.assertFalse(self.page.locator('[data-sources]').is_visible())
+        self.assertFalse(self.page.locator('[data-source-pages]').is_visible())
+        result = self.page.get_by_role('link', name='Invented register volume 0390')
+        self.assertEqual(1, result.count())
+        result.click()
+        self.assertTrue(self.page.locator(':target').inner_text().startswith('Invented register volume 0390'))
+        self.page.goto(large + 'timeline/1700s.html', wait_until='networkidle')
+        self.assertIn('Timeline: 1700s', self.page.locator('h1').inner_text())
         self.assertEqual([], self.errors)
 
     def test_search_pagination_tree_compare_and_connections(self):
@@ -254,7 +309,9 @@ class BrowserSiteTests(unittest.TestCase):
             self.page.locator('.site-sidebar a[data-view="people"]').click()
             self.page.locator('.pagination').wait_for()
             self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
-            payload = self.page.evaluate('window.GENEALOGY_SITE_DATA')
+            self.assertEqual(42, len(self.page.evaluate('window.GENEALOGY_SITE_DATA')['people']))
+            # The full public export sits beside the pages; the browser script carries a subset.
+            payload = self.page.request.get(urljoin(self.page.url, 'data/site.json')).json()
             self.assertEqual(42, len(payload['people']))
             self.assertTrue(all(p['sensitivity'] == 'public' for p in payload['people']))
             if filename.endswith('.ged'):

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Large sites stay quick: past 300 records, the catalogue, timeline, places and sources pages write one page of records and keep the rest on paged pages (`catalogue/page-<n>.html`, `timeline/<decade>s.html`, `places/<region>.html`, `sources/page-<n>.html`), while the script searches everyone from the shared data. Person menus, relationships, claims and findings no longer repeat on the tool pages. See [Large sites](docs/deployment.md#large-sites).
+- `data/site-data.js` carries only the fields the pages read: under a third of its former size on a tree of 4,800 people. `data/site.json` still has every public field.
+- A rebuild removes findings archive pages that a shorter log no longer needs.
+
 ## 0.5.0 — 20 October 2026
 
 - Findings can state their limitations (`Finding.limitations`), cite records directly (`Finding.citation_ids`) and carry a project's own type (`Finding.kind`). The site shows all three; `finding add` takes `--limitations`, `--cite` and `--kind`. A finding citing a non-public record is withheld.

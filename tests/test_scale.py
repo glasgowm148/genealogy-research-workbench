@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import re
 import tempfile
 import unittest
@@ -9,11 +10,12 @@ import unittest
 from genealogy.case import ResearchCase, validate_case
 from genealogy.config import ProjectConfig
 from genealogy.models import (AccessLevel as A, Citation, Claim, ClaimStatus, Event, Evidence, Finding,
-                              LivingStatus as L, Name, Person, Relationship, Source)
-from genealogy.site import INLINE_LIMIT, _anchor, build_site
+                              LivingStatus as L, Name, Person, Place, Relationship, Source)
+from genealogy.site import BROWSER_FIELDS, CATALOGUE_PER_PAGE, INLINE_LIMIT, PLACES_PER_PAGE, SOURCES_PER_PAGE, _anchor, build_site
 from genealogy.sitecheck import check_site
 
 PEOPLE = INLINE_LIMIT + 100
+COUNTRIES = ("Fableland", "Inventia", "Nowhere Isles")
 
 
 def large_case(people: int = PEOPLE) -> ResearchCase:
@@ -22,16 +24,24 @@ def large_case(people: int = PEOPLE) -> ResearchCase:
                Citation("register-1", "register", locator="entry 1", sensitivity=A.PUBLIC)]
     for n in range(people):
         pid = f"p{n:04d}"
+        # Every 50th place has no broader jurisdiction; every other place has coordinates.
+        place = Place(f"pl{n:04d}", f"Hamlet {n:04d}" if n % 50 == 0 else f"Town {n:04d}, Shire {n % 7}, {COUNTRIES[n % 3]}",
+                      latitude=40 + n % 20 if n % 2 else None, longitude=-5 + n % 30 if n % 2 else None)
         records += [
+            place,
             Person(pid, names=[Name(f"Person {n:04d} Fable", surname="Fable")], living=L.DECEASED,
                    event_ids=[f"{pid}-b"], sensitivity=A.PUBLIC),
-            Event(f"{pid}-b", "birth", date=str(1700 + n % 150), participant_ids=[pid], sensitivity=A.PUBLIC),
-            Claim(f"{pid}-c", pid, "occupation", "weaver", citation_ids=["register-1"], status=ClaimStatus.SUPPORTED,
+            Event(f"{pid}-b", "birth", date=str(1700 + n % 150), place_id=place.id, participant_ids=[pid], sensitivity=A.PUBLIC),
+            Source(f"{pid}-src", f"Invented register volume {n:04d}", "register", repository=f"Archive {n % 4}", sensitivity=A.PUBLIC),
+            Citation(f"{pid}-cit", f"{pid}-src", locator=f"folio {n}", sensitivity=A.PUBLIC),
+            Claim(f"{pid}-c", pid, "occupation", "weaver", citation_ids=["register-1", f"{pid}-cit"], status=ClaimStatus.SUPPORTED,
                   sensitivity=A.PUBLIC),
-            Evidence(f"{pid}-e", f"{pid}-c", "register-1", "The register names the trade.", sensitivity=A.PUBLIC),
+            Evidence(f"{pid}-e", f"{pid}-c", f"{pid}-cit", "The register names the trade.", sensitivity=A.PUBLIC),
             Finding(f"{pid}-f", f"Finding about person {n:04d}.", related_ids=[pid], status="reviewed",
                     recorded_on=f"2026-{1 + n % 12:02d}-{1 + n % 28:02d}", sensitivity=A.PUBLIC),
         ]
+        if n % 40 == 0:
+            records.append(Event(f"{pid}-res", "residence", place_id=place.id, participant_ids=[pid], sensitivity=A.PUBLIC))
         if n:
             records.append(Relationship(f"{pid}-r", pid, f"p{(n - 1) // 2:04d}", "parent", sensitivity=A.PUBLIC))
     records.append(Finding("open-1", "An open question still being worked.", related_ids=["p0001"], status="draft",
@@ -79,9 +89,97 @@ class LargeSiteTests(unittest.TestCase):
         self.assertEqual([], check_site(self.out)["broken"])
 
     def test_pages_stay_small(self):
-        sizes = {p.name: p.stat().st_size for p in self.out.glob("*.html")}
-        for name in ("tree.html", "compare.html", "connections.html", "research.html", "sitemap.html", "findings.html", "index.html"):
-            self.assertLess(sizes[name], 100_000, name)
+        sizes = {str(p.relative_to(self.out)): p.stat().st_size for p in self.out.rglob("*.html")}
+        for name in ("tree.html", "compare.html", "connections.html", "research.html", "sitemap.html", "findings.html", "index.html",
+                     "catalogue.html", "timeline.html", "places.html"):
+            self.assertIn(name, sizes)
+        for name, size in sizes.items():
+            self.assertLess(size, 100_000, name)
+
+    def test_the_catalogue_writes_one_page_and_keeps_the_rest_on_paged_pages(self):
+        catalogue = self.text("catalogue.html")
+        self.assertEqual(CATALOGUE_PER_PAGE, catalogue.count("<tr data-person-id="))
+        self.assertIn(f'data-total="{PEOPLE}"', catalogue)
+        pages = sorted((self.out / "catalogue").glob("page-*.html"))
+        self.assertEqual(-(-PEOPLE // CATALOGUE_PER_PAGE) - 1, len(pages))
+        listed = re.findall(r'<tr data-person-id="([^"]+)"', catalogue + "".join(p.read_text() for p in pages))
+        self.assertEqual(sorted(f"p{n:04d}" for n in range(PEOPLE)), sorted(listed))
+        # Every page links to every other, in name order, and the links resolve.
+        self.assertIn('href="../catalogue/page-2.html" aria-current="page">Person 0100 Fable – Person 0199 Fable', self.text("catalogue/page-2.html"))
+        self.assertIn('<a href="../people/', self.text("catalogue/page-2.html"))
+        self.assertEqual([], check_site(self.out)["broken"])
+
+    def test_the_timeline_has_a_page_per_decade(self):
+        timeline = self.text("timeline.html")
+        self.assertNotIn("data-event-id", timeline)
+        self.assertIn('<a href="timeline/1700s.html">1700s</a>', timeline)
+        self.assertIn('<a href="timeline/undated.html">Events without a recorded year</a>', timeline)
+        decade = self.text("timeline/1700s.html")
+        self.assertIn(f'id="{_anchor("p0000-b")}"', decade)
+        self.assertNotIn(f'id="{_anchor("p0010-b")}"', decade)
+        self.assertIn(f'id="{_anchor("p0010-b")}"', self.text("timeline/1710s.html"))
+        self.assertIn(f'id="{_anchor("p0040-res")}"', self.text("timeline/undated.html"))
+        self.assertIn('<a href="1710s.html">1710s →</a>', decade)
+        self.assertIn("<title>Timeline: 1700s —", decade)
+
+    def test_places_have_pages_per_region(self):
+        places = self.text("places.html")
+        self.assertNotIn("<circle", places)
+        self.assertIn("places have supplied coordinates. The map needs JavaScript", places)
+        self.assertIn('<a href="places/fableland.html">Fableland</a>', places)
+        self.assertIn('<a href="places/other.html">Places without a broader jurisdiction</a>', places)
+        self.assertNotIn(f'id="{_anchor("pl0003")}"', places)
+        first, second = self.text("places/fableland.html"), self.text("places/fableland--2.html")
+        self.assertEqual(PLACES_PER_PAGE, first.count("<h3>"))
+        self.assertIn(f'id="{_anchor("pl0003")}"', first + second)
+        self.assertIn('href="fableland--2.html">Page 2</a>', first)
+        self.assertIn(f'id="{_anchor("pl0050")}"', self.text("places/other.html"))
+        # A place's events are listed with it, linking to the people.
+        self.assertIn("../people/", self.text("places/other.html"))
+
+    def test_sources_write_one_page_and_keep_the_rest_on_paged_pages(self):
+        sources = self.text("sources.html")
+        self.assertEqual(SOURCES_PER_PAGE, sources.count("data-source-id="))
+        self.assertIn(f'data-total="{PEOPLE + 1}"', sources)
+        pages = sorted((self.out / "sources").glob("page-*.html"))
+        self.assertEqual(-(-(PEOPLE + 1) // SOURCES_PER_PAGE) - 1, len(pages))
+        listed = re.findall(r'data-source-id="([^"]+)"', sources + "".join(p.read_text() for p in pages))
+        self.assertEqual(PEOPLE + 1, len(set(listed)))
+        # A dossier's citation links to the page its source is on.
+        dossier = next(p for p in (self.out / "people").glob("*.html") if 'data-person-id="p0390"' in p.read_text()).read_text()
+        self.assertRegex(dossier, r'href="\.\./sources/page-\d+\.html#' + _anchor("p0390-src") + '"')
+        script = self.text("data/site-data.js")
+        self.assertIn('"title": "Invented register volume 0390"', script)
+        self.assertIn("sources/page-", script)
+
+    def test_paged_pages_load_no_data_and_are_removed_when_no_longer_needed(self):
+        for page in ("catalogue/page-2.html", "timeline/1700s.html", "places/fableland.html", "sources/page-2.html"):
+            self.assertNotIn("site-data.js", self.text(page), page)
+        self.assertIn("site-data.js", self.text("catalogue.html"))
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            config = ProjectConfig(name="Fictional")
+            build_site(large_case(), config, out)
+            build_site(large_case(20), config, out)
+            for folder in ("catalogue", "timeline", "places", "sources"):
+                self.assertEqual([], list((out / folder).glob("*.html")) if (out / folder).exists() else [], folder)
+            self.assertIn("data-event-id", (out / "timeline.html").read_text())
+            self.assertEqual([], check_site(out)["broken"])
+
+    def test_the_browser_script_carries_only_what_the_pages_read(self):
+        script = self.text("data/site-data.js")
+        data = json.loads(script[script.index("{"):script.rindex("}") + 1])
+        self.assertEqual(set(BROWSER_FIELDS) | {"project", "site"}, set(data))
+        for key, fields in BROWSER_FIELDS.items():
+            self.assertTrue(data[key], key)
+            self.assertTrue(all(set(row) <= set(fields) for row in data[key]), key)
+        self.assertNotIn("sensitivity", script)
+        self.assertEqual({"value", "surname"}, set(data["people"][0]["names"][0]))
+        # The full public export is still published beside it.
+        full = json.loads(self.text("data/site.json"))
+        self.assertEqual(len(full["people"]), len(data["people"]))
+        self.assertIn("sensitivity", full["people"][0])
+        self.assertLess(len(script), len(self.text("data/site.json")) / 2)
 
 
 if __name__ == "__main__":

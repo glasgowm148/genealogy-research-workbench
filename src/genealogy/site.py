@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import re
 from typing import Any
+import unicodedata
 from urllib.parse import quote, urlsplit
 from xml.sax.saxutils import escape as xml_escape
 
@@ -26,6 +27,10 @@ from .maps import geojson
 INLINE_LIMIT = 300
 LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are on archive pages
 FINDINGS_PER_PAGE = 50
+CATALOGUE_PER_PAGE = 100  # people per catalogue page on a large site, in name order
+PLACES_PER_PAGE = 100  # places per region page on a large site
+SOURCES_PER_PAGE = 100  # sources per page on a large site, in title order
+UNPLACED_REGION = "Places without a broader jurisdiction"
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
     "tree.html": ("tree", "Family tree"), "branches.html": ("branches", "Families & branches"),
@@ -37,6 +42,17 @@ ROUTES = {
 }
 DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
               "data/public-tree.ged", "sitemap.xml", "findings.xml"}
+# The fields the browser script reads. ``data/site.json`` keeps every public
+# field; the shared script carries only these, so it stays small to download
+# and parse on a large site.
+BROWSER_FIELDS = {
+    "people": ("id", "names", "event_ids", "notes"),
+    "events": ("id", "kind", "date", "place_id", "participant_ids", "description"),
+    "places": ("id", "name", "latitude", "longitude", "precision"),
+    "relationships": ("id", "subject_id", "object_id", "kind", "confidence", "estimate", "tree_status", "pedigree"),
+    "claims": ("id", "subject_id", "predicate", "value", "status"),
+    "sources": ("id", "title", "author", "publication", "source_type", "repository"),
+}
 BROAD_PRECISIONS = {"parish", "district", "county", "region", "country", "approximate"}
 ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
 MANIFEST = ".genealogy-site-manifest.json"
@@ -75,9 +91,36 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
+def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_urls: dict[str, str] | None = None) -> dict[str, Any]:
+    """The public records the interactive pages need, without empty values."""
+    def slim(row: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+        out = {key: row[key] for key in fields if row.get(key) is not None and row.get(key) != [] and row.get(key) != ""}
+        if "names" in out:
+            out["names"] = [{key: n[key] for key in ("value", "surname") if n.get(key)} for n in out["names"]]
+        return out
+    data: dict[str, Any] = {key: [slim(row, fields) for row in project[key]] for key, fields in BROWSER_FIELDS.items()}
+    data["project"] = project["project"]
+    data["site"] = {"people_urls": people_urls}
+    if source_urls:
+        data["site"]["source_urls"] = source_urls
+    return data
+
+
 def _owned(name: str) -> bool:
     return (name in ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
-            or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html|findings/page-[1-9][0-9]*\.html", name)))
+            or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources)/page-[1-9][0-9]*\.html"
+                                 r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html", name)))
+
+
+def _slug(value: str) -> str:
+    ascii_text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", ascii_text.casefold()).strip("-")
+
+
+def _decade(row: dict[str, Any]) -> str:
+    """The timeline page an event is on: ``1870s``, or ``undated`` without a year."""
+    year = year_of(row.get("date"))
+    return f"{year // 10 * 10}s" if year else "undated"
 
 
 def _base_url(config: ProjectConfig) -> str | None:
@@ -164,6 +207,37 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     compact_people = len(people) > INLINE_LIMIT
     compact_relationships = len(project["relationships"]) > INLINE_LIMIT
     compact_claims = len(project["claims"]) > INLINE_LIMIT
+    compact_events = len(project["events"]) > INLINE_LIMIT
+    compact_places = len(project["places"]) > INLINE_LIMIT
+    compact_sources = len(project["sources"]) > INLINE_LIMIT
+    sources_ordered = sorted(sources, key=lambda sid: (str(sources[sid]["title"]).casefold(), sid))
+    source_page_url = lambda n: "sources.html" if n == 1 else f"sources/page-{n}.html"
+    source_pages = ({sid: source_page_url(index // SOURCES_PER_PAGE + 1) for index, sid in enumerate(sources_ordered)}
+                    if compact_sources else {})
+    # Places group by their broadest jurisdiction as written ("Town, County,
+    # Country" -> "Country"); nothing is looked up or inferred. On a large site
+    # each region has its own pages.
+    regions: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for p in project["places"]:
+        parts = [part.strip() for part in str(p["name"]).split(",") if part.strip()]
+        regions[parts[-1] if len(parts) > 1 else UNPLACED_REGION].append(p)
+    for members in regions.values():
+        members.sort(key=lambda row: (str(row["name"]).casefold(), row["id"]))
+    region_order = sorted(regions, key=lambda r: (r == UNPLACED_REGION, -len(regions[r]), r.casefold()))
+    region_pages: dict[str, list[str]] = {}
+    place_pages: dict[str, str] = {}
+    if compact_places:
+        used: set[str] = set()
+        for region in region_order:
+            slug = "other" if region == UNPLACED_REGION else _slug(region) or "region"
+            if slug in used:
+                slug = f"{slug}-{_key(region)[:8]}"
+            used.add(slug)
+            members = regions[region]
+            region_pages[region] = [f"places/{slug}.html" if n == 0 else f"places/{slug}--{n + 1}.html"
+                                    for n in range(0, max(1, -(-len(members) // PLACES_PER_PAGE)))]
+            for index, row in enumerate(members):
+                place_pages[row["id"]] = region_pages[region][index // PLACES_PER_PAGE]
     # On a large site a relationship or claim lives on its subject's page,
     # where it is already shown with the same anchor.
     home_of = {}
@@ -181,6 +255,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             if not route:
                 route = {"events": "timeline.html", "places": "places.html", "sources": "sources.html", "citations": "sources.html", "relationships": "tree.html"}.get(collection, "research.html")
                 route = home_of.get(row["id"], route)
+                if collection == "events" and compact_events:
+                    route = f"timeline/{_decade(row)}.html"
+                if collection == "places" and compact_places:
+                    route = place_pages[row["id"]]
+                if collection in ("sources", "citations") and compact_sources:
+                    route = source_pages[row["id"] if collection == "sources" else row["source_id"]]
                 if collection == "findings" and compact_findings:
                     route = f"findings/page-{archive_page[row['id']]}.html" if row["id"] in archive_page else "findings.html"
                 route += "#" + _anchor(row["id"])
@@ -319,59 +399,148 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     options = '<option value="">Choose a person</option>' + ("" if compact_people else "".join(f'<option value="{_text(pid)}">{_text(person_name(pid))}</option>' for pid in people))
     browse_people = (f'<p>All {len(people):,} people are listed in the <a href="catalogue.html">catalogue</a>; each has a page of their own.</p>'
                      if compact_people else empty([f'<li>{ref(pid)}</li>' for pid in people]))
-    catalogue_rows = []
-    for pid, person in people.items():
-        events = events_by_person[pid]
-        summary = "; ".join(f'{e["kind"]}: {e.get("date") or "date unknown"}' for e in events)
+    def catalogue_row(pid: str, prefix: str = "") -> str:
+        summary = "; ".join(f'{e["kind"]}: {e.get("date") or "date unknown"}' for e in events_by_person[pid])
         span = lifespan(pid)
-        catalogue_rows.append(f'<tr data-person-id="{_text(pid)}" data-surname="{_text(surname(pid))}" data-search-text="{_text(person_name(pid) + " " + pid + " " + summary)}"><td>{ref(pid)}' + (f'<br><span class="meta">{_text(span)}</span>' if span else "") + f'</td><td>{_text(surname(pid) or "—")}</td><td>{_text(summary or "No events recorded.")}</td><td>{_text(pid)}</td></tr>')
+        return (f'<tr data-person-id="{_text(pid)}" data-surname="{_text(surname(pid))}" data-search-text="{_text(person_name(pid) + " " + pid + " " + summary)}"><td>{ref(pid, prefix)}'
+                + (f'<br><span class="meta">{_text(span)}</span>' if span else "") + f'</td><td>{_text(surname(pid) or "—")}</td><td>{_text(summary or "No events recorded.")}</td><td>{_text(pid)}</td></tr>')
+
+    def catalogue_table(pids: list[str], prefix: str = "") -> str:
+        return ('<div class="table-wrap"><table><thead><tr><th>Person</th><th>Surname</th><th>Recorded events</th><th>Record ID</th></tr></thead><tbody>'
+                + "".join(catalogue_row(pid, prefix) for pid in pids) + '</tbody></table></div>')
+
     pages: dict[str, str] = {}
+    # Pages other than the fixed routes: (view, title).
+    extra_titles: dict[str, tuple[str, str]] = {}
     open_questions = [q for q in project["questions"] if str(q.get("status", "open")).casefold() == "open"]
     counts = [(len(project["people"]), "people"), (len(project["events"]), "events"), (len(project["sources"]), "sources"), (len(open_questions), "open questions")]
     pages["index.html"] = '<p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1><p>Explore people, family connections and historical records. Claims, citations and evidence assessments remain distinct throughout this collection. <a href="evidence.html">How to read the evidence labels</a>.</p><div class="stats stat-grid">' + "".join(f'<div class="stat-card"><strong>{n}</strong><span>{label}</span></div>' for n, label in counts) + '</div><h2>Start exploring</h2><p><a class="button" href="catalogue.html">Browse the people</a> <a href="tree.html">Explore family connections</a></p><h2>Research findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in sorted(project["findings"], key=lambda f: (str(f.get("recorded_on") or ""), f["id"]), reverse=True)[:10]]) + (f'<p><a href="findings.html">All {len(project["findings"]):,} findings</a></p>' if len(project["findings"]) > 10 else "")
-    pages["catalogue.html"] = '<h1>People catalogue</h1><label>Search people <input type="search" data-search placeholder="Name, ID or event"></label><p id="site-status" role="status"></p><div data-catalogue>' + ('<div class="table-wrap"><table><thead><tr><th>Person</th><th>Surname</th><th>Recorded events</th><th>Record ID</th></tr></thead><tbody>' + "".join(catalogue_rows) + '</tbody></table></div>' if catalogue_rows else '<p class="empty-state">No public people are available.</p>') + '</div>'
+    catalogue_search = '<h1>People catalogue</h1><label>Search people <input type="search" data-search placeholder="Name, ID or event"></label><p id="site-status" role="status"></p>'
+    if compact_people:
+        # The first page is written out; the script searches and pages everyone
+        # from the shared data, and each later page has its own address.
+        ordered = sorted(people, key=lambda pid: (person_name(pid).casefold(), pid))
+        chunks = [ordered[i:i + CATALOGUE_PER_PAGE] for i in range(0, len(ordered), CATALOGUE_PER_PAGE)]
+        page_url = lambda n: "catalogue.html" if n == 1 else f"catalogue/page-{n}.html"
+
+        def catalogue_pages(prefix: str, current: int) -> str:
+            return ('<nav class="catalogue-pages" aria-label="Catalogue pages" data-catalogue-pages><h2>Browse by name</h2><ol>'
+                    + "".join(f'<li><a href="{prefix}{page_url(n)}"' + (' aria-current="page"' if n == current else "")
+                              + f'>{_text(person_name(chunk[0]))} – {_text(person_name(chunk[-1]))}</a></li>' for n, chunk in enumerate(chunks, 1))
+                    + "</ol></nav>")
+        pages["catalogue.html"] = (catalogue_search + f'<div data-catalogue data-total="{len(people)}">' + catalogue_table(chunks[0]) + '</div>'
+                                   + catalogue_pages("", 1))
+        for n, chunk in enumerate(chunks[1:], 2):
+            pages[page_url(n)] = (f'<h1>People catalogue, page {n} of {len(chunks)}</h1><p>{len(people):,} people in name order. '
+                                  '<a href="../catalogue.html">Search the catalogue</a>.</p>' + catalogue_table(chunk, "../") + catalogue_pages("../", n))
+            extra_titles[page_url(n)] = ("people", f"People catalogue, page {n}")
+    else:
+        pages["catalogue.html"] = catalogue_search + '<div data-catalogue>' + (catalogue_table(list(people)) if people else '<p class="empty-state">No public people are available.</p>') + '</div>'
     pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + (
         f'<p>{len(project["relationships"]):,} recorded family connections. Each person\'s page lists their parents, partners, children and siblings with these labels, and <a href="branches.html">Families &amp; branches</a> groups them.</p>'
         if compact_relationships else empty([relationship(r) for r in project["relationships"]], "No public family connections recorded."))
-    pages["timeline.html"] = '<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates.</p><div data-timeline>' + empty([event(e) for e in events_sorted], "No public dated events recorded.").replace('class="record-list"', 'class="record-list timeline"', 1) + '</div>'
+    timeline_list = lambda rows, prefix="": empty([event(e, prefix) for e in rows], "No public dated events recorded.").replace('class="record-list"', 'class="record-list timeline"', 1)
+    if compact_events:
+        # One page per decade; an event keeps its page as others are added.
+        by_decade: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in events_sorted:
+            by_decade[_decade(row)].append(row)
+        decades = sorted((d for d in by_decade if d != "undated"), key=lambda d: int(d[:-1])) + (["undated"] if "undated" in by_decade else [])
+        label = lambda d: "Events without a recorded year" if d == "undated" else d
+        centuries: dict[str, list[str]] = defaultdict(list)
+        for d in decades:
+            centuries["Without a year" if d == "undated" else f"{int(d[:-1]) // 100 * 100}s"].append(d)
+        index = "".join(f'<h2>{_text(century)}</h2><ul class="decade-list">' + "".join(
+            f'<li><a href="timeline/{d}.html">{_text(label(d))}</a> <span class="meta">{len(by_decade[d]):,} event{"" if len(by_decade[d]) == 1 else "s"}</span></li>'
+            for d in members) + "</ul>" for century, members in centuries.items())
+        pages["timeline.html"] = (f'<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates. {len(events_sorted):,} events, one page per decade.</p>'
+                                  f'<div data-timeline data-total="{len(events_sorted)}">' + index + '</div>')
+        for n, d in enumerate(decades):
+            steps = "".join(link for link in (
+                f'<a href="{decades[n - 1]}.html">← {_text(label(decades[n - 1]))}</a>' if n else "",
+                f'<a href="{decades[n + 1]}.html">{_text(label(decades[n + 1]))} →</a>' if n + 1 < len(decades) else "") if link)
+            nav = f'<nav class="pagination" aria-label="Timeline decades"><div>{steps}</div></nav>'
+            pages[f"timeline/{d}.html"] = (f'<h1>Timeline: {_text(label(d))}</h1><p>{len(by_decade[d]):,} event{"" if len(by_decade[d]) == 1 else "s"}. '
+                                           'Recorded dates are preserved, including approximate and incomplete dates. <a href="../timeline.html">All decades</a>.</p>'
+                                           + nav + timeline_list(by_decade[d], "../") + nav)
+            extra_titles[f"timeline/{d}.html"] = ("timeline", f"Timeline: {label(d)}")
+    else:
+        pages["timeline.html"] = '<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates.</p><div data-timeline>' + timeline_list(events_sorted) + '</div>'
+    def place_item(p: dict[str, Any], prefix: str = "") -> str:
+        coords = p.get("latitude") is not None and p.get("longitude") is not None
+        details = f'{p["latitude"]}, {p["longitude"]}' if coords else "Coordinates not supplied"
+        if coords and p.get("precision"):
+            details += f' · located to {p["precision"]} level' if p["precision"] != "exact" else " · exact location"
+        return (f'<li id="{_anchor(p["id"])}"><h3>{_text(p["name"])}</h3><p>{_text(details)}</p>'
+                + empty([event(e, prefix, canonical=False) for e in events_by_place[p["id"]]], "No events linked to this place.") + '</li>')
+
     points, place_rows = [], []
-    # Group places by their broadest jurisdiction as written ("Town, County,
-    # Country" -> "Country"); nothing is looked up or inferred.
-    regions: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for p in project["places"]:
-        parts = [part.strip() for part in str(p["name"]).split(",") if part.strip()]
-        regions[parts[-1] if len(parts) > 1 else "Places without a broader jurisdiction"].append(p)
-    region_order = sorted(regions, key=lambda r: (r == "Places without a broader jurisdiction", -len(regions[r]), r.casefold()))
     region_rows = []
+    located_count = 0
     for region in region_order:
         members = regions[region]
         region_events = [e for p in members for e in events_by_place[p["id"]]]
         region_people = {pid for e in region_events for pid in e.get("participant_ids", []) if pid in people}
         located = sum(1 for p in members if p.get("latitude") is not None and p.get("longitude") is not None)
-        region_rows.append(f'<tr><td><a href="#{_anchor("region:" + region)}">{_text(region)}</a></td><td>{len(members)}</td><td>{located}</td><td>{len(region_events)}</td><td>{len(region_people)}</td></tr>')
-    for region in region_order:
-        items = []
-        for p in sorted(regions[region], key=lambda row: str(row["name"]).casefold()):
-            coords = p.get("latitude") is not None and p.get("longitude") is not None
-            details = f'{p["latitude"]}, {p["longitude"]}' if coords else "Coordinates not supplied"
-            if coords and p.get("precision"):
-                details += f' · located to {p["precision"]} level' if p["precision"] != "exact" else " · exact location"
-            if coords:
-                x, y = (p["longitude"] + 180) * 960 / 360, (90 - p["latitude"]) * 480 / 180
-                broad = p.get("precision") in BROAD_PRECISIONS
-                points.append(f'<a href="#{_anchor(p["id"])}"><circle cx="{x:.3f}" cy="{y:.3f}" r="{9 if broad else 5}"' + (' class="broad"' if broad else "") + f'><title>{_text(p["name"])}</title></circle></a>')
-            related = events_by_place[p["id"]]
-            items.append(f'<li id="{_anchor(p["id"])}"><h3>{_text(p["name"])}</h3><p>{_text(details)}</p>' + empty([event(e, canonical=False) for e in related], "No events linked to this place.") + '</li>')
-        place_rows.append(f'<section class="place-region" id="{_anchor("region:" + region)}"><h2>{_text(region)}</h2>' + empty(items) + '</section>')
+        located_count += located
+        target = region_pages[region][0] if compact_places else "#" + _anchor("region:" + region)
+        region_rows.append(f'<tr><td><a href="{target}">{_text(region)}</a></td><td>{len(members)}</td><td>{located}</td><td>{len(region_events)}</td><td>{len(region_people)}</td></tr>')
+    if compact_places:
+        # Each region has pages of its own; the map is drawn by the script from the shared data.
+        for region in region_order:
+            urls = region_pages[region]
+            for n, url in enumerate(urls):
+                chunk = regions[region][n * PLACES_PER_PAGE:(n + 1) * PLACES_PER_PAGE]
+                nav = ('<nav class="pagination" aria-label="Pages for this region"><div>' + "".join(
+                    f'<a href="{other.split("/")[1]}"' + (' aria-current="page"' if other == url else "") + f'>Page {i + 1}</a>' for i, other in enumerate(urls)) + "</div></nav>") if len(urls) > 1 else ""
+                page_note = f", page {n + 1} of {len(urls)}" if len(urls) > 1 else ""
+                pages[url] = (f'<h1>Places: {_text(region)}</h1><p>{len(regions[region]):,} place{"" if len(regions[region]) == 1 else "s"}{page_note}, '
+                              'grouped by the last part of each place name as recorded. <a href="../places.html">All countries and regions</a>.</p>'
+                              + nav + empty([place_item(p, "../") for p in chunk]) + nav)
+                extra_titles[url] = ("map", f"Places: {region}" + (f", page {n + 1}" if n else ""))
+        located_note = (f'<p>{located_count:,} of {len(project["places"]):,} places have supplied coordinates. The map needs JavaScript; '
+                        'each region\'s page lists the coordinates.</p>' if located_count else "<p>No coordinates supplied.</p>")
+        map_block = f'<div id="map-output">{located_note}</div>'
+    else:
+        for region in region_order:
+            items = []
+            for p in regions[region]:
+                if p.get("latitude") is not None and p.get("longitude") is not None:
+                    x, y = (p["longitude"] + 180) * 960 / 360, (90 - p["latitude"]) * 480 / 180
+                    broad = p.get("precision") in BROAD_PRECISIONS
+                    points.append(f'<a href="#{_anchor(p["id"])}"><circle cx="{x:.3f}" cy="{y:.3f}" r="{9 if broad else 5}"' + (' class="broad"' if broad else "") + f'><title>{_text(p["name"])}</title></circle></a>')
+                items.append(place_item(p))
+            place_rows.append(f'<section class="place-region" id="{_anchor("region:" + region)}"><h2>{_text(region)}</h2>' + empty(items) + '</section>')
+        map_block = ('<div id="map-output"><svg class="place-map" viewBox="0 0 960 480" role="img" aria-label="Places with supplied coordinates"><rect width="960" height="480" fill="#e8efec"/><image href="assets/world.svg" width="960" height="480"/><path d="M0 240H960M480 0V480" stroke="#a8b9af"/>'
+                     + "".join(points) + '</svg></div>' + ("<p>No coordinates supplied.</p>" if not points else ""))
     summary_table = ('<h2>By country or region</h2><p class="meta">Grouped by the last part of each place name as recorded.</p><div class="table-wrap"><table><thead><tr><th>Country or region</th><th>Places</th><th>With coordinates</th><th>Events</th><th>People</th></tr></thead><tbody>'
-                     + "".join(region_rows) + '</tbody></table></div>') if len(region_rows) > 1 else ""
-    pages["places.html"] = '<h1>Places</h1><p>This offline coordinate overview uses supplied coordinates only. No geocoding or external map service is used. Basemap: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain).</p><div id="map-output"><svg class="place-map" viewBox="0 0 960 480" role="img" aria-label="Places with supplied coordinates"><rect width="960" height="480" fill="#e8efec"/><image href="assets/world.svg" width="960" height="480"/><path d="M0 240H960M480 0V480" stroke="#a8b9af"/>' + "".join(points) + '</svg></div>' + ("<p>No coordinates supplied.</p>" if not points else "") + summary_table + ("".join(place_rows) if place_rows else empty([]))
-    source_cards = []
-    for src in sources.values():
+                     + "".join(region_rows) + '</tbody></table></div>') if len(region_rows) > 1 or compact_places else ""
+    pages["places.html"] = ('<h1>Places</h1><p>This offline coordinate overview uses supplied coordinates only. No geocoding or external map service is used. Basemap: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain).</p>'
+                            + map_block + summary_table + ("" if compact_places else "".join(place_rows) if place_rows else empty([])))
+    def source_card(src: dict[str, Any], prefix: str = "") -> str:
         link = _url(src.get("url"))
         fields = "".join(f'<p><strong>{_text(k.replace("_", " ").capitalize())}:</strong> {_text(src[k])}</p>' for k in ("author", "publication", "source_type", "repository", "access_note", "licence") if src.get(k))
-        source_cards.append(f'<article class="record-card card" data-source-id="{_text(src["id"])}" id="{_anchor(src["id"])}"><h2>{_text(src["title"])}</h2>{fields}' + (f'<p><a href="{_text(link)}" rel="noreferrer">Open original source</a></p>' if link else "") + '<h3>Citations</h3>' + empty(["<li>" + citation(c, canonical=True) + "</li>" for c in citations_by_source[src["id"]]]) + '</article>')
-    pages["sources.html"] = '<h1>Sources and citations</h1><p>Consult original records when assessing a claim. A citation identifies the specific record or passage.</p><div data-sources>' + ("".join(source_cards) or '<p class="empty-state">No public sources recorded.</p>') + '</div>'
+        return (f'<article class="record-card card" data-source-id="{_text(src["id"])}" id="{_anchor(src["id"])}"><h2>{_text(src["title"])}</h2>{fields}' + (f'<p><a href="{_text(link)}" rel="noreferrer">Open original source</a></p>' if link else "")
+                + '<h3>Citations</h3>' + empty(["<li>" + citation(c, prefix, canonical=True) + "</li>" for c in citations_by_source[src["id"]]]) + '</article>')
+
+    sources_intro = '<h1>Sources and citations</h1><p>Consult original records when assessing a claim. A citation identifies the specific record or passage.</p>'
+    if compact_sources:
+        # The first page is written out; the script searches every source from the shared data.
+        chunks = [sources_ordered[i:i + SOURCES_PER_PAGE] for i in range(0, len(sources_ordered), SOURCES_PER_PAGE)]
+
+        def source_page_nav(prefix: str, current: int) -> str:
+            return ('<nav class="catalogue-pages" aria-label="Source pages" data-source-pages><h2>Browse by title</h2><ol>'
+                    + "".join(f'<li><a href="{prefix}{source_page_url(n)}"' + (' aria-current="page"' if n == current else "")
+                              + f'>{_text(sources[chunk[0]]["title"])} – {_text(sources[chunk[-1]]["title"])}</a></li>' for n, chunk in enumerate(chunks, 1))
+                    + "</ol></nav>")
+        pages["sources.html"] = (sources_intro + f'<div data-sources data-total="{len(sources)}">' + "".join(source_card(sources[sid]) for sid in chunks[0]) + '</div>'
+                                 + source_page_nav("", 1))
+        for n, chunk in enumerate(chunks[1:], 2):
+            pages[source_page_url(n)] = (f'<h1>Sources and citations, page {n} of {len(chunks)}</h1><p>{len(sources):,} sources in title order. '
+                                         '<a href="../sources.html">Search the sources</a>.</p>' + "".join(source_card(sources[sid], "../") for sid in chunk) + source_page_nav("../", n))
+            extra_titles[source_page_url(n)] = ("sources", f"Sources, page {n}")
+    else:
+        pages["sources.html"] = sources_intro + '<div data-sources>' + ("".join(source_card(src) for src in sources.values()) or '<p class="empty-state">No public sources recorded.</p>') + '</div>'
     research = ['<h1>Research notebook</h1><p>Claims and their evidence first, then the work still outstanding: hypotheses, open questions and draft or reviewed findings. <a href="evidence.html">Reading the evidence</a>.</p><h2>Claims</h2>', (
         f'<p>{len(project["claims"]):,} claims. Each is shown, with its citations and evidence, on the page of the person it concerns.</p>'
         + "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex" and c["id"] not in home_of)
@@ -477,13 +646,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     if not project["findings"]:
         log.append('<p class="empty-state">No public findings recorded yet.</p>')
     pages["findings.html"] = "".join(log)
-    archive_titles: dict[str, str] = {}
     for number, rows in archive.items():
         newer = f'<a href="{archive_url(number + 1).split("/")[1]}">← Newer</a>' if number + 1 in archive else '<a href="../findings.html">← Latest findings</a>'
         older = f'<a href="{archive_url(number - 1).split("/")[1]}">Older →</a>' if number - 1 in archive else ""
         pages[archive_url(number)] = (f'<h1>Findings, page {number} of {len(archive)}</h1><p>Archive pages are numbered from the earliest finding, so a finding keeps its page. <a href="../findings.html">Latest findings</a>.</p>'
                                       + by_month(rows, "../") + f'<nav class="pagination" aria-label="Finding pages"><div>{newer}{older}</div></nav>' + archive_nav("../"))
-        archive_titles[archive_url(number)] = f"Findings, page {number}"
+        extra_titles[archive_url(number)] = ("findings", f"Findings, page {number}")
 
     # Families and branches: surname groups and connected groups of recorded relatives.
     groups: dict[str, list[str]] = defaultdict(list)
@@ -566,7 +734,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
     data_links = "<ul>" + "".join(f'<li><a href="{path}">{label}</a></li>' for path, label in downloads) + "</ul>"
     pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul>' + ('<h2>Studies</h2>' + empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()]) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
-    shared = {**project, "site": {"people_urls": people_urls}}
+    shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None)
     outputs: dict[str, str] = {
         "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
         "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n",
@@ -593,12 +761,13 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     study_titles = {url: studies[sid]["title"] for sid, url in study_urls.items()}
     for path, content in pages.items():
         prefix = "../" if "/" in path else ""
-        view, title = ROUTES[path] if path in ROUTES else ("study", study_titles[path]) if path in study_titles else ("findings", archive_titles[path]) if path in archive_titles else ("person", person_titles[path])
+        view, title = ROUTES[path] if path in ROUTES else ("study", study_titles[path]) if path in study_titles else extra_titles[path] if path in extra_titles else ("person", person_titles[path])
         person_attribute = f' data-person-id="{_text(person_ids_by_path[path])}"' if path in person_ids_by_path else ""
         nav = "".join(f'<a data-view="{v}" href="{prefix}{p}"' + (' aria-current="page"' if path == p else '') + f'>{t}</a>' for p, (v, t) in ROUTES.items())
         # Dossiers need only the menu enhancement. Interactive pages share one
         # data script rather than embedding the whole collection in each page.
-        interactive = view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "overview"}
+        # The paged pages of a large site are plain lists and need no data.
+        interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "overview"}
         data_script = f'<script defer src="{prefix}data/site-data.js"></script>' if interactive else ""
         payload = {"project": project["project"], "site": {"root": prefix}}
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
