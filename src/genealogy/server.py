@@ -8,7 +8,7 @@ import secrets
 import shutil
 from urllib.parse import unquote, urlsplit
 
-from .importing import MAX_IMPORT_BYTES, detect_format, import_file, private_write
+from .importing import MAX_IMPORT_BYTES, SUFFIXES, detect_format, import_file, private_write
 
 HTML = r'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Genealogy · Create your research site</title><style>
@@ -17,7 +17,7 @@ HTML = r'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="view
 <p>Import a GEDCOM or OneTree JSON export. Your file stays on this computer. Nothing is uploaded to an outside service.</p>
 <form id="upload" class="card"><label for="name">Public project title</label><input id="name" type="text" maxlength="120" value="Family research" required>
 <small>Choose a public title without private personal details.</small>
-<label for="file">Your tree export</label><input id="file" type="file" accept=".ged,.gedcom,.json" required><small>UTF-8 GEDCOM or OneTree JSON · maximum 32 MiB</small>
+<label for="file">Your tree export</label><input id="file" type="file" accept=".ged,.gedcom,.gdz,.json" required><small>GEDCOM (.ged), GEDCOM 7 archive (.gdz) or OneTree JSON · maximum 32 MiB</small>
 <label><input id="review" type="checkbox"> I have reviewed this tree and permit basic deceased or historical facts to appear publicly.</label>
 <small>Optional. Living, explicitly private, restricted and licensed records remain protected. Notes and source text require separate review. Imported relationships remain unverified assertions.</small>
 <label><input id="sources" type="checkbox"> I have also reviewed linked source titles, repositories, URLs and citation locators for public use.</label>
@@ -137,7 +137,7 @@ class UploadHandler(BaseHTTPRequestHandler):
                 raise ValueError("Preview storage escapes the project directory")
             staging = base / identifier
             initialize_project(staging, name)
-            source = staging / "private" / ("upload.ged" if format == "gedcom" else "upload.json")
+            source = staging / "private" / ("upload" + SUFFIXES[format])
             private_write(source, raw)
             case, config = load_case(staging)
             report = import_file(staging, case, config, source, format=format, publish_deceased=review == "true",

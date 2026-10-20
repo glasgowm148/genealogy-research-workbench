@@ -1,6 +1,6 @@
 # Importing a tree
 
-`genealogy import FILE` accepts one explicitly selected local file of at most 32 MiB. `.ged` and `.gedcom` select GEDCOM; `.json` selects OneTree. Use `--format gedcom` or `--format one-tree` when the extension is different.
+`genealogy import FILE` accepts one explicitly selected local file of at most 32 MiB. `.ged` and `.gedcom` select GEDCOM, `.gdz` selects a GEDCOM 7 archive and `.json` selects OneTree. Use `--format gedcom`, `--format gedzip` or `--format one-tree` when the extension is different.
 
 ```sh
 genealogy init my-family --name "Family research"
@@ -44,7 +44,9 @@ The importer supports common GEDCOM 5.5, 5.5.1 and 7 structures. This is a usefu
 
 **Repairs and diagnostics.** Some exporters, including WikiTree's, write raw line breaks inside long notes. A line that cannot be a GEDCOM line and follows text is kept as continued text, and the import reports how many lines were repaired. Missing referenced people or sources are reported and omitted; `@VOID@` pointers are treated as deliberately empty. Invalid coordinates are reported and dropped, never kept or guessed. Every structure the importer does not interpret is counted in a warning (for example `INDI._MILT×16`) and remains only in the private original file. Government identifiers such as `SSN`/`IDNO` are never imported.
 
-Outside this release: GEDZIP archives, embedded media (`OBJE`), source templates, `ASSO` associations, LDS ordinances and full round-trip fidelity. The private original file keeps them.
+**GEDZIP.** A GEDCOM 7 `.gdz` archive (or `.zip`) is read without unpacking anything. Its top-level `gedcom.ged` is imported like any GEDCOM. Media files are counted in the report, kept only in the private copy of the archive, and never imported or published. Encrypted archives, and archives with no single top-level GEDCOM, are rejected with a message.
+
+Outside this release: importing or publishing media (`OBJE`, including archive media), source templates, `ASSO` associations, LDS ordinances and full round-trip fidelity. The private original file keeps them.
 
 ## OneTree JSON
 

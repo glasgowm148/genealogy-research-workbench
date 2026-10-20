@@ -239,5 +239,41 @@ class ReimportTests(unittest.TestCase):
         self.assertEqual(len(self.load()[0].records(Person)), 1)
 
 
+
+class GedzipTests(unittest.TestCase):
+    def archive(self, entries):
+        import io, zipfile
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            for name, data in entries.items():
+                archive.writestr(name, data)
+        return buffer.getvalue()
+
+    def test_gedcom7_archive_imports_and_keeps_media_private(self):
+        tree = "0 HEAD\n1 GEDC\n2 VERS 7.0\n0 @I1@ INDI\n1 NAME Ada /Fable/\n1 DEAT Y\n1 OBJE @O1@\n0 @O1@ OBJE\n1 FILE media/ada.jpg\n2 FORM image/jpeg\n0 TRLR\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "project"
+            self.assertEqual(main(["init", str(root), "--name", "Fictional"]), 0)
+            source = Path(temporary) / "family.gdz"
+            source.write_bytes(self.archive({"gedcom.ged": tree, "media/ada.jpg": b"\xff\xd8not-a-real-photo"}))
+            config = ProjectConfig.load(root / "genealogy.toml")
+            case = CaseStore(root / config.case_directory).load(config.default_case)
+            report = import_file(root, case, config, source, publish_deceased=True)
+            self.assertEqual((report["format"], report["people"], report["published_people"]), ("gedzip", 1, 1))
+            self.assertTrue(any("1 media files were kept only in the private copy" in w for w in report["warnings"]))
+            self.assertTrue((root / "private" / "imports" / f"{report['sha256']}.gdz").is_file())
+            self.assertEqual(main(["--project", str(root), "build"]), 0)
+            self.assertFalse(any(path.suffix == ".jpg" for path in (root / "dist").rglob("*")))
+
+    def test_archives_without_one_gedcom_are_rejected(self):
+        from genealogy.importing import gedzip_gedcom
+        with self.assertRaisesRegex(ValueError, "gedcom.ged"):
+            gedzip_gedcom(self.archive({"a.ged": "0 HEAD", "b.ged": "0 HEAD"}))
+        with self.assertRaisesRegex(ValueError, "not a valid ZIP"):
+            gedzip_gedcom(b"not a zip")
+        data, notes = gedzip_gedcom(self.archive({"Family.GED": "0 HEAD"}))
+        self.assertEqual((data, notes), (b"0 HEAD", []))
+
+
 if __name__ == "__main__":
     unittest.main()

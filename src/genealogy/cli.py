@@ -190,7 +190,7 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--name", help="public project/site title (no private personal details)")
     imported = commands.add_parser("import", help="import GEDCOM or OneTree JSON into an empty case")
     imported.add_argument("input", type=Path)
-    imported.add_argument("--format", choices=("auto", "gedcom", "one-tree"), default="auto")
+    imported.add_argument("--format", choices=("auto", "gedcom", "gedzip", "one-tree"), default="auto")
     imported.add_argument("--publish-deceased", action="store_true",
                           help="confirm reviewed basic deceased/historical facts may be public; protected records stay private")
     imported.add_argument("--publish-reviewed-sources", action="store_true",

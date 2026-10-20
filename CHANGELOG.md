@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- GEDCOM 7 `.gdz` archives import their `gedcom.ged` without unpacking. Media files are counted and kept only in the private archive copy.
+- The local preview server now serves the CSV, GEDCOM and XML downloads it builds (previously 404).
+
 ## 0.3.0 — 20 October 2026
 
 Import

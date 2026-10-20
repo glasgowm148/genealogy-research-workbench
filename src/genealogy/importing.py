@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 from typing import Any
+import zipfile
 
 from .adapters import resolve_adapter
 from .case import CaseStore, ResearchCase, validate_case
@@ -18,17 +20,59 @@ MAX_IMPORT_BYTES = 32 * 1024 * 1024
 MAX_WARNINGS = 20
 
 
+FORMATS = ("gedcom", "gedzip", "one-tree")
+MAX_GEDZIP_GEDCOM_BYTES = 128 * 1024 * 1024
+SUFFIXES = {"gedcom": ".ged", "gedzip": ".gdz", "one-tree": ".json"}
+
+
 def detect_format(filename: str, selected: str = "auto") -> str:
     if selected != "auto":
-        if selected not in ("gedcom", "one-tree"):
-            raise ValueError("format must be auto, gedcom or one-tree")
+        if selected not in FORMATS:
+            raise ValueError("format must be auto, gedcom, gedzip or one-tree")
         return selected
     suffix = Path(filename).suffix.casefold()
     if suffix in (".ged", ".gedcom"):
         return "gedcom"
+    if suffix in (".gdz", ".zip"):
+        return "gedzip"
     if suffix == ".json":
         return "one-tree"
-    raise ValueError("Choose a .ged, .gedcom or OneTree .json file (or specify --format)")
+    raise ValueError("Choose a .ged, .gedcom, GEDCOM 7 .gdz or OneTree .json file (or specify --format)")
+
+
+def gedzip_gedcom(raw: bytes) -> tuple[bytes, list[str]]:
+    """Read ``gedcom.ged`` from a GEDCOM 7 GEDZIP archive without extracting anything.
+
+    Media files stay inside the private copy of the archive; they are counted,
+    never unpacked or published.
+    """
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile as error:
+        raise ValueError("The .gdz file is not a valid ZIP archive") from error
+    with archive:
+        entries = [info for info in archive.infolist() if not info.is_dir()]
+        names = {info.filename.casefold(): info for info in entries}
+        info = names.get("gedcom.ged")
+        if info is None:
+            candidates = [entry for entry in entries if entry.filename.casefold().endswith((".ged", ".gedcom")) and "/" not in entry.filename.strip("/")]
+            if len(candidates) != 1:
+                raise ValueError("A GEDZIP archive must contain gedcom.ged at its top level")
+            info = candidates[0]
+        if info.flag_bits & 0x1:
+            raise ValueError("Encrypted GEDZIP archives are not supported")
+        if info.file_size > MAX_GEDZIP_GEDCOM_BYTES:
+            raise ValueError("The GEDCOM inside the archive is larger than 128 MiB")
+        with archive.open(info) as handle:
+            data = handle.read(MAX_GEDZIP_GEDCOM_BYTES + 1)
+        if len(data) > MAX_GEDZIP_GEDCOM_BYTES:
+            raise ValueError("The GEDCOM inside the archive is larger than 128 MiB")
+        media = [entry for entry in entries if entry is not info]
+    notes = []
+    if media:
+        notes.append(f"The archive's {len(media)} media files were kept only in the private copy of the archive; "
+                     "media are not imported or published.")
+    return data, notes
 
 
 def _json_text(raw: bytes) -> str:
@@ -55,7 +99,7 @@ def private_write(path: Path, data: bytes) -> None:
     path.chmod(0o600)
 
 
-_IMPORT_ADAPTERS = {"gedcom": "gedcom", "one-tree": "one-tree"}
+_IMPORT_ADAPTERS = {"gedcom": "gedcom", "gedzip": "gedcom", "one-tree": "one-tree"}
 
 
 def _imported_ids(case: ResearchCase, adapter: str) -> set[str]:
@@ -107,8 +151,8 @@ def import_file(directory: Path, case: ResearchCase, config: ProjectConfig, sour
     if enabled is not None:
         if not isinstance(enabled, list) or not all(isinstance(value, str) for value in enabled):
             raise ValueError("adapters.enabled must be a list of adapter names")
-        if selected not in {value.casefold().replace("_", "-") for value in enabled}:
-            raise ValueError(f"adapter is not enabled by project configuration: {selected}")
+        if _IMPORT_ADAPTERS[selected] not in {value.casefold().replace("_", "-") for value in enabled}:
+            raise ValueError(f"adapter is not enabled by project configuration: {_IMPORT_ADAPTERS[selected]}")
     digest = hashlib.sha256(raw).hexdigest()
     signature = {"sha256": digest, "format": selected, "publish_deceased": publish_deceased, "publish_reviewed_sources": publish_reviewed_sources}
     for provenance in case.records("ImportProvenance"):
@@ -125,8 +169,13 @@ def import_file(directory: Path, case: ResearchCase, config: ProjectConfig, sour
         raise ValueError(f"--update needs a case created by an earlier {selected} import; use --replace or a new project")
     try:
         # GEDCOM declares its own character set; the adapter decodes it.
-        payload = raw if selected == "gedcom" else json.loads(_json_text(raw))
-        batch = resolve_adapter(selected).ingest(payload)
+        archive_notes: list[str] = []
+        if selected == "gedzip":
+            payload, archive_notes = gedzip_gedcom(raw)
+        else:
+            payload = raw if selected == "gedcom" else json.loads(_json_text(raw))
+        batch = resolve_adapter(_IMPORT_ADAPTERS[selected]).ingest(payload)
+        batch.warnings[:0] = archive_notes
     except (TypeError, KeyError, AttributeError, RecursionError) as error:
         raise ValueError(f"Invalid {selected} input: {error}") from error
     if not any(type(entity).__name__ == "Person" for entity in batch.entities):
@@ -183,7 +232,7 @@ def import_file(directory: Path, case: ResearchCase, config: ProjectConfig, sour
         warnings.append(f"The previous case was backed up privately to {report['backup']}.")
         report["warnings"] = [str(warning)[:500] for warning in warnings[:MAX_WARNINGS]]
         report["warning_count"] = len(warnings)
-    suffix = ".ged" if selected == "gedcom" else ".json"
+    suffix = SUFFIXES[selected]
     private_write(private / f"{digest}{suffix}", raw)
     private_write(private / f"{digest}.report.json", (json.dumps(report, indent=2) + "\n").encode())
     CaseStore(storage).save(imported)

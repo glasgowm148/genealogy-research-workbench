@@ -89,6 +89,7 @@ Got a newer export of the same tree? `import FILE --update` refreshes the import
 | Supported input | Details |
 | --- | --- |
 | GEDCOM 5.5, 5.5.1 and 7 (`.ged`, `.gedcom`) | Declared UTF-8, UTF-16, ANSI, ANSEL, ASCII and Mac encodings; names with surname parts; about 40 event types; parent roles (step, adopted, foster); identifiers; sources with author, publication and repository; citations with locators; supplied coordinates |
+| GEDCOM 7 archive (`.gdz`) | The GEDCOM inside is imported as above; media files stay in the private copy and are not published |
 | WikiTree OneTree JSON (`.json`) | Profiles, parents, spouses and marriages; WikiTree `1850-00-00` dates with guess/before/after qualifiers; the tree's own parent marks; privacy levels |
 
 Everything the importer does not interpret is counted in the import report and kept in the private original. See [import formats](docs/imports.md).
