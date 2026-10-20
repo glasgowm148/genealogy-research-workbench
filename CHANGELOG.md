@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 20 October 2026
 
 - GEDCOM 7 `.gdz` archives import their `gedcom.ged` without unpacking. Media files are counted and kept only in the private archive copy.
+- Importing a path that does not exist names the missing file instead of reporting a size limit.
 - The local preview server now serves the CSV, GEDCOM and XML downloads it builds (previously 404).
+- `genealogy.feeds.atom_feed` writes deterministic Atom feeds; the latest-findings feed gains a self link and full-text summaries.
 - Releases publish to PyPI through a trusted-publishing workflow.
 - A step-by-step guide, [Your first site](docs/first-site.md), from a tree export to a hosted site.
 

@@ -18,7 +18,7 @@ Install a built wheel in a separate environment to test the actual distribution:
 
 ```sh
 python3 -m venv /tmp/workbench-wheel
-/tmp/workbench-wheel/bin/python -m pip install dist/genealogy_research_workbench-0.3.0-py3-none-any.whl
+/tmp/workbench-wheel/bin/python -m pip install dist/genealogy_research_workbench-0.4.0-py3-none-any.whl
 cd /tmp
 /tmp/workbench-wheel/bin/genealogy init wheel-demo --name "Wheel demonstration"
 /tmp/workbench-wheel/bin/genealogy --project wheel-demo build
@@ -86,7 +86,7 @@ The release workflow uses [trusted publishing](https://docs.pypi.org/trusted-pub
    - workflow: `release.yml`
    - environment: `pypi`
 2. In the GitHub repository settings, create an environment named `pypi`. Optionally require approval before publishing.
-3. Publish a release. Re-running the failed workflow for an existing release also works, for example to publish 0.3.0 after the setup.
+3. Publish a release. The workflow runs from the tagged commit, so the first release that can reach PyPI is 0.4.0; earlier tags do not contain it. Re-running a failed workflow run for a 0.4.0 or later release also works once the setup is complete.
 
 After the first upload, `python -m pip install genealogy-research-workbench` installs the toolkit, and the README quick start can use it instead of a clone. The import package is called `genealogy`. An unrelated PyPI project named `genealogy` installs a module with the same name, so install only one of them in a given environment.
 

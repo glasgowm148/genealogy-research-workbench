@@ -19,7 +19,7 @@ You need Python 3.11 or later.
 ```sh
 python3 -m venv ~/genealogy-env
 source ~/genealogy-env/bin/activate
-python -m pip install "git+https://github.com/glasgowm148/genealogy-research-workbench.git@v0.3.0"
+python -m pip install "git+https://github.com/glasgowm148/genealogy-research-workbench.git@v0.4.0"
 ```
 
 On Windows, activate with `%USERPROFILE%\genealogy-env\Scripts\activate`. Once the package is on PyPI, `python -m pip install genealogy-research-workbench` does the same.
