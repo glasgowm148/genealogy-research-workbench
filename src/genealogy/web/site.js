@@ -42,6 +42,8 @@ const view=document.body.dataset.view;
 $$('.site-sidebar a[data-view]').forEach(a=>{if(a.dataset.view===view)a.setAttribute('aria-current','page');});
 
 // Catalogue: retain the complete server-rendered table and filter its rows.
+// A large site writes only a placeholder into its person menus; fill them from the data.
+function fillPeople(menu){if(menu.options.length>1)return;const sorted=[...people].sort((x,y)=>name(x).localeCompare(name(y))||x.id.localeCompare(y.id));const fragment=document.createDocumentFragment();sorted.forEach(p=>fragment.append(option(p.id,name(p))));menu.append(fragment);}
 function catalogue(){
  const host=$('[data-catalogue]');if(!host)return;
  let rows=$$('tbody tr',host);if(!rows.length)rows=$$('[data-person-id]',host);if(!rows.length)return;
@@ -65,7 +67,7 @@ function catalogue(){
 
 function tree(){
  const output=$('#tree-output'),root=$('#tree-root');if(!output||!root)return;
- if(!root.options.length)people.forEach(p=>root.append(option(p.id,name(p))));
+ fillPeople(root);
  const requested=new URLSearchParams(location.search).get('person');if(requested&&personBy.has(requested))root.value=requested;
  const controls=el('div',undefined,'tree-controls'),out=el('button','−'),inn=el('button','+'),reset=el('button','Fit tree'),help=el('span','Drag to pan · wheel or buttons to zoom','hint');out.setAttribute('aria-label','Zoom out');inn.setAttribute('aria-label','Zoom in');controls.append(out,inn,reset,help);output.before(controls);
  let tx=0,ty=0,scale=1,group,svg,initial,mode=new URLSearchParams(location.search).get('person')&&personBy.has(new URLSearchParams(location.search).get('person'))?'family':'whole',wholeController;
@@ -108,12 +110,12 @@ function wholeTree(output,root,focusFamily){
  const observer=typeof ResizeObserver==='function'?new ResizeObserver(schedule):null;observer?.observe(viewport);inspect(selected);fit();return{zoom,fit,dispose(){dead=true;if(frame)cancelAnimationFrame(frame);observer?.disconnect();}};
 }
 function comparison(){
- const a=$('[data-compare-a]'),b=$('[data-compare-b]'),out=$('#compare-result');if(!a||!b||!out)return;
+ const a=$('[data-compare-a]'),b=$('[data-compare-b]'),out=$('#compare-result');if(!a||!b||!out)return;fillPeople(a);fillPeople(b);
  function draw(){out.replaceChildren();const pa=personBy.get(a.value),pb=personBy.get(b.value);if(!pa||!pb){out.append(empty('Choose two people to compare the recorded details.'));return;}const grid=el('div',undefined,'comparison');for(const p of [pa,pb]){const card=el('section',undefined,'card');card.append(el('h2',name(p)));const dl=el('dl');const add=(k,v)=>dl.append(el('dt',k),el('dd',v));add('Birth',dates(p)[0]);add('Death',dates(p)[1]);add('Names',(p.names||[]).map(n=>n.value).join('; ')||'No name recorded');add('Places',[...new Set(pe(p).map(e=>placeBy.get(e.place_id)?.name).filter(Boolean))].join('; ')||'No place recorded');add('Relatives',relativeIds(p.id).map(id=>name(personBy.get(id))).join('; ')||'No public relationships recorded');const cs=claimsByPerson.get(p.id)||[];add('Claims',`${cs.length} recorded · ${cs.filter(c=>c.status==='supported').length} supported`);card.append(dl,personLink(p));grid.append(card);}out.append(grid,el('p','Similar details are research leads. Comparison does not establish identity or authorize a merge.','note'));}
  a.addEventListener('change',draw);b.addEventListener('change',draw);draw();
 }
 function connections(){
- const a=$('[data-connection-a]'),b=$('[data-connection-b]'),out=$('#connection-result');if(!a||!b||!out)return;
+ const a=$('[data-connection-a]'),b=$('[data-connection-b]'),out=$('#connection-result');if(!a||!b||!out)return;fillPeople(a);fillPeople(b);
  const adjacency=new Map;for(const r of relationships){if(r.confidence==='disproved'||!personBy.has(r.subject_id)||!personBy.has(r.object_id))continue;for(const [x,y] of [[r.subject_id,r.object_id],[r.object_id,r.subject_id]]){if(!adjacency.has(x))adjacency.set(x,[]);adjacency.get(x).push({id:y,relation:r});}}
  function draw(){out.replaceChildren();if(!personBy.has(a.value)||!personBy.has(b.value)){out.append(empty('Choose two people to explore their recorded connections.'));return;}const queue=[a.value],seen=new Map([[a.value,null]]);let found=false;for(let i=0;i<queue.length;i++){const id=queue[i];if(id===b.value){found=true;break;}for(const n of adjacency.get(id)||[]){if(!seen.has(n.id)){seen.set(n.id,{previous:id,relation:n.relation});queue.push(n.id);}}}if(!found){out.append(empty('No connection found in the public records in this project. This does not establish that the people are unrelated.'));return;}const path=[];let id=b.value;while(id!==null){const step=seen.get(id);path.unshift({id,relation:step?.relation});id=step?.previous??null;}out.append(el('p',`${path.length-1} recorded connection${path.length===2?'':'s'} · shortest available path`,'result-count'));const row=el('div',undefined,'connection-path');path.forEach((n,i)=>{if(i)row.append(el('span',`→ ${relKind(n.relation)} (${relLabel(n.relation)}) →`,'connection-step'));const box=el('div',undefined,'connection-person');box.append(personLink(personBy.get(n.id)));row.append(box);});out.append(row,el('p','This path follows recorded relationships, including uncertain connections. It is not a proof of kinship.','note'));}
  a.addEventListener('change',draw);b.addEventListener('change',draw);draw();

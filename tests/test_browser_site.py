@@ -35,6 +35,9 @@ class BrowserSiteTests(unittest.TestCase):
         config = ProjectConfig.load(ROOT / 'examples/demo/genealogy.toml')
         case = CaseStore(ROOT / 'examples/demo/cases').load(config.default_case)
         build_site(case, config, cls.root / 'nested')
+        from test_scale import PEOPLE, large_case  # tests/ is on the path under unittest discovery
+        cls.large_people = PEOPLE
+        build_site(large_case(), ProjectConfig(name='Fictional large tree'), cls.root / 'large')
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0),
             partial(QuietHandler, directory=str(cls.root)))
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -158,6 +161,34 @@ class BrowserSiteTests(unittest.TestCase):
                         "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
+
+    def test_large_site_menus_fill_from_the_data_and_pass_axe(self):
+        large = self.base.replace('/nested/', '/large/')
+        for page, menus in (('compare.html', ('[data-compare-a]', '[data-compare-b]')),
+                            ('connections.html', ('[data-connection-a]', '[data-connection-b]')), ('tree.html', ('#tree-root',))):
+            self.page.goto(large + page, wait_until='networkidle')
+            for menu in menus:
+                self.assertEqual(self.large_people + 1, self.page.locator(f'{menu} option').count(), page)
+        self.page.goto(large + 'compare.html')
+        self.page.locator('[data-compare-a]').select_option('p0001')
+        self.page.locator('[data-compare-b]').select_option('p0002')
+        self.assertIn('Person 0002 Fable', self.page.locator('#compare-result').inner_text())
+        self.page.goto(large + 'connections.html')
+        self.page.locator('[data-connection-a]').select_option('p0001')
+        self.page.locator('[data-connection-b]').select_option('p0003')
+        self.assertIn('Person 0003 Fable', self.page.locator('#connection-result').inner_text())
+        if os.environ.get('GENEALOGY_AXE_PATH'):
+            axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+            for route in ('tree.html', 'compare.html', 'research.html', 'sitemap.html', 'findings.html', 'findings/page-1.html'):
+                with self.subTest(route=route):
+                    self.page.goto(large + route, wait_until='networkidle')
+                    self.page.add_script_tag(content=axe)
+                    violations = self.page.evaluate(
+                        "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                        "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                        ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                    self.assertEqual([], violations)
+        self.assertEqual([], self.errors)
 
     def test_search_pagination_tree_compare_and_connections(self):
         self.page.goto(self.base + 'catalogue.html')

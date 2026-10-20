@@ -20,6 +20,10 @@ from .markup import references as prose_references, render as render_prose
 from .labels import child_role, confidence_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
 from .maps import geojson
 
+# Lists longer than this are not written out in full: the interactive views
+# load them from the shared data script, and readers without JavaScript
+# browse the paged pages instead. Keeps every page small at thousands of people.
+INLINE_LIMIT = 300
 LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are on archive pages
 FINDINGS_PER_PAGE = 50
 ROUTES = {
@@ -150,6 +154,24 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         for row in project[collection]:
             for rid in set(row.get("related_ids", [])):
                 research_by_subject[rid].append(row)
+    # A long findings log keeps each finding on a stable archive page, numbered
+    # from the earliest; on a large site that page, not the notebook, is its address.
+    dated = sorted((f for f in project["findings"] if f.get("recorded_on")), key=lambda f: (f["recorded_on"], f["id"]), reverse=True)
+    undated = [f for f in project["findings"] if not f.get("recorded_on")]
+    archive_page = ({row["id"]: (len(dated) - 1 - index) // FINDINGS_PER_PAGE + 1 for index, row in enumerate(dated)}
+                    if len(dated) > LATEST_FINDINGS else {})
+    compact_findings = len(project["findings"]) > INLINE_LIMIT
+    compact_people = len(people) > INLINE_LIMIT
+    compact_relationships = len(project["relationships"]) > INLINE_LIMIT
+    compact_claims = len(project["claims"]) > INLINE_LIMIT
+    # On a large site a relationship or claim lives on its subject's page,
+    # where it is already shown with the same anchor.
+    home_of = {}
+    if compact_relationships:
+        home_of.update({r["id"]: people_urls[r["subject_id"]] for r in project["relationships"] if r["subject_id"] in people_urls})
+    if compact_claims:
+        home_of.update({c["id"]: people_urls[c["subject_id"]] for c in project["claims"] if c["subject_id"] in people_urls})
+        home_of.update({e["id"]: home_of[e["claim_id"]] for e in project["evidence"] if e["claim_id"] in home_of})
     record_routes: dict[str, str] = {}
     for collection, rows in project.items():
         if not isinstance(rows, list):
@@ -158,6 +180,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             route = people_urls.get(row["id"]) or study_urls.get(row["id"])
             if not route:
                 route = {"events": "timeline.html", "places": "places.html", "sources": "sources.html", "citations": "sources.html", "relationships": "tree.html"}.get(collection, "research.html")
+                route = home_of.get(row["id"], route)
+                if collection == "findings" and compact_findings:
+                    route = f"findings/page-{archive_page[row['id']]}.html" if row["id"] in archive_page else "findings.html"
                 route += "#" + _anchor(row["id"])
             record_routes[row["id"]] = route
 
@@ -290,7 +315,10 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         sections.append("<h3>Siblings</h3>" + empty(sibling_items, "No public siblings recorded."))
         return '<section class="family-summary" aria-labelledby="family-heading"><h2 id="family-heading">Family</h2>' + "".join(sections) + "</section>"
 
-    options = '<option value="">Choose a person</option>' + "".join(f'<option value="{_text(pid)}">{_text(person_name(pid))}</option>' for pid in people)
+    # A large site's person menus are filled by the script from the shared data.
+    options = '<option value="">Choose a person</option>' + ("" if compact_people else "".join(f'<option value="{_text(pid)}">{_text(person_name(pid))}</option>' for pid in people))
+    browse_people = (f'<p>All {len(people):,} people are listed in the <a href="catalogue.html">catalogue</a>; each has a page of their own.</p>'
+                     if compact_people else empty([f'<li>{ref(pid)}</li>' for pid in people]))
     catalogue_rows = []
     for pid, person in people.items():
         events = events_by_person[pid]
@@ -302,7 +330,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     counts = [(len(project["people"]), "people"), (len(project["events"]), "events"), (len(project["sources"]), "sources"), (len(open_questions), "open questions")]
     pages["index.html"] = '<p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1><p>Explore people, family connections and historical records. Claims, citations and evidence assessments remain distinct throughout this collection. <a href="evidence.html">How to read the evidence labels</a>.</p><div class="stats stat-grid">' + "".join(f'<div class="stat-card"><strong>{n}</strong><span>{label}</span></div>' for n, label in counts) + '</div><h2>Start exploring</h2><p><a class="button" href="catalogue.html">Browse the people</a> <a href="tree.html">Explore family connections</a></p><h2>Research findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in sorted(project["findings"], key=lambda f: (str(f.get("recorded_on") or ""), f["id"]), reverse=True)[:10]]) + (f'<p><a href="findings.html">All {len(project["findings"]):,} findings</a></p>' if len(project["findings"]) > 10 else "")
     pages["catalogue.html"] = '<h1>People catalogue</h1><label>Search people <input type="search" data-search placeholder="Name, ID or event"></label><p id="site-status" role="status"></p><div data-catalogue>' + ('<div class="table-wrap"><table><thead><tr><th>Person</th><th>Surname</th><th>Recorded events</th><th>Record ID</th></tr></thead><tbody>' + "".join(catalogue_rows) + '</tbody></table></div>' if catalogue_rows else '<p class="empty-state">No public people are available.</p>') + '</div>'
-    pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + empty([relationship(r) for r in project["relationships"]], "No public family connections recorded.")
+    pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + (
+        f'<p>{len(project["relationships"]):,} recorded family connections. Each person\'s page lists their parents, partners, children and siblings with these labels, and <a href="branches.html">Families &amp; branches</a> groups them.</p>'
+        if compact_relationships else empty([relationship(r) for r in project["relationships"]], "No public family connections recorded."))
     pages["timeline.html"] = '<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates.</p><div data-timeline>' + empty([event(e) for e in events_sorted], "No public dated events recorded.").replace('class="record-list"', 'class="record-list timeline"', 1) + '</div>'
     points, place_rows = [], []
     # Group places by their broadest jurisdiction as written ("Town, County,
@@ -342,14 +372,22 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         fields = "".join(f'<p><strong>{_text(k.replace("_", " ").capitalize())}:</strong> {_text(src[k])}</p>' for k in ("author", "publication", "source_type", "repository", "access_note", "licence") if src.get(k))
         source_cards.append(f'<article class="record-card card" data-source-id="{_text(src["id"])}" id="{_anchor(src["id"])}"><h2>{_text(src["title"])}</h2>{fields}' + (f'<p><a href="{_text(link)}" rel="noreferrer">Open original source</a></p>' if link else "") + '<h3>Citations</h3>' + empty(["<li>" + citation(c, canonical=True) + "</li>" for c in citations_by_source[src["id"]]]) + '</article>')
     pages["sources.html"] = '<h1>Sources and citations</h1><p>Consult original records when assessing a claim. A citation identifies the specific record or passage.</p><div data-sources>' + ("".join(source_cards) or '<p class="empty-state">No public sources recorded.</p>') + '</div>'
-    research = ['<h1>Research notebook</h1><p>Claims and their evidence first, then the work still outstanding: hypotheses, open questions and draft or reviewed findings. <a href="evidence.html">Reading the evidence</a>.</p><h2>Claims</h2>', "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex") or '<p>No public claims recorded.</p>']
+    research = ['<h1>Research notebook</h1><p>Claims and their evidence first, then the work still outstanding: hypotheses, open questions and draft or reviewed findings. <a href="evidence.html">Reading the evidence</a>.</p><h2>Claims</h2>', (
+        f'<p>{len(project["claims"]):,} claims. Each is shown, with its citations and evidence, on the page of the person it concerns.</p>'
+        + "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex" and c["id"] not in home_of)
+        if compact_claims else "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex") or '<p>No public claims recorded.</p>')]
     for collection, heading, field in (("hypotheses", "Hypotheses", "statement"), ("questions", "Research questions", "question"), ("findings", "Findings", "conclusion")):
         rows = sorted(project[collection], key=lambda r: (str(r.get("status", "open")).casefold() not in ("open", "draft"), r["id"]))
         outstanding = sum(str(r.get("status", "open")).casefold() in ("open", "draft") for r in rows)
+        if collection == "findings" and compact_findings:
+            # The findings log and its archive hold every finding; the notebook keeps the open work.
+            research.append(f'<h2>{heading}</h2><p class="result-count">{outstanding} of {len(rows):,} open or in draft. All findings are in the <a href="findings.html">findings log</a>.</p>'
+                            + empty([f'<li data-status="{_text(r.get("status", ""))}">{ref(r["id"], label=r[field])}{metadata(r)}</li>' for r in rows if str(r.get("status", "open")).casefold() in ("open", "draft")], "No open or draft findings."))
+            continue
         research.append(f'<h2>{heading}</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r[field])}</h3>{metadata(r)}{finding_kind(r) if collection == "findings" else ""}{finding_details(r) if collection == "findings" else ""}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in rows]))
     pages["research.html"] = "".join(research)
     for route, heading, hook in (("compare.html", "Compare people", "compare"), ("connections.html", "Find a connection", "connection")):
-        pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + empty([f'<li>{ref(pid)}</li>' for pid in people])
+        pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + browse_people
     def record_label(rid: str) -> str:
         if rid in people:
             return person_name(rid)
@@ -400,8 +438,6 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         pages[study_urls[sid]] = content
 
     # Latest findings: the dated discovery log; the research page keeps the full account.
-    dated = sorted((f for f in project["findings"] if f.get("recorded_on")), key=lambda f: (f["recorded_on"], f["id"]), reverse=True)
-    undated = [f for f in project["findings"] if not f.get("recorded_on")]
     months = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
     def finding_item(row: dict[str, Any], prefix: str = "") -> str:
@@ -425,9 +461,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     # A long log opens with the newest findings; archive pages are numbered from
     # the earliest, so a finding keeps its page as newer ones are added.
     archive: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    if len(dated) > LATEST_FINDINGS:
-        for index, row in enumerate(dated):
-            archive[(len(dated) - 1 - index) // FINDINGS_PER_PAGE + 1].append(row)
+    for row in dated:
+        if row["id"] in archive_page:
+            archive[archive_page[row["id"]]].append(row)
     archive_url = lambda number: f"findings/page-{number}.html"
     archive_nav = lambda prefix: ('<nav class="pagination findings-archive" aria-label="Finding archive"><span>Archive pages, from the earliest:</span><div>'
                                   + "".join(f'<a href="{prefix}{archive_url(n)}">{n}</a>' for n in sorted(archive)) + "</div></nav>")
@@ -529,7 +565,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     if base_url:
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
     data_links = "<ul>" + "".join(f'<li><a href="{path}">{label}</a></li>' for path, label in downloads) + "</ul>"
-    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul>' + ('<h2>Studies</h2>' + empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()]) if studies else "") + '<h2>People</h2>' + empty([f'<li>{ref(pid)}</li>' for pid in people]) + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
+    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul>' + ('<h2>Studies</h2>' + empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()]) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
     shared = {**project, "site": {"people_urls": people_urls}}
     outputs: dict[str, str] = {
         "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
