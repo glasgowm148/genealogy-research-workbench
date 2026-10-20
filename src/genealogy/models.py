@@ -180,6 +180,10 @@ class Relationship(Record):
     # An assessed probability (1–99 %) recorded with the reasoning in claims or
     # findings. Imports never set it; 0 and 100 are not estimates.
     estimate: int | None = None
+    # The project's own grade for ``confidence``, defined under [grades] in
+    # genealogy.toml (e.g. "strongly_supported"). ``confidence`` stays the
+    # standard grade it counts as; the site prints the project's wording.
+    grade: str | None = None
 
 
 @dataclass(slots=True)
@@ -216,6 +220,7 @@ class Claim(Record):
     confidence: Confidence = Confidence.UNKNOWN
     rationale: str | None = None
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    grade: str | None = None  # see Relationship.grade
 
 
 @dataclass(slots=True)
@@ -226,6 +231,7 @@ class Evidence(Record):
     supports: bool = True
     confidence: Confidence = Confidence.UNKNOWN
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    grade: str | None = None  # see Relationship.grade
 
 
 @dataclass(slots=True)
@@ -236,6 +242,7 @@ class Hypothesis(Record):
     status: str = "open"
     confidence: Confidence = Confidence.UNKNOWN
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    grade: str | None = None  # see Relationship.grade
 
 
 @dataclass(slots=True)

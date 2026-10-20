@@ -18,7 +18,7 @@ from .config import ProjectConfig
 from .dates import date_sort_key, year_of
 from .feeds import FeedEntry, atom_feed
 from .markup import references as prose_references, render as render_prose
-from .labels import child_role, confidence_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
+from .labels import child_role, confidence_label, grade_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
 from .maps import geojson
 
 # Lists longer than this are not written out in full: the interactive views
@@ -49,7 +49,7 @@ BROWSER_FIELDS = {
     "people": ("id", "names", "event_ids", "notes"),
     "events": ("id", "kind", "date", "place_id", "participant_ids", "description"),
     "places": ("id", "name", "latitude", "longitude", "precision"),
-    "relationships": ("id", "subject_id", "object_id", "kind", "confidence", "estimate", "tree_status", "pedigree"),
+    "relationships": ("id", "subject_id", "object_id", "kind", "confidence", "grade", "estimate", "tree_status", "pedigree"),
     "claims": ("id", "subject_id", "predicate", "value", "status"),
     "sources": ("id", "title", "author", "publication", "source_type", "repository"),
 }
@@ -91,7 +91,8 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
-def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_urls: dict[str, str] | None = None) -> dict[str, Any]:
+def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_urls: dict[str, str] | None = None,
+                 grades: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
     """The public records the interactive pages need, without empty values."""
     def slim(row: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
         out = {key: row[key] for key in fields if row.get(key) is not None and row.get(key) != [] and row.get(key) != ""}
@@ -103,6 +104,8 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
     data["site"] = {"people_urls": people_urls}
     if source_urls:
         data["site"]["source_urls"] = source_urls
+    if grades:
+        data["site"]["grades"] = {key: grade["label"] for key, grade in grades.items()}
     return data
 
 
@@ -299,14 +302,16 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         if not (relationship or row.get("status") or row.get("confidence")):
             return ""
         confidence = str(row.get("confidence") or "unknown")
+        graded = grade_label(row, config.grades)
         if relationship:
-            words = relationship_label(row)
-            anchor = "confidence-tree-link" if confidence == "unknown" else f"confidence-{confidence}"
+            words = relationship_label(row, config.grades)
+            anchor = f'grade-{row["grade"]}' if graded else "confidence-tree-link" if confidence == "unknown" else f"confidence-{confidence}"
         else:
             words = " · ".join(value for value in (status_label(row.get("status")) if row.get("status") else "",
-                                                   confidence_label(row["confidence"]) if row.get("confidence") else "") if value)
-            anchor = status_anchor(row["status"]) if row.get("status") and not row.get("confidence") else f"confidence-{confidence}"
-        stored = "".join(f' data-{name.replace("_", "-")}="{_text(row[name])}"' for name in ("status", "confidence", "tree_status") if row.get(name))
+                                                   graded or (confidence_label(row["confidence"]) if row.get("confidence") else "")) if value)
+            anchor = (status_anchor(row["status"]) if row.get("status") and not row.get("confidence") else
+                      f'grade-{row["grade"]}' if graded else f"confidence-{confidence}")
+        stored = "".join(f' data-{name.replace("_", "-")}="{_text(row[name])}"' for name in ("status", "confidence", "grade", "tree_status") if row.get(name))
         return f' <a class="badge evidence-badge" href="{prefix}evidence.html#{_text(anchor)}"{stored}>{_text(words)}</a>'
 
     def citation(row: dict[str, Any], prefix: str = "", *, canonical: bool = False) -> str:
@@ -696,7 +701,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
 
     guide = ['<h1>Reading the evidence</h1><p>Every relationship, claim and finding on this site carries a label describing how far it has been assessed. Labels never claim more than the record behind them. A family-tree export supplies assertions: it cannot by itself prove parentage, supply missing sources, or establish DNA findings.</p>']
     current_group = None
-    for anchor, label, meaning, group in guide_entries():
+    for anchor, label, meaning, group in guide_entries(config.grades):
         if group != current_group:
             guide.append(("</dl>" if current_group else "") + f'<h2>{_text(group)}</h2><dl class="evidence-guide">')
             current_group = group
@@ -734,7 +739,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
     data_links = "<ul>" + "".join(f'<li><a href="{path}">{label}</a></li>' for path, label in downloads) + "</ul>"
     pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul>' + ('<h2>Studies</h2>' + empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()]) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
-    shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None)
+    shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
+                          config.grades)
     outputs: dict[str, str] = {
         "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
         "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n",

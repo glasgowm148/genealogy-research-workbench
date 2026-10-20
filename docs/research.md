@@ -62,6 +62,26 @@ The strict CLI adds records; it does not silently replace an existing record. To
 
 Imported links stay "Unassessed tree link" until you assess them. To record an assessment, edit the relationship's `confidence` (`documented`, `probable`, `possible` or `disproved`) and, if you work with probabilities, an `estimate` from 1 to 99 per cent. Record the reasoning in a claim, evidence assessment or finding linked to it. The site shows, for example, "Probable (70%)". A percentage is your assessed estimate: imports never set one, and import review clears any it finds.
 
+### Use your own grades
+
+If your project already grades evidence in its own words, such as "strongly supported" or "uncertain", define those grades in `genealogy.toml`, in the order you want them listed. Each one says which standard grade it counts as:
+
+```toml
+[grades.strongly_supported]
+label = "Strongly supported"
+meaning = "Several independent records agree, short of proof."
+confidence = "probable"
+
+[grades.uncertain]
+label = "Uncertain"
+meaning = "The records are too thin to weigh either way."
+confidence = "possible"
+```
+
+Then give a relationship, claim, evidence assessment or hypothesis a `grade` as well as its `confidence`, for example `"confidence": "probable", "grade": "strongly_supported"`. The site prints your label ("Strongly supported (80%)"), and **Reading the evidence** lists each grade with its meaning and the standard grade it counts as. Filters, colours and the tree use the standard grade.
+
+`genealogy validate` and every build reject a grade that `genealogy.toml` does not define, or whose `confidence` differs from the one the grade counts as.
+
 ## Write a study
 
 A study is the written account of one research question: why it was undertaken, what the records show and the current conclusion. Each study gets its own page, is listed on **Studies**, and is linked from the dossier of every person it concerns. Add one as a typed record:

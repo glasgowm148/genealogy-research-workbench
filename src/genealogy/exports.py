@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from .case import ResearchCase, validate_case
+from .case import ResearchCase, grade_errors, validate_case
 from .catalogue import catalogue_data, render_catalogue, render_catalogue_html
 from .config import ProjectConfig
 from .maps import geojson, render_map_html
@@ -66,7 +66,7 @@ def render(project: Mapping[str, Any], format_name: str) -> str:
 
 def project_for_public_export(case: ResearchCase, config: ProjectConfig) -> dict[str, Any]:
     """Return the only project representation intended for public outputs."""
-    errors = validate_case(case)
+    errors = validate_case(case) + grade_errors(case, config.grades)
     if errors:
         raise ValueError("cannot export invalid research case:\n" + "\n".join(f"- {error}" for error in errors))
     policy = PrivacyPolicy(

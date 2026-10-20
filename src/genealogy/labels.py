@@ -43,9 +43,15 @@ def confidence_meaning(value: Any) -> str:
     return CONFIDENCE.get(str(value or "unknown").casefold(), ("", "Recorded with this project's own wording."))[1]
 
 
-def relationship_label(row: Mapping[str, Any]) -> str:
+def grade_label(row: Mapping[str, Any], grades: Mapping[str, Mapping[str, str]] | None) -> str | None:
+    """The project's own wording for a record's grade, when it has one."""
+    grade = row.get("grade")
+    return str(grades[grade]["label"]) if grades and grade in grades else None
+
+
+def relationship_label(row: Mapping[str, Any], grades: Mapping[str, Mapping[str, str]] | None = None) -> str:
     """E.g. "Unassessed tree link · tree-marked uncertain"."""
-    parts = [confidence_label(row.get("confidence"), relationship=True)]
+    parts = [grade_label(row, grades) or confidence_label(row.get("confidence"), relationship=True)]
     if isinstance(row.get("estimate"), int):
         parts[0] += f" ({row['estimate']}%)"
     if row.get("tree_status"):
@@ -95,12 +101,18 @@ def status_anchor(value: Any) -> str:
     return f"status-{key}" if key in CLAIM_STATUS or key in RESEARCH_MEANINGS else "research-status"
 
 
-def guide_entries() -> list[tuple[str, str, str, str]]:
-    """(anchor, label, meaning, group) rows for a reader's evidence guide."""
+def guide_entries(grades: Mapping[str, Mapping[str, str]] | None = None) -> list[tuple[str, str, str, str]]:
+    """(anchor, label, meaning, group) rows for a reader's evidence guide.
+
+    A project's own grades follow the standard ones, each with the standard
+    grade it counts as.
+    """
     rows = [(f"confidence-{key}", label, meaning, "Confidence") for key, (label, meaning) in CONFIDENCE.items()]
     rows.append(("confidence-tree-link", "Unassessed tree link", "A relationship copied from a family tree or export. It is a research lead until records are assessed.", "Confidence"))
     rows.append(("estimate", "Probable (70%) and similar", "A percentage is a researcher's assessed probability for that link, recorded with its reasoning. It is an estimate, not a measurement, and never comes from an imported tree.", "Confidence"))
     rows.append(("tree-marked", "Tree-marked …", "The supplying tree's own mark, such as uncertain or confident. It is shown as that tree's statement, never as this project's assessment.", "Confidence"))
+    rows += [(f"grade-{key}", str(grade["label"]), f'{grade["meaning"]} Counted as {CONFIDENCE[grade["confidence"]][0].lower()} wherever the site groups or colours by confidence.',
+              "This project's grades") for key, grade in (grades or {}).items()]
     rows += [(f"status-{key}", label, meaning, "Claim status") for key, (label, meaning) in CLAIM_STATUS.items()]
     rows += [(f"status-{key}", RESEARCH_STATUS[key], meaning, "Research status") for key, meaning in RESEARCH_MEANINGS.items()]
     rows.append(("research-status", "Other statuses", "A project's own wording for the state of a question, hypothesis, finding or study, printed as recorded.", "Research status"))

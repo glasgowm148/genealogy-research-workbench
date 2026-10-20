@@ -227,6 +227,23 @@ def validate_case(case: ResearchCase) -> list[str]:
     return errors
 
 
+GRADE_KEY = r"[a-z0-9][a-z0-9_-]*"
+
+
+def grade_errors(case: ResearchCase, grades: dict[str, dict[str, Any]]) -> list[str]:
+    """Each record's grade must be one the project defines, counted as its confidence."""
+    errors = []
+    for record in (record for records in case.record_sets.values() for record in records):
+        grade = getattr(record, "grade", None)
+        if grade is None:
+            continue
+        if grade not in grades:
+            errors.append(f"{record.id}.grade is not defined under [grades] in genealogy.toml: {grade}")
+        elif str(record.confidence) != grades[grade]["confidence"]:
+            errors.append(f"{record.id}.confidence must be {grades[grade]['confidence']} for grade {grade}")
+    return errors
+
+
 def _iso_date(value: str) -> bool:
     match = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", value)
     if not match:
@@ -292,6 +309,9 @@ def _validate_record_fields(record: Record) -> list[str]:
             errors.append(f"{record.id}.{field_name} must be a string or null")
     if isinstance(record, Finding) and record.kind is not None and not (_string(record.kind) and record.kind.strip()):
         errors.append(f"{record.id}.kind must be a non-empty string or null")
+    grade = getattr(record, "grade", None)
+    if grade is not None and not (_string(grade) and re.fullmatch(GRADE_KEY, grade)):
+        errors.append(f"{record.id}.grade must be a grade key (lower-case letters, digits, '_' or '-') or null")
     list_fields = (
         "event_ids", "participant_ids", "claim_ids", "citation_ids", "related_ids",
         "evidence_ids", "entity_ids",

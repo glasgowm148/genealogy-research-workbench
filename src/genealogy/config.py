@@ -5,7 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import tomllib
+import re
 from typing import Any, ClassVar, Mapping
+
+from .models import Confidence
 
 
 DEFAULT_PROJECT_NAME = "Genealogy research project"
@@ -50,6 +53,9 @@ class ProjectConfig:
     exports: dict[str, Any] = field(default_factory=dict)
     research: dict[str, Any] = field(default_factory=dict)
     paths: dict[str, Any] = field(default_factory=dict)
+    # A project's own confidence grades, in display order: key -> {label,
+    # meaning, confidence}. ``confidence`` is the standard grade it counts as.
+    grades: dict[str, dict[str, str]] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -70,6 +76,7 @@ class ProjectConfig:
             exports=_table(data, "exports"),
             research=_table(data, "research"),
             paths=_table(data, "paths"),
+            grades=_table(data, "grades"),
             raw=data,
         )
         config.validate()
@@ -94,6 +101,20 @@ class ProjectConfig:
         for format_name in ("json", "ndjson", "csv", "geojson"):
             if format_name in self.exports:
                 safe_relative_path(self.exports[format_name], setting=f"exports.{format_name}")
+        for key, grade in self.grades.items():
+            setting = f"grades.{key}"
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", key):
+                raise ValueError(f"{setting}: a grade key uses lower-case letters, digits, '_' or '-'")
+            if not isinstance(grade, dict):
+                raise ValueError(f"[{setting}] must be a table")
+            unknown = set(grade) - {"label", "meaning", "confidence"}
+            if unknown:
+                raise ValueError(f"{setting} has unknown settings: {', '.join(sorted(unknown))}")
+            for name in ("label", "meaning"):
+                if not isinstance(grade.get(name), str) or not grade[name].strip():
+                    raise ValueError(f"{setting}.{name} must be a non-empty string")
+            if grade.get("confidence") not in {c.value for c in Confidence}:
+                raise ValueError(f"{setting}.confidence must be one of: {', '.join(c.value for c in Confidence)}")
 
     def to_dict(self) -> dict[str, Any]:
         # Preserve project-defined extension sections so a toolkit upgrade does
@@ -108,4 +129,6 @@ class ProjectConfig:
                      "maps": self.maps, "timelines": self.timelines,
                      "adapters": self.adapters, "exports": self.exports,
                      "research": self.research, "paths": self.paths})
+        if self.grades:
+            data["grades"] = self.grades
         return data

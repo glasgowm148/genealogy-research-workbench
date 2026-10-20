@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .adapters import resolve_adapter
-from .case import CaseStore, ResearchCase, validate_case
+from .case import CaseStore, ResearchCase, grade_errors, validate_case
 from .config import ProjectConfig, safe_relative_path
 from .exports import (
     build_public_views, configured_views, project_for_public_export, render, safe_output_path,
@@ -287,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Created research case at {store.path_for(args.case_id)}")
             return 0
         case, config = load_case(args.project, args.case)
-        errors = validate_case(case)
+        errors = validate_case(case) + grade_errors(case, config.grades)
         if args.command == "validate":
             if errors:
                 print("\n".join(f"error: {error}" for error in errors), file=sys.stderr)
