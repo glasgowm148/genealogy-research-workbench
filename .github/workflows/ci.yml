@@ -51,4 +51,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -e '.[browser]'
       - run: python -m playwright install --with-deps chromium
+      - run: npm install --no-save axe-core@4.10.2
       - run: make browser-check PYTHON=python
+        env:
+          GENEALOGY_AXE_PATH: node_modules/axe-core/axe.min.js

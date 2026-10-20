@@ -34,7 +34,7 @@ python -m playwright install chromium
 make browser-check
 ```
 
-They exercise desktop/mobile routes, search and surname filters, tree views, family dossiers, the evidence guide, comparisons, connections, opening the built site directly from disk, and real GEDCOM/OneTree uploads through the local server. Set `GENEALOGY_BROWSER_EXECUTABLE` to use an installed Chromium or Chrome instead of Playwright's download. Standard unit tests do not require a browser. CI tests Python 3.11–3.14, builds distributions, smoke-tests an installed wheel outside the source checkout, and runs the separate browser job.
+They exercise desktop/mobile routes, search and surname filters, tree views, family dossiers, the evidence guide, comparisons, connections, opening the built site directly from disk, and real GEDCOM/OneTree uploads through the local server. Set `GENEALOGY_BROWSER_EXECUTABLE` to use an installed Chromium or Chrome instead of Playwright's download. Set `GENEALOGY_AXE_PATH` to an [axe-core](https://github.com/dequelabs/axe-core) `axe.min.js` (for example from `npm install axe-core`) to also check every page type against WCAG 2.1 A/AA at desktop and mobile widths; CI does this. Standard unit tests do not require a browser. CI tests Python 3.11–3.14, builds distributions, smoke-tests an installed wheel outside the source checkout, and runs the separate browser job.
 
 ## Layout
 

@@ -141,6 +141,24 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.go_back()
         self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 391)
 
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'set GENEALOGY_AXE_PATH to an axe-core axe.min.js')
+    def test_wcag_aa_on_every_page_type_at_both_widths(self):
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        routes = json.loads((self.root / 'nested' / 'data' / 'routes.json').read_text())
+        pages = [r for r in routes if not r.startswith(('people/', 'studies/'))]
+        pages += [next(r for r in routes if r.startswith(prefix)) for prefix in ('people/', 'studies/')]
+        for width in (1440, 390):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            for route in pages:
+                with self.subTest(width=width, route=route):
+                    self.page.goto(self.base + route, wait_until='networkidle')
+                    self.page.add_script_tag(content=axe)
+                    violations = self.page.evaluate(
+                        "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                        "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                        ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                    self.assertEqual([], violations)
+
     def test_search_pagination_tree_compare_and_connections(self):
         self.page.goto(self.base + 'catalogue.html')
         self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
