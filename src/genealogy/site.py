@@ -77,7 +77,7 @@ def _json(value: Any) -> str:
 
 def _owned(name: str) -> bool:
     return (name in ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
-            or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html", name)))
+            or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html|findings/page-[1-9][0-9]*\.html", name)))
 
 
 def _base_url(config: ProjectConfig) -> str | None:

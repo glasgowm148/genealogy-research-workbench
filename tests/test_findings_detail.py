@@ -108,6 +108,13 @@ class ArchiveTests(unittest.TestCase):
             self.assertIn("Conclusion number 99.", (out / "findings/page-2.html").read_text())
             self.assertIn("Conclusion number 100.", (out / "findings/page-3.html").read_text())
 
+    def test_archive_pages_no_longer_needed_are_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build(case(self.findings(120)), directory)
+            out = build(case(self.findings(LATEST_FINDINGS)), directory)
+            self.assertEqual([], list((out / "findings").glob("*.html")))
+            self.assertEqual([], check_site(out)["broken"])
+
     def test_short_logs_have_no_archive(self):
         with tempfile.TemporaryDirectory() as directory:
             out = build(case(self.findings(LATEST_FINDINGS)), directory)
