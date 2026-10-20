@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 — 20 October 2026
+
+- The README and [Your first site](docs/first-site.md) install the toolkit from PyPI, so the PyPI project page shows the current instructions.
+
 ## 0.4.0 — 20 October 2026
 
 - GEDCOM 7 `.gdz` archives import their `gedcom.ged` without unpacking. Media files are counted and kept only in the private archive copy.
