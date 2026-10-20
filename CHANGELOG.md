@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 20 October 2026
 
 - A citation can carry an `abstract`, your reading of the record in your own words; the site shows it with the citation. See [Summarise a record](docs/research.md#summarise-a-record).
 - Projects can define their own confidence grades under `[grades]` in `genealogy.toml`, each counted as a standard grade. A relationship, claim, evidence assessment or hypothesis with a `grade` shows the project's wording, and **Reading the evidence** explains each grade. See [Use your own grades](docs/research.md#use-your-own-grades).
