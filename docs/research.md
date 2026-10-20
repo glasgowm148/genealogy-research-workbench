@@ -86,7 +86,7 @@ The prose fields use a small Markdown subset:
 - `[label](https://…)` links;
 - `[[record-id]]` or `[[record-id|label]]` references to any record in the case.
 
-Raw HTML is shown as text. Validation rejects a reference to a record that does not exist. A study is published only when it is public and **every** record it lists in `related_ids` or references in its prose is public, so it can never reveal a living or withheld person. Its free text is still your responsibility: the toolkit cannot detect a name typed as plain text.
+Pipe tables work too: a header row, a separator row such as `|---|---|`, then one row per line. Cells may contain links and `[[record]]` references. Raw HTML is shown as text. Validation rejects a reference to a record that does not exist. A study is published only when it is public and **every** record it lists in `related_ids` or references in its prose is public, so it can never reveal a living or withheld person. Its free text is still your responsibility: the toolkit cannot detect a name typed as plain text.
 
 ## Place precision
 

@@ -1,7 +1,7 @@
 """A deliberately small, escaping Markdown subset for research prose.
 
 Supported: ``#``–``####`` headings, paragraphs, ``-``/``*`` and ``1.`` lists,
-``> `` quotations, ``**strong**``, ``*emphasis*``, ```code```, http(s) links
+``> `` quotations, pipe tables (a header row, a ``|---|`` separator, then rows), ``**strong**``, ``*emphasis*``, ```code```, http(s) links
 ``[label](https://…)`` and record references ``[[record-id]]`` or
 ``[[record-id|label]]``. Everything else is text. Raw HTML is always escaped,
 and a reference to a record that is not public renders only its label (or
@@ -21,6 +21,16 @@ _LINK = re.compile(r"\[([^\[\]]+)\]\(([^()\s]+)\)")
 _CODE = re.compile(r"`([^`]+)`")
 _STRONG = re.compile(r"\*\*(.+?)\*\*")
 _EMPHASIS = re.compile(r"(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])")
+_TABLE_ROW = re.compile(r"\s*\|.*\|\s*")
+_TABLE_RULE = re.compile(r"\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*")
+
+
+def _cells(line: str) -> list[str]:
+    """Split a table row on its pipes, keeping ``[[id|label]]`` references whole."""
+    kept: list[str] = []
+    text = _REFERENCE.sub(lambda m: kept.append(m[0]) or f"\x01{len(kept) - 1}\x01", line.strip()[1:-1])
+    return [re.sub("\x01(\\d+)\x01", lambda m: kept[int(m[1])], cell).strip()
+            for cell in re.split(r"(?<!\\)\|", text)]
 
 
 def _safe_url(value: str) -> str | None:
@@ -87,8 +97,24 @@ def render(source: str | None, resolve: Resolver, *, heading_offset: int = 1) ->
             output.append("<blockquote><p>" + "<br>".join(inline(line, resolve) for line in quote) + "</p></blockquote>")
             quote.clear()
 
-    for raw in source.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        line = raw.rstrip()
+    lines = source.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    index = 0
+    while index < len(lines):
+        line = lines[index].rstrip()
+        index += 1
+        if _TABLE_ROW.fullmatch(line) and index < len(lines) and _TABLE_RULE.fullmatch(lines[index].rstrip()):
+            flush()
+            header, index = _cells(line), index + 1
+            rows = []
+            while index < len(lines) and _TABLE_ROW.fullmatch(lines[index].rstrip()):
+                rows.append(_cells(lines[index].rstrip()))
+                index += 1
+            width = len(header)
+            cell = lambda value: inline(value.replace("\\|", "|"), resolve)
+            body = "".join("<tr>" + "".join(f"<td>{cell(value)}</td>" for value in (row + [""] * width)[:width]) + "</tr>" for row in rows)
+            output.append('<div class="table-wrap"><table><thead><tr>' + "".join(f'<th scope="col">{cell(value)}</th>' for value in header)
+                          + f"</tr></thead><tbody>{body}</tbody></table></div>")
+            continue
         heading = re.fullmatch(r"(#{1,4})\s+(.+)", line)
         bullet = re.fullmatch(r"\s*[-*]\s+(.+)", line)
         number = re.fullmatch(r"\s*\d+[.)]\s+(.+)", line)

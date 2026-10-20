@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Research prose supports pipe tables, including links and record references in cells.
+
 ## 0.4.1 — 20 October 2026
 
 - The README and [Your first site](docs/first-site.md) install the toolkit from PyPI, so the PyPI project page shows the current instructions.
