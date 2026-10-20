@@ -2,7 +2,9 @@
 
 ## Unreleased
 
+- Findings can state their limitations (`Finding.limitations`), cite records directly (`Finding.citation_ids`) and carry a project's own type (`Finding.kind`). The site shows all three; `finding add` takes `--limitations`, `--cite` and `--kind`. A finding citing a non-public record is withheld.
 - Research prose supports pipe tables, including links and record references in cells.
+- A findings log of more than 30 dated findings opens with the newest 30. Older ones move to archive pages numbered from the earliest finding, so their links stay stable. The home page lists the newest 10 findings.
 
 ## 0.4.1 — 20 October 2026
 

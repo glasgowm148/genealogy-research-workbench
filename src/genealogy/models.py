@@ -257,6 +257,13 @@ class Finding(Record):
     sensitivity: Sensitivity = Sensitivity.PRIVATE
     # ISO date (YYYY, YYYY-MM or YYYY-MM-DD) the finding was reached; dates a findings log.
     recorded_on: str | None = None
+    # What the finding does not establish: a copy rather than the original, an
+    # identification it leaves open. Shown beside the conclusion, never inside it.
+    limitations: str | None = None
+    # Records the finding rests on directly, when no claim-level evidence exists.
+    citation_ids: list[str] = field(default_factory=list)
+    # A project's own grouping, e.g. "vital", "relationship" or "record".
+    kind: str | None = None
 
 
 @dataclass(slots=True)

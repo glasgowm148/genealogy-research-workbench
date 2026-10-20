@@ -20,6 +20,8 @@ from .markup import references as prose_references, render as render_prose
 from .labels import child_role, confidence_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
 from .maps import geojson
 
+LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are on archive pages
+FINDINGS_PER_PAGE = 50
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
     "tree.html": ("tree", "Family tree"), "branches.html": ("branches", "Families & branches"),
@@ -210,6 +212,26 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 parts.append(f'<p><strong>{_text(key.replace("_", " ").capitalize())}:</strong> {_text(row[key])}</p>')
         return ('<article id="' + _anchor(row["id"]) + '">' if canonical else "<article>") + "".join(parts) + "</article>"
 
+    def finding_details(row: dict[str, Any], prefix: str = "") -> str:
+        """A finding's type, stated limits and the records it rests on."""
+        parts = []
+        if row.get("limitations"):
+            parts.append(f'<p class="finding-limitations"><strong>Limits:</strong> {_text(row["limitations"])}</p>')
+        cited = []
+        for cid in row.get("citation_ids", []):
+            if cid in citations:
+                found = citations[cid]
+                label = sources.get(found["source_id"], {}).get("title", found["source_id"])
+                if found.get("locator"):
+                    label += f' ({found["locator"]})'
+                cited.append(f"<li>{ref(cid, prefix, label)}</li>")
+        if cited:
+            parts.append('<p class="meta">Records:</p><ul class="finding-records">' + "".join(cited) + "</ul>")
+        return "".join(parts)
+
+    def finding_kind(row: dict[str, Any]) -> str:
+        return f' <span class="badge finding-kind" data-kind="{_text(row["kind"])}">{_text(str(row["kind"]).replace("-", " ").replace("_", " ").capitalize())}</span>' if row.get("kind") else ""
+
     def event(row: dict[str, Any], prefix: str = "", *, canonical: bool = True) -> str:
         place = places.get(row.get("place_id"), {})
         return (f'<li id="{_anchor(row["id"])}" data-event-id="{_text(row["id"])}">' if canonical else "<li>") + f'<strong>{_text(row.get("date") or "Date unknown")} · {_text(row["kind"])}</strong>' + (f' — {ref(place["id"], prefix, place["name"])}' if place else "") + (f'<p>{_text(row["description"])}</p>' if row.get("description") else "") + '<p>' + ", ".join(ref(pid, prefix) for pid in row.get("participant_ids", [])) + "</p></li>"
@@ -278,7 +300,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     pages: dict[str, str] = {}
     open_questions = [q for q in project["questions"] if str(q.get("status", "open")).casefold() == "open"]
     counts = [(len(project["people"]), "people"), (len(project["events"]), "events"), (len(project["sources"]), "sources"), (len(open_questions), "open questions")]
-    pages["index.html"] = '<p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1><p>Explore people, family connections and historical records. Claims, citations and evidence assessments remain distinct throughout this collection. <a href="evidence.html">How to read the evidence labels</a>.</p><div class="stats stat-grid">' + "".join(f'<div class="stat-card"><strong>{n}</strong><span>{label}</span></div>' for n, label in counts) + '</div><h2>Start exploring</h2><p><a class="button" href="catalogue.html">Browse the people</a> <a href="tree.html">Explore family connections</a></p><h2>Research findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in project["findings"]])
+    pages["index.html"] = '<p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1><p>Explore people, family connections and historical records. Claims, citations and evidence assessments remain distinct throughout this collection. <a href="evidence.html">How to read the evidence labels</a>.</p><div class="stats stat-grid">' + "".join(f'<div class="stat-card"><strong>{n}</strong><span>{label}</span></div>' for n, label in counts) + '</div><h2>Start exploring</h2><p><a class="button" href="catalogue.html">Browse the people</a> <a href="tree.html">Explore family connections</a></p><h2>Research findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in sorted(project["findings"], key=lambda f: (str(f.get("recorded_on") or ""), f["id"]), reverse=True)[:10]]) + (f'<p><a href="findings.html">All {len(project["findings"]):,} findings</a></p>' if len(project["findings"]) > 10 else "")
     pages["catalogue.html"] = '<h1>People catalogue</h1><label>Search people <input type="search" data-search placeholder="Name, ID or event"></label><p id="site-status" role="status"></p><div data-catalogue>' + ('<div class="table-wrap"><table><thead><tr><th>Person</th><th>Surname</th><th>Recorded events</th><th>Record ID</th></tr></thead><tbody>' + "".join(catalogue_rows) + '</tbody></table></div>' if catalogue_rows else '<p class="empty-state">No public people are available.</p>') + '</div>'
     pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + empty([relationship(r) for r in project["relationships"]], "No public family connections recorded.")
     pages["timeline.html"] = '<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates.</p><div data-timeline>' + empty([event(e) for e in events_sorted], "No public dated events recorded.").replace('class="record-list"', 'class="record-list timeline"', 1) + '</div>'
@@ -324,7 +346,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     for collection, heading, field in (("hypotheses", "Hypotheses", "statement"), ("questions", "Research questions", "question"), ("findings", "Findings", "conclusion")):
         rows = sorted(project[collection], key=lambda r: (str(r.get("status", "open")).casefold() not in ("open", "draft"), r["id"]))
         outstanding = sum(str(r.get("status", "open")).casefold() in ("open", "draft") for r in rows)
-        research.append(f'<h2>{heading}</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r[field])}</h3>{metadata(r)}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in rows]))
+        research.append(f'<h2>{heading}</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r[field])}</h3>{metadata(r)}{finding_kind(r) if collection == "findings" else ""}{finding_details(r) if collection == "findings" else ""}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in rows]))
     pages["research.html"] = "".join(research)
     for route, heading, hook in (("compare.html", "Compare people", "compare"), ("connections.html", "Find a connection", "connection")):
         pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + empty([f'<li>{ref(pid)}</li>' for pid in people])
@@ -382,27 +404,50 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     undated = [f for f in project["findings"] if not f.get("recorded_on")]
     months = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
-    def finding_item(row: dict[str, Any]) -> str:
-        subjects = ", ".join(ref(rid, label=record_label(rid)) for rid in row.get("related_ids", []) if rid in record_routes)
-        in_studies = ", ".join(f'<a href="{study_urls[s["id"]]}">{_text(s["title"])}</a>' for s in studies_by_subject[row["id"]])
-        return (f'<li class="finding-entry" data-recorded-on="{_text(row.get("recorded_on") or "")}"><p class="meta">{_text(row.get("recorded_on") or "Undated")}</p><h3><a href="{record_routes[row["id"]]}">{_text(row["conclusion"])}</a></h3>{metadata(row)}'
-                + (f'<p>About: {subjects}</p>' if subjects else "") + (f'<p>Studies: {in_studies}</p>' if in_studies else "")
+    def finding_item(row: dict[str, Any], prefix: str = "") -> str:
+        subjects = ", ".join(ref(rid, prefix, record_label(rid)) for rid in row.get("related_ids", []) if rid in record_routes)
+        in_studies = ", ".join(f'<a href="{prefix}{study_urls[s["id"]]}">{_text(s["title"])}</a>' for s in studies_by_subject[row["id"]])
+        return (f'<li class="finding-entry" id="{_anchor(row["id"])}" data-recorded-on="{_text(row.get("recorded_on") or "")}"><p class="meta">{_text(row.get("recorded_on") or "Undated")}</p>'
+                f'<h3><a href="{prefix}{record_routes[row["id"]]}">{_text(row["conclusion"])}</a></h3>{metadata(row, prefix)}{finding_kind(row)}'
+                + finding_details(row, prefix) + (f'<p>About: {subjects}</p>' if subjects else "") + (f'<p>Studies: {in_studies}</p>' if in_studies else "")
                 + (f'<p class="meta">{len(row.get("evidence_ids", []))} evidence assessments</p>' if row.get("evidence_ids") else "") + "</li>")
+
+    def by_month(rows: list[dict[str, Any]], prefix: str = "") -> str:
+        out, current = [], None
+        for row in rows:
+            month = row["recorded_on"][:7]
+            if month != current:
+                out.append(("</ul>" if current else "") + f'<h2>{months[int(month[5:7]) - 1] + " " if len(month) == 7 else ""}{_text(month[:4])}</h2><ul class="record-list findings-log">')
+                current = month
+            out.append(finding_item(row, prefix))
+        return "".join(out) + ("</ul>" if current else "")
+
+    # A long log opens with the newest findings; archive pages are numbered from
+    # the earliest, so a finding keeps its page as newer ones are added.
+    archive: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    if len(dated) > LATEST_FINDINGS:
+        for index, row in enumerate(dated):
+            archive[(len(dated) - 1 - index) // FINDINGS_PER_PAGE + 1].append(row)
+    archive_url = lambda number: f"findings/page-{number}.html"
+    archive_nav = lambda prefix: ('<nav class="pagination findings-archive" aria-label="Finding archive"><span>Archive pages, from the earliest:</span><div>'
+                                  + "".join(f'<a href="{prefix}{archive_url(n)}">{n}</a>' for n in sorted(archive)) + "</div></nav>")
     log = ['<h1>Latest findings</h1><p>A dated log of research conclusions, newest first. Each entry links to the full finding with its evidence; studies and dossiers hold the current account.</p>']
-    current_month = None
-    for row in dated:
-        month = row["recorded_on"][:7]
-        if month != current_month:
-            log.append(("</ul>" if current_month else "") + f'<h2>{months[int(month[5:7]) - 1] + " " if len(month) == 7 else ""}{_text(month[:4])}</h2><ul class="record-list findings-log">')
-            current_month = month
-        log.append(finding_item(row))
-    if current_month:
-        log.append("</ul>")
+    if archive:
+        log.append(f'<p class="result-count">The newest {LATEST_FINDINGS} of {len(dated):,} dated findings.</p>' + by_month(dated[:LATEST_FINDINGS]) + archive_nav(""))
+    else:
+        log.append(by_month(dated))
     if undated:
         log.append('<h2>Undated findings</h2><ul class="record-list findings-log">' + "".join(finding_item(row) for row in undated) + "</ul>")
     if not project["findings"]:
         log.append('<p class="empty-state">No public findings recorded yet.</p>')
     pages["findings.html"] = "".join(log)
+    archive_titles: dict[str, str] = {}
+    for number, rows in archive.items():
+        newer = f'<a href="{archive_url(number + 1).split("/")[1]}">← Newer</a>' if number + 1 in archive else '<a href="../findings.html">← Latest findings</a>'
+        older = f'<a href="{archive_url(number - 1).split("/")[1]}">Older →</a>' if number - 1 in archive else ""
+        pages[archive_url(number)] = (f'<h1>Findings, page {number} of {len(archive)}</h1><p>Archive pages are numbered from the earliest finding, so a finding keeps its page. <a href="../findings.html">Latest findings</a>.</p>'
+                                      + by_month(rows, "../") + f'<nav class="pagination" aria-label="Finding pages"><div>{newer}{older}</div></nav>' + archive_nav("../"))
+        archive_titles[archive_url(number)] = f"Findings, page {number}"
 
     # Families and branches: surname groups and connected groups of recorded relatives.
     groups: dict[str, list[str]] = defaultdict(list)
@@ -503,7 +548,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             self_url=base_url + "findings.xml", author=config.name,
             updated=max((f["recorded_on"] for f in dated), default="1970-01-01"),
             entries=[FeedEntry(id=base_url + record_routes[f["id"]], title=f["conclusion"][:150], link=base_url + record_routes[f["id"]],
-                               updated=f["recorded_on"], summary=f["conclusion"])
+                               updated=f["recorded_on"], summary=f["conclusion"] + (f' Limits: {f["limitations"]}' if f.get("limitations") else ""))
                      for f in dated[:50]])
     branding = config.raw.get("site", {})
     description = branding.get("description", "A public collection of people, records and research.") if isinstance(branding, dict) else "A public collection of people, records and research."
@@ -512,7 +557,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     study_titles = {url: studies[sid]["title"] for sid, url in study_urls.items()}
     for path, content in pages.items():
         prefix = "../" if "/" in path else ""
-        view, title = ROUTES[path] if path in ROUTES else ("study", study_titles[path]) if path in study_titles else ("person", person_titles[path])
+        view, title = ROUTES[path] if path in ROUTES else ("study", study_titles[path]) if path in study_titles else ("findings", archive_titles[path]) if path in archive_titles else ("person", person_titles[path])
         person_attribute = f' data-person-id="{_text(person_ids_by_path[path])}"' if path in person_ids_by_path else ""
         nav = "".join(f'<a data-view="{v}" href="{prefix}{p}"' + (' aria-current="page"' if path == p else '') + f'>{t}</a>' for p, (v, t) in ROUTES.items())
         # Dossiers need only the menu enhancement. Interactive pages share one

@@ -43,10 +43,16 @@ A citation points to a `source_id`; a claim names its `subject_id`, predicate/va
 genealogy --project my-family finding add finding:parentage \
   "The cited record supports the proposed parent link" \
   --related gedcom:person:I1 --evidence evidence:reviewed-entry \
-  --confidence probable --status reviewed --recorded-on 2026-10-19 --sensitivity public
+  --confidence probable --status reviewed --recorded-on 2026-10-19 --sensitivity public \
+  --limitations "The register is a later copy; the original was not seen." \
+  --cite citation:register-1801 --kind vital
 ```
 
-`--recorded-on` dates the finding, so it appears in the site's **Latest findings** log, newest first. Undated findings are listed after the dated ones. With `site.base_url` set, the build also writes an Atom feed, `findings.xml`.
+`--recorded-on` dates the finding, so it appears in the site's **Latest findings** log, newest first. Undated findings are listed after the dated ones. With `site.base_url` set, the build also writes an Atom feed, `findings.xml`. A log of more than 30 dated findings opens with the newest 30. Older findings are on archive pages (`findings/page-N.html`) numbered from the earliest finding, so a finding never changes page as newer ones are added.
+
+- `--limitations` says what the finding does not establish. It is shown beside the conclusion, never merged into it.
+- `--cite` links a record the finding rests on directly, when there is no claim-level evidence. Repeat it for several. A finding that cites a private or restricted record is withheld from the site, like any record that depends on one.
+- `--kind` is your own grouping, such as `vital`, `relationship` or `record`, shown as a label.
 
 Use real IDs already in the selected case; validation rejects missing references. Confidence values are `documented`, `probable`, `possible`, `disproved`, and `unknown`. A finding’s confidence does not automatically change a relationship. Preserve alternative hypotheses and record what could change the assessment.
 

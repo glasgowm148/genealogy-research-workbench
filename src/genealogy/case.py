@@ -163,7 +163,7 @@ def validate_case(case: ResearchCase) -> list[str]:
         "Evidence": {"claim_id": "Claim", "citation_id": "Citation"},
         "Hypothesis": {"related_ids": None, "evidence_ids": "Evidence"},
         "ResearchQuestion": {"related_ids": None},
-        "Finding": {"related_ids": None, "evidence_ids": "Evidence"},
+        "Finding": {"related_ids": None, "evidence_ids": "Evidence", "citation_ids": "Citation"},
         "Study": {"related_ids": None},
         "ImportProvenance": {"entity_ids": None},
     }
@@ -285,11 +285,13 @@ def _validate_record_fields(record: Record) -> list[str]:
         "parent_id", "date", "place_id", "description", "notes", "repository", "url",
         "access_note", "licence", "locator", "quotation", "transcription", "accessed_on",
         "rationale", "start_date", "end_date", "summary", "body", "conclusion", "pedigree", "tree_status",
-        "author", "publication",
+        "author", "publication", "limitations",
     )
     for field_name in optional_strings:
         if hasattr(record, field_name) and not _string(getattr(record, field_name), optional=True):
             errors.append(f"{record.id}.{field_name} must be a string or null")
+    if isinstance(record, Finding) and record.kind is not None and not (_string(record.kind) and record.kind.strip()):
+        errors.append(f"{record.id}.kind must be a non-empty string or null")
     list_fields = (
         "event_ids", "participant_ids", "claim_ids", "citation_ids", "related_ids",
         "evidence_ids", "entity_ids",

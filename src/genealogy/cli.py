@@ -239,6 +239,10 @@ def parser() -> argparse.ArgumentParser:
     add_finding.add_argument("conclusion")
     add_finding.add_argument("--related", action="append", default=[])
     add_finding.add_argument("--evidence", action="append", default=[])
+    add_finding.add_argument("--cite", action="append", default=[], metavar="CITATION_ID",
+                             help="a citation the finding rests on directly; repeat for several")
+    add_finding.add_argument("--limitations", help="what the finding does not establish")
+    add_finding.add_argument("--kind", help="your own grouping, e.g. vital, relationship or record")
     add_finding.add_argument("--status", default="draft")
     add_finding.add_argument("--recorded-on", help="ISO date the finding was reached (YYYY, YYYY-MM or YYYY-MM-DD); dates the findings log")
     add_finding.add_argument("--confidence", choices=tuple(Confidence), default=Confidence.UNKNOWN)
@@ -331,6 +335,9 @@ def main(argv: list[str] | None = None) -> int:
                 confidence=Confidence(args.confidence),
                 sensitivity=AccessLevel(args.sensitivity),
                 recorded_on=args.recorded_on,
+                limitations=args.limitations,
+                citation_ids=args.cite,
+                kind=args.kind,
             ))
             print(f"Recorded finding {args.finding_id} in case {case.id}.")
             return 0
