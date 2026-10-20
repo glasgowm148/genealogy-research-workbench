@@ -282,18 +282,37 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + empty([relationship(r) for r in project["relationships"]], "No public family connections recorded.")
     pages["timeline.html"] = '<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates.</p><div data-timeline>' + empty([event(e) for e in events_sorted], "No public dated events recorded.").replace('class="record-list"', 'class="record-list timeline"', 1) + '</div>'
     points, place_rows = [], []
+    # Group places by their broadest jurisdiction as written ("Town, County,
+    # Country" -> "Country"); nothing is looked up or inferred.
+    regions: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for p in project["places"]:
-        coords = p.get("latitude") is not None and p.get("longitude") is not None
-        details = f'{p["latitude"]}, {p["longitude"]}' if coords else "Coordinates not supplied"
-        if coords and p.get("precision"):
-            details += f' · located to {p["precision"]} level' if p["precision"] != "exact" else " · exact location"
-        if coords:
-            x, y = (p["longitude"] + 180) * 960 / 360, (90 - p["latitude"]) * 480 / 180
-            broad = p.get("precision") in BROAD_PRECISIONS
-            points.append(f'<a href="#{_anchor(p["id"])}"><circle cx="{x:.3f}" cy="{y:.3f}" r="{9 if broad else 5}"' + (' class="broad"' if broad else "") + f'><title>{_text(p["name"])}</title></circle></a>')
-        related = events_by_place[p["id"]]
-        place_rows.append(f'<li id="{_anchor(p["id"])}"><h2>{_text(p["name"])}</h2><p>{_text(details)}</p>' + empty([event(e, canonical=False) for e in related], "No events linked to this place.") + '</li>')
-    pages["places.html"] = '<h1>Places</h1><p>This offline coordinate overview uses supplied coordinates only. No geocoding or external map service is used. Basemap: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain).</p><div id="map-output"><svg class="place-map" viewBox="0 0 960 480" role="img" aria-label="Places with supplied coordinates"><rect width="960" height="480" fill="#e8efec"/><image href="assets/world.svg" width="960" height="480"/><path d="M0 240H960M480 0V480" stroke="#a8b9af"/>' + "".join(points) + '</svg></div>' + ("<p>No coordinates supplied.</p>" if not points else "") + empty(place_rows)
+        parts = [part.strip() for part in str(p["name"]).split(",") if part.strip()]
+        regions[parts[-1] if len(parts) > 1 else "Places without a broader jurisdiction"].append(p)
+    region_order = sorted(regions, key=lambda r: (r == "Places without a broader jurisdiction", -len(regions[r]), r.casefold()))
+    region_rows = []
+    for region in region_order:
+        members = regions[region]
+        region_events = [e for p in members for e in events_by_place[p["id"]]]
+        region_people = {pid for e in region_events for pid in e.get("participant_ids", []) if pid in people}
+        located = sum(1 for p in members if p.get("latitude") is not None and p.get("longitude") is not None)
+        region_rows.append(f'<tr><td><a href="#{_anchor("region:" + region)}">{_text(region)}</a></td><td>{len(members)}</td><td>{located}</td><td>{len(region_events)}</td><td>{len(region_people)}</td></tr>')
+    for region in region_order:
+        items = []
+        for p in sorted(regions[region], key=lambda row: str(row["name"]).casefold()):
+            coords = p.get("latitude") is not None and p.get("longitude") is not None
+            details = f'{p["latitude"]}, {p["longitude"]}' if coords else "Coordinates not supplied"
+            if coords and p.get("precision"):
+                details += f' · located to {p["precision"]} level' if p["precision"] != "exact" else " · exact location"
+            if coords:
+                x, y = (p["longitude"] + 180) * 960 / 360, (90 - p["latitude"]) * 480 / 180
+                broad = p.get("precision") in BROAD_PRECISIONS
+                points.append(f'<a href="#{_anchor(p["id"])}"><circle cx="{x:.3f}" cy="{y:.3f}" r="{9 if broad else 5}"' + (' class="broad"' if broad else "") + f'><title>{_text(p["name"])}</title></circle></a>')
+            related = events_by_place[p["id"]]
+            items.append(f'<li id="{_anchor(p["id"])}"><h3>{_text(p["name"])}</h3><p>{_text(details)}</p>' + empty([event(e, canonical=False) for e in related], "No events linked to this place.") + '</li>')
+        place_rows.append(f'<section class="place-region" id="{_anchor("region:" + region)}"><h2>{_text(region)}</h2>' + empty(items) + '</section>')
+    summary_table = ('<h2>By country or region</h2><p class="meta">Grouped by the last part of each place name as recorded.</p><div class="table-wrap"><table><thead><tr><th>Country or region</th><th>Places</th><th>With coordinates</th><th>Events</th><th>People</th></tr></thead><tbody>'
+                     + "".join(region_rows) + '</tbody></table></div>') if len(region_rows) > 1 else ""
+    pages["places.html"] = '<h1>Places</h1><p>This offline coordinate overview uses supplied coordinates only. No geocoding or external map service is used. Basemap: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain).</p><div id="map-output"><svg class="place-map" viewBox="0 0 960 480" role="img" aria-label="Places with supplied coordinates"><rect width="960" height="480" fill="#e8efec"/><image href="assets/world.svg" width="960" height="480"/><path d="M0 240H960M480 0V480" stroke="#a8b9af"/>' + "".join(points) + '</svg></div>' + ("<p>No coordinates supplied.</p>" if not points else "") + summary_table + ("".join(place_rows) if place_rows else empty([]))
     source_cards = []
     for src in sources.values():
         link = _url(src.get("url"))

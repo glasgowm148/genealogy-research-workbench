@@ -131,5 +131,37 @@ class StudySiteTests(unittest.TestCase):
         self.assertIn("s.updated_on must be an ISO date", errors)
 
 
+
+class PlaceRegionTests(unittest.TestCase):
+    def test_places_are_grouped_by_their_recorded_country(self):
+        case = ResearchCase("regions", "Regions")
+        for pid, place in (("a", "Lanternford, Invented Shire, Scotland"), ("b", "Reedhaven, Scotland"), ("c", "Quayside, Ireland"), ("d", "Nowhere")):
+            case.add(Place(f"place-{pid}", place, sensitivity=A.PUBLIC))
+            case.add(Person(pid, names=[Name(pid)], living=L.DECEASED, event_ids=[f"e-{pid}"], sensitivity=A.PUBLIC))
+            case.add(Event(f"e-{pid}", "birth", date="1800", place_id=f"place-{pid}", participant_ids=[pid], sensitivity=A.PUBLIC))
+        with tempfile.TemporaryDirectory() as temporary:
+            page = build_site(case, ProjectConfig(), Path(temporary))["places.html"].read_text()
+            text = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", page)))
+            self.assertIn("Scotland 2 0 2 2", text)
+            self.assertIn("Ireland 1 0 1 1", text)
+            self.assertLess(text.index("Scotland 2"), text.index("Ireland 1"))
+            self.assertIn("Places without a broader jurisdiction 1", text)
+            self.assertEqual(check_site(Path(temporary))["missing_anchors"], [])
+
+
+
+class EstimateTests(unittest.TestCase):
+    def test_assessed_percentages_are_labelled_and_validated(self):
+        from genealogy.labels import relationship_label
+        self.assertEqual(relationship_label({"confidence": "probable", "estimate": 70}), "Probable (70%)")
+        case = ResearchCase("estimates", "Estimates")
+        case.add(Person("a", names=[Name("A")]))
+        case.add(Person("b", names=[Name("B")]))
+        for number, value in enumerate((0, 100, 55.5, "70")):
+            case.add(Relationship(f"r{number}", "a", "b", "parent", estimate=value))
+        errors = [error for error in validate_case(case) if "estimate" in error]
+        self.assertEqual(len(errors), 4)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -177,6 +177,9 @@ class Relationship(Record):
     # The source tree's own mark, e.g. WikiTree "uncertain" or GEDCOM "challenged".
     # It is displayed as the tree's statement and never raises ``confidence``.
     tree_status: str | None = None
+    # An assessed probability (1–99 %) recorded with the reasoning in claims or
+    # findings. Imports never set it; 0 and 100 are not estimates.
+    estimate: int | None = None
 
 
 @dataclass(slots=True)

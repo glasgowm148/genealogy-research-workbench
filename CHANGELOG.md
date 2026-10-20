@@ -29,12 +29,16 @@ Research and website (continued)
 - `Place.precision` (exact … country, or approximate). Broad locations are drawn as dashed rings and labelled on the map and place list.
 - `genealogy check-links` and `genealogy.sitecheck`: a static-site link and anchor checker with a ratcheting baseline, extracted from the Glasgow project's release gate.
 
+- Places are grouped by their broadest recorded jurisdiction ("…, Scotland"), with a country or region summary of places, coordinates, events and people. Nothing is looked up.
+- `Relationship.estimate`: an optional assessed percentage (1–99), shown as "Probable (70%)". Imports never set it.
+- Muted and eyebrow text colours now meet WCAG AA contrast. An opt-in axe-core browser check (`GENEALOGY_AXE_PATH`, run in CI) covers every page type at desktop and mobile widths.
+
 Fixes
 - The fictional demo stored parent links from parent to child, contrary to the documented child → parent direction, so its tree drew descendants as ancestors. It is regenerated.
 - Browser tests no longer assume a macOS Chrome path (`GENEALOGY_BROWSER_EXECUTABLE`).
 - `genealogy.dates` adds `year_of` and `wikitree_date`; sorting understands Julian/dual years, `circa`/`c.`, interpreted dates and month names.
 
-Compatibility: cases gain optional fields (`Name.given/surname`, `Relationship.pedigree/tree_status`, `Source.author/publication`, `Finding.recorded_on`, `Place.precision`) and a `Study` record type. Older 0.2 readers cannot load cases written with them. GEDCOM-imported people now record `living` as `"deceased"` rather than `false`. OneTree spouse relationship IDs are now one per couple, so re-import with `--replace` (not `--update`) if research refers to the old per-profile spouse IDs.
+Compatibility: cases gain optional fields (`Name.given/surname`, `Relationship.pedigree/tree_status`, `Source.author/publication`, `Finding.recorded_on`, `Place.precision`, `Relationship.estimate`) and a `Study` record type. Older 0.2 readers cannot load cases written with them. GEDCOM-imported people now record `living` as `"deceased"` rather than `false`. OneTree spouse relationship IDs are now one per couple, so re-import with `--replace` (not `--update`) if research refers to the old per-profile spouse IDs.
 
 ## 0.2.0 — 19 October 2026
 

@@ -317,6 +317,9 @@ def _validate_record_fields(record: Record) -> list[str]:
         value = getattr(record, field_name, None)
         if value is not None and not (isinstance(value, str) and _iso_date(value)):
             errors.append(f"{record.id}.{field_name} must be an ISO date (YYYY, YYYY-MM or YYYY-MM-DD)")
+    estimate = getattr(record, "estimate", None)
+    if estimate is not None and not (type(estimate) is int and 1 <= estimate <= 99):
+        errors.append(f"{record.id}.estimate must be a whole percentage from 1 to 99")
     if isinstance(record, Place) and record.precision is not None and record.precision not in PLACE_PRECISIONS:
         errors.append(f"{record.id}.precision must be one of: {', '.join(PLACE_PRECISIONS)}")
     if isinstance(record, ImportProvenance):

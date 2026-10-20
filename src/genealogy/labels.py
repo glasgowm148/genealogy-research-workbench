@@ -46,6 +46,8 @@ def confidence_meaning(value: Any) -> str:
 def relationship_label(row: Mapping[str, Any]) -> str:
     """E.g. "Unassessed tree link · tree-marked uncertain"."""
     parts = [confidence_label(row.get("confidence"), relationship=True)]
+    if isinstance(row.get("estimate"), int):
+        parts[0] += f" ({row['estimate']}%)"
     if row.get("tree_status"):
         parts.append(f"tree-marked {row['tree_status']}")
     return " · ".join(parts)
@@ -97,6 +99,7 @@ def guide_entries() -> list[tuple[str, str, str, str]]:
     """(anchor, label, meaning, group) rows for a reader's evidence guide."""
     rows = [(f"confidence-{key}", label, meaning, "Confidence") for key, (label, meaning) in CONFIDENCE.items()]
     rows.append(("confidence-tree-link", "Unassessed tree link", "A relationship copied from a family tree or export. It is a research lead until records are assessed.", "Confidence"))
+    rows.append(("estimate", "Probable (70%) and similar", "A percentage is a researcher's assessed probability for that link, recorded with its reasoning. It is an estimate, not a measurement, and never comes from an imported tree.", "Confidence"))
     rows.append(("tree-marked", "Tree-marked …", "The supplying tree's own mark, such as uncertain or confident. It is shown as that tree's statement, never as this project's assessment.", "Confidence"))
     rows += [(f"status-{key}", label, meaning, "Claim status") for key, (label, meaning) in CLAIM_STATUS.items()]
     rows += [(f"status-{key}", RESEARCH_STATUS[key], meaning, "Research status") for key, meaning in RESEARCH_MEANINGS.items()]

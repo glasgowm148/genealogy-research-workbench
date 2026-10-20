@@ -188,6 +188,7 @@ def review_deceased(case: ResearchCase, batch: AdapterBatch, *, reviewed_sources
             elif kind == "Relationship":
                 record.claim_ids = []
                 record.confidence = Confidence.UNKNOWN
+                record.estimate = None
             # Imported external links may contain private paths or arbitrary URL schemes.
             if hasattr(record, "external_ids"):
                 record.external_ids = []

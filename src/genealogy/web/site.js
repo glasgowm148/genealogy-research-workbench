@@ -25,7 +25,7 @@ for(const r of relationships)for(const id of new Set([r.subject_id,r.object_id])
 for(const c of claims){if(!claimsByPerson.has(c.subject_id))claimsByPerson.set(c.subject_id,[]);claimsByPerson.get(c.subject_id).push(c);}
 const CONFIDENCE={documented:'Documented',probable:'Probable',possible:'Possible',disproved:'Disproved'};
 const BROAD=new Set(['parish','district','county','region','country','approximate']);
-const relLabel=r=>[CONFIDENCE[r?.confidence]||'Unassessed tree link',r?.tree_status?`tree-marked ${r.tree_status}`:''].filter(Boolean).join(' · ');
+const relLabel=r=>[(CONFIDENCE[r?.confidence]||'Unassessed tree link')+(Number.isInteger(r?.estimate)?` (${r.estimate}%)`:''),r?.tree_status?`tree-marked ${r.tree_status}`:''].filter(Boolean).join(' · ');
 const relKind=r=>r?.pedigree&&r.pedigree!=='birth'?`${r.kind} (${r.pedigree})`:(r?.kind||'relationship');
 const pe=p=>[...(eventsByPerson.get(p.id)?.values()||[])];
 const year=v=>{const m=String(v||'').match(/\b(\d{3,4})\b/);return m?Number(m[1]):null;};
