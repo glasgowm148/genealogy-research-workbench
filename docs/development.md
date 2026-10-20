@@ -61,12 +61,34 @@ An adapter returns `AdapterBatch`: typed neutral entities, private audit observa
 
 ## Release checklist
 
-1. Run unit and browser checks, then build wheel and source distribution.
-2. Verify wheel installation and `init → import → build` outside the checkout.
-3. Inspect the fictional demo and README screenshots; validate documentation links.
-4. Review the release for real research, credentials, private captures and generated artifacts.
-5. Commit the toolkit, create its version tag, and publish the repository/release when authorised. Package-index publication is a separate step; a package name in metadata does not mean it is already on PyPI.
-6. Update downstream consumers to the reviewed toolkit commit/version and rerun their integration checks.
+1. Set the version in `pyproject.toml` and date its `CHANGELOG.md` entry.
+2. Run the unit and browser checks (with `GENEALOGY_AXE_PATH`), then build the wheel and source distribution.
+3. Install the wheel outside the checkout and check `init → import → build → check-links`.
+4. Inspect the fictional demo and README screenshots, and validate documentation links.
+5. Review the release for real research, credentials, private captures and generated artifacts.
+6. Commit, tag `vX.Y.Z`, push `main` and the tag, then publish the GitHub release:
+
+   ```sh
+   gh release create vX.Y.Z dist/genealogy_research_workbench-X.Y.Z* --title "Genealogy Research Workbench X.Y.Z" --notes-file CHANGELOG.md
+   ```
+
+   Publishing the release runs `.github/workflows/release.yml`. That workflow rebuilds the distributions, checks that the version matches the tag, smoke-tests the wheel, and uploads it to PyPI.
+7. Update downstream consumers to the released commit and rerun their integration checks. Push the toolkit before any consumer commit that pins it.
+
+### Publishing to PyPI (one-time setup)
+
+The release workflow uses [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no API token is stored in the repository.
+
+1. On [pypi.org](https://pypi.org), add a pending trusted publisher:
+   - project: `genealogy-research-workbench`
+   - owner: `glasgowm148`
+   - repository: `genealogy-research-workbench`
+   - workflow: `release.yml`
+   - environment: `pypi`
+2. In the GitHub repository settings, create an environment named `pypi`. Optionally require approval before publishing.
+3. Publish a release. Re-running the failed workflow for an existing release also works, for example to publish 0.3.0 after the setup.
+
+After the first upload, `python -m pip install genealogy-research-workbench` installs the toolkit, and the README quick start can use it instead of a clone. The import package is called `genealogy`. An unrelated PyPI project named `genealogy` installs a module with the same name, so install only one of them in a given environment.
 
 The Glasgow consumer uses a Git submodule pinned to a toolkit commit, with a compatible package-version declaration. Its source tree is not a separately maintained toolkit fork. For local development, install the standalone checkout in the consumer’s environment with `pip install -e /path/to/genealogy-research-workbench`; commit/review changes upstream before updating the consumer’s pin.
 
