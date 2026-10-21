@@ -184,6 +184,9 @@ class Relationship(Record):
     # genealogy.toml (e.g. "strongly_supported"). ``confidence`` stays the
     # standard grade it counts as; the site prints the project's wording.
     grade: str | None = None
+    # Why the link is shown (or was rejected), in a sentence. Without it the
+    # site gives the first linked claim's rationale.
+    rationale: str | None = None
 
 
 @dataclass(slots=True)

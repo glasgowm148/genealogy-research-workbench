@@ -399,19 +399,20 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 parts.append(f'<p><strong>{_text(key.replace("_", " ").capitalize())}:</strong> {_text(row[key])}</p>')
         return ('<article id="' + _anchor(row["id"]) + '">' if canonical else "<article>") + "".join(parts) + "</article>"
 
+    def record_link(cid: str, prefix: str = "") -> str:
+        """A citation as its source title and locator, linked to the citation."""
+        found = citations[cid]
+        label = sources.get(found["source_id"], {}).get("title", found["source_id"])
+        if found.get("locator"):
+            label += f' ({found["locator"]})'
+        return ref(cid, prefix, label)
+
     def finding_details(row: dict[str, Any], prefix: str = "") -> str:
         """A finding's type, stated limits and the records it rests on."""
         parts = []
         if row.get("limitations"):
             parts.append(f'<p class="finding-limitations"><strong>Limits:</strong> {_text(row["limitations"])}</p>')
-        cited = []
-        for cid in row.get("citation_ids", []):
-            if cid in citations:
-                found = citations[cid]
-                label = sources.get(found["source_id"], {}).get("title", found["source_id"])
-                if found.get("locator"):
-                    label += f' ({found["locator"]})'
-                cited.append(f"<li>{ref(cid, prefix, label)}</li>")
+        cited = [f"<li>{record_link(cid, prefix)}</li>" for cid in row.get("citation_ids", []) if cid in citations]
         if cited:
             parts.append('<p class="meta">Records:</p><ul class="finding-records">' + "".join(cited) + "</ul>")
         changed = [f'<li>{ref(c["record_id"], prefix, changed_label(c["record_id"]))} <span class="badge change" data-after="{_text(c["after"])}"'
@@ -468,18 +469,45 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                      if rows else '<p class="empty-state">No public records cited.</p>')
         return "".join(parts) + "</article>"
 
+    def link_reason(row: dict[str, Any], prefix: str) -> str:
+        """Why a family link is shown: its own rationale, else its first linked
+        claim's, and the records those claims cite. Nothing is supplied for a blank."""
+        linked = [claims_by_id[cid] for cid in row.get("claim_ids", []) if cid in claims_by_id]
+        reason = row.get("rationale") or next((c["rationale"] for c in linked if c.get("rationale")), None)
+        cited = list(dict.fromkeys(cid for c in linked for cid in [*c.get("citation_ids", []), *(e["citation_id"] for e in evidence_by_claim[c["id"]])]
+                                   if cid in citations))
+        more = len(cited) - 5
+        return ((f'<p class="meta link-reason"><strong>Reason:</strong> {_text(reason)}</p>' if reason else "")
+                + (f'<p class="meta link-records">Supporting records: ' + ", ".join(record_link(cid, prefix) for cid in cited[:5])
+                   + (f" and {more:,} more" if more > 0 else "") + "</p>" if cited else ""))
+
     def person_item(pid: str, role: str, row: dict[str, Any] | None, prefix: str, extra: str = "") -> str:
         span = lifespan(pid)
         return (f'<li><span class="family-role">{_text(role)}</span> {ref(pid, prefix)}' + (f' <span class="meta">{_text(span)}</span>' if span else "")
-                + (metadata(row, prefix, relationship=True) + change_notes(row["id"], prefix) if row else "") + extra + "</li>")
+                + (metadata(row, prefix, relationship=True) + change_notes(row["id"], prefix) + link_reason(row, prefix) if row else "") + extra + "</li>")
+
+    def rejected(row: dict[str, Any]) -> bool:
+        """A link assessed evidence contradicts: disproved, or a project grade counted as disproved.
+        The family section, its competing-parents notice and the opening sentence all use this."""
+        return row.get("confidence") == "disproved" or config.grades.get(str(row.get("grade")), {}).get("confidence") == "disproved"
+
+    def kin(pid: str) -> tuple[list[dict[str, Any]], list[tuple[dict[str, Any], str]], list[dict[str, Any]]]:
+        """Parent, partner and child links in the order the family section lists them."""
+        birth = lambda p: date_sort_key(next((e.get("date") for e in events_by_person[p] if e["kind"] == "birth"), None))
+        return (sorted(parents_of[pid], key=lambda r: (person_name(r["object_id"]), r["id"])),
+                sorted(partners_of[pid], key=lambda item: (person_name(item[1]), item[0]["id"])),
+                sorted(children_of[pid], key=lambda r: (birth(r["subject_id"]), person_name(r["subject_id"]))))
 
     def family(pid: str) -> str:
-        """Parents, partners, children and siblings, each with its own recorded label."""
+        """Parents, partners, children and siblings, each with its own recorded label.
+        Rejected links leave those lists for one list of their own, kept with their reasons."""
         prefix = "../"
-        parents = sorted(parents_of[pid], key=lambda r: (person_name(r["object_id"]), r["id"]))
+        all_parents, all_partners, all_children = kin(pid)
+        parents = [r for r in all_parents if not rejected(r)]
+        set_apart = [person_item(r["object_id"], parent_role(r, sex.get(r["object_id"])), r, prefix) for r in all_parents if rejected(r)]
         sections = []
         items = [person_item(r["object_id"], parent_role(r, sex.get(r["object_id"])), r, prefix) for r in parents]
-        by_birth = [r for r in parents if str(r.get("pedigree") or "birth") == "birth" and r.get("confidence") != "disproved"]
+        by_birth = [r for r in parents if str(r.get("pedigree") or "birth") == "birth"]
         fathers = {r["object_id"] for r in by_birth if sex.get(r["object_id"], "").casefold() in ("m", "male")}
         mothers = {r["object_id"] for r in by_birth if sex.get(r["object_id"], "").casefold() in ("f", "female")}
         competing = ""
@@ -488,24 +516,28 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                          'Each link keeps its own label until research resolves it. <a href="../evidence.html#alternatives">About alternatives</a></p>')
         sections.append("<h3>Parents</h3>" + competing + empty(items, "No public parents recorded."))
         partner_items = []
-        for row, other in sorted(partners_of[pid], key=lambda item: (person_name(item[1]), item[0]["id"])):
+        for row, other in all_partners:
             shared = [e for e in events_by_person[pid] if e["kind"] in FAMILY_EVENTS and other in e.get("participant_ids", [])]
             extra = "".join(f'<p class="meta">{_text(e["kind"].capitalize())}: {_text(e.get("date") or "date unknown")}' + (f' · {_text(places[e["place_id"]]["name"])}' if e.get("place_id") in places else "") + "</p>" for e in shared)
-            partner_items.append(person_item(other, "Spouse or partner", row, prefix, extra))
+            (set_apart if rejected(row) else partner_items).append(person_item(other, "Spouse or partner", row, prefix, extra))
         sections.append("<h3>Spouses and partners</h3>" + empty(partner_items, "No public spouses or partners recorded."))
-        child_rows = sorted(children_of[pid], key=lambda r: (date_sort_key(next((e.get("date") for e in events_by_person[r["subject_id"]] if e["kind"] == "birth"), None)), person_name(r["subject_id"])))
-        sections.append("<h3>Children</h3>" + empty([person_item(r["subject_id"], child_role(r, sex.get(r["subject_id"])), r, prefix) for r in child_rows], "No public children recorded."))
-        my_parents = {r["object_id"] for r in parents if r.get("confidence") != "disproved"}
+        child_items = []
+        for r in all_children:
+            (set_apart if rejected(r) else child_items).append(person_item(r["subject_id"], child_role(r, sex.get(r["subject_id"])), r, prefix))
+        sections.append("<h3>Children</h3>" + empty(child_items, "No public children recorded."))
         siblings: dict[str, set[str]] = defaultdict(set)
-        for parent in my_parents:
+        for parent in {r["object_id"] for r in parents}:
             for r in children_of[parent]:
-                if r["subject_id"] != pid and r.get("confidence") != "disproved":
+                if r["subject_id"] != pid and not rejected(r):
                     siblings[r["subject_id"]].add(parent)
-        # A recorded sibling link is symmetric like a partner link; like a parent
-        # link, a disproved one is kept only under "All recorded relationships".
+        # A recorded sibling link is symmetric like a partner link; a rejected
+        # one is set apart with the other rejected links.
         recorded: dict[str, dict[str, Any]] = {}
         for row, other in sorted(siblings_of[pid], key=lambda item: item[0]["id"]):
-            if row.get("confidence") != "disproved":
+            if rejected(row):
+                half = "half" in str(row["kind"]).casefold() or "half" in str(row.get("pedigree") or "").casefold()
+                set_apart.append(person_item(other, "Recorded half-sibling" if half else "Recorded sibling", row, prefix))
+            else:
                 recorded.setdefault(other, row)
         sibling_items = []
         for sibling in sorted(set(siblings) | set(recorded), key=lambda s: (date_sort_key(next((e.get("date") for e in events_by_person[s] if e["kind"] == "birth"), None)), person_name(s))):
@@ -519,6 +551,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                         else "Recorded half-sibling" if half else "Recorded sibling")
             sibling_items.append(person_item(sibling, role, row, prefix))
         sections.append("<h3>Siblings</h3>" + empty(sibling_items, "No public siblings recorded."))
+        if set_apart:
+            sections.append('<h3>Rejected and superseded links</h3><p class="meta">Assessed evidence contradicts these links. '
+                            'They are kept, with their reasons, so the reasoning stays visible.</p><ul class="record-list rejected-links">' + "".join(set_apart) + "</ul>")
         return '<section class="family-summary" aria-labelledby="family-heading"><h2 id="family-heading">Family</h2>' + "".join(sections) + "</section>"
 
     # A large site's person menus are filled by the script from the shared data.
@@ -979,6 +1014,50 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             + (f'<p class="preserve-lines">{_text(contact["note"])}</p>' if "note" in contact else "")
             + '<h2>Imported trees</h2><p>Some details here may come from an imported family tree. If a person\'s page lists an external identifier, '
             'such as a profile on an online tree, a correction to an imported detail should also go to that tree, so the two stay in step.</p>')
+    numbers = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+    count = lambda n, one, many: f'{numbers[n] if n < len(numbers) else f"{n:,}"} {one if n == 1 else many}'
+    listed = lambda items: items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+    finding_ids = {f["id"] for f in project["findings"]}
+
+    def introduction(pid: str) -> str:
+        """Plain sentences from the public record only: a missing event or relative means a missing clause."""
+        prefix = "../"
+
+        def phrase(kinds: tuple[tuple[str, str, str], ...]) -> tuple[str, str] | None:
+            # The first recorded event of the first kind recorded, with a date or a place to state.
+            for kind, alone, joined in kinds:
+                found = next((e for e in events_by_person[pid] if str(e["kind"]).casefold() == kind and (e.get("date") or e.get("place_id") in places)), None)
+                if found:
+                    words = (f' {_text(found["date"])}' if found.get("date") else "") + (
+                        f' in {ref(found["place_id"], prefix, places[found["place_id"]]["name"])}' if found.get("place_id") in places else "")
+                    return alone + words, joined + words
+            return None
+        start = phrase((("birth", "was born", "was born"), ("baptism", "was baptised", "was baptised"), ("christening", "was baptised", "was baptised")))
+        end = phrase((("death", "died", "died"), ("burial", "was buried", "buried")))
+        sentences = []
+        if start or end:
+            sentences.append(f'{_text(person_name(pid))} ' + (f"{start[0]}, and {end[1]}" if start and end else start[0] if start else end[0]) + ".")
+        all_parents, all_partners, all_children = kin(pid)
+        parents = list(dict.fromkeys(r["object_id"] for r in all_parents if not rejected(r)))
+        partners = {other for row, other in all_partners if not rejected(row)}
+        children = {r["subject_id"] for r in all_children if not rejected(r)}
+        clauses = ([f'{listed([ref(p, prefix) for p in parents])} as {"a parent" if len(parents) == 1 else "parents"}'] if parents else []) + (
+            [count(len(partners), "spouse or partner", "spouses or partners")] if partners else []) + ([count(len(children), "child", "children")] if children else [])
+        if clauses:
+            sentences.append(f"This page lists {listed(clauses)}.")
+        return f'<p class="lead intro">{" ".join(sentences)}</p>' if sentences else ""
+
+    def latest_finding(pid: str) -> str:
+        """The newest dated public finding about a person, and when research on them was last recorded."""
+        found = [f for f in research_by_subject[pid] if f["id"] in finding_ids and f.get("recorded_on")]
+        if not found:
+            return ""
+        newest = max(found, key=lambda f: (f["recorded_on"], f["id"]))
+        last = max([f["recorded_on"] for f in found] + [s["updated_on"] for s in studies_by_subject[pid] if s.get("updated_on")])
+        return ('<aside class="latest-finding" aria-labelledby="latest-finding-heading"><h2 id="latest-finding-heading">Latest finding</h2>'
+                f'<p>{ref(newest["id"], "../", newest["conclusion"])}{metadata(newest, "../")}</p><p class="meta">Recorded {_text(newest["recorded_on"])}</p>'
+                f'<p class="meta research-date">Research last recorded {_text(last)}</p></aside>')
+
     for pid, person in people.items():
         related_events = events_by_person[pid]
         subject_ids = {pid, *(e["id"] for e in related_events)}
@@ -1008,6 +1087,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         content += '<p class="explore"><span class="meta">Explore:</span> ' + " · ".join(f'<a href="../{_text(url)}">{_text(label)}</a>' for url, label in explore) + "</p>"
         if recorded_sex:
             content += f'<p class="meta">Recorded sex: {_text(recorded_sex)} <span class="badge">Unassessed tree assertion</span></p>'
+        # The researcher's own notes, when there are any, open the page instead of generated sentences.
+        content += ("" if person.get("notes") else introduction(pid)) + latest_finding(pid)
         content += '<h2 id="names">Names</h2>' + empty(name_items)
         if person.get("notes"):
             content += '<h2 id="biography">Biography and notes</h2><p class="preserve-lines">' + _text(person["notes"]) + '</p>'

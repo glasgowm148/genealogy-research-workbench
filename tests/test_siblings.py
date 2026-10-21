@@ -65,7 +65,8 @@ class RecordedSiblingTests(unittest.TestCase):
         return next(path for key, path in self.paths.items() if key.startswith("people/") and f"<h1>{name}</h1>" in path.read_text()).read_text()
 
     def siblings(self, name):
-        section = self.dossier(name).split("<h3>Siblings</h3>", 1)[1].split("</section>", 1)[0]
+        # Up to the next heading: rejected links follow the siblings in a list of their own.
+        section = self.dossier(name).split("<h3>Siblings</h3>", 1)[1].split("<h3>", 1)[0].split("</section>", 1)[0]
         return [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", item)).strip() for item in re.findall(r"<li>(.*?)</li>", section)]
 
     def test_fixture_is_valid(self):
@@ -94,6 +95,10 @@ class RecordedSiblingTests(unittest.TestCase):
         self.assertNotIn("Nell Fable", " ".join(self.siblings("Ada Fable")))
         self.assertEqual([], self.siblings("Nell Fable"))
         self.assertIn("No public siblings recorded.", self.dossier("Nell Fable"))
+        # Both dossiers set the disproved link apart, with its badge, after the siblings.
+        for name, other in (("Ada Fable", "Nell Fable"), ("Nell Fable", "Ada Fable")):
+            rejected = self.dossier(name).split("<h3>Rejected and superseded links</h3>", 1)[1].split("</section>", 1)[0]
+            self.assertRegex(re.sub(r"<[^>]+>", " ", rejected), rf"Recorded sibling\s+{other}\s+b\. \d+\s+Disproved")
         for name in ("Ada Fable", "Nell Fable"):
             recorded = re.sub(r"<[^>]+>", " ", self.dossier(name).split('<h2 id="relationships">All recorded relationships</h2>', 1)[1])
             self.assertRegex(recorded, r"Ada Fable\s+— sister\s+→\s+Nell Fable\s+Disproved")

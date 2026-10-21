@@ -442,6 +442,26 @@ class BrowserSiteTests(unittest.TestCase):
                     ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                 self.assertEqual([], violations)
 
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'set GENEALOGY_AXE_PATH to an axe-core axe.min.js')
+    def test_link_reasons_rejected_links_and_opening_pass_axe(self):
+        from test_family_reasons import GRADES, family_case
+        build_site(family_case(), ProjectConfig(name='Fictional reasons', grades=GRADES), self.root / 'reasons')
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        dossier = next(p for p in (self.root / 'reasons' / 'people').glob('*.html') if 'data-person-id="ada"' in p.read_text())
+        for width in (1440, 390):
+            with self.subTest(width=width):
+                self.page.set_viewport_size({'width': width, 'height': 900})
+                self.page.goto(urljoin(self.base, f'../reasons/people/{dossier.name}'), wait_until='networkidle')
+                for selector in ('.lead.intro', '.latest-finding', '.link-reason', '.link-records', '.rejected-links'):
+                    self.assertTrue(self.page.locator(selector).first.is_visible(), selector)
+                self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                self.page.add_script_tag(content=axe)
+                violations = self.page.evaluate(
+                    "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                    "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                    ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                self.assertEqual([], violations)
+
     def test_map_controls_and_source_timeline_filters(self):
         self.page.goto(self.base + 'places.html')
         svg = self.page.locator('#map-output svg')
