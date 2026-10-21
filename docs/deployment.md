@@ -37,7 +37,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `sources.html` | Bibliography and citations |
 | `research.html` | Claims, evidence, hypotheses, questions and findings, outstanding work first |
 | `branches.html` | Surname groups and connected groups of recorded relatives, linked to the catalogue and tree |
-| `studies.html`, `studies/s-<hash>.html` | Written research studies with rationale, conclusion and linked subjects |
+| `studies.html`, `studies/s-<hash>.html` | Written research studies with rationale, conclusion and linked subjects, most recently updated first, with a search by title, summary or linked person; past 300 studies, `studies/page-<n>.html` lists them by title |
 | `findings.html`, `findings/page-<n>.html` | Dated log of findings, newest first (`findings.xml` Atom feed when `site.base_url` is set); past 30 findings, archive pages numbered from the earliest |
 | `compare.html` | Side-by-side person comparison |
 | `connections.html` | Shortest path through recorded relationships |
@@ -55,12 +55,13 @@ All site assets are local and links are relative. Test both desktop and mobile b
 
 ### Large sites
 
-Past 300 people, events, places or sources (300 relationships, claims or findings for those lists), a site stops writing every record into its tool pages, so each page stays small:
+Past 300 people, events, places, sources or studies (300 relationships, claims or findings for those lists), a site stops writing every record into its tool pages, so each page stays small:
 
 - The catalogue writes its first 100 people; `catalogue/page-<n>.html` holds the rest in name order. With JavaScript, search, filters and pages cover everyone from `data/site-data.js`.
 - The timeline lists its decades; `timeline/<decade>s.html` (and `timeline/undated.html`) holds each decade's events, and an event's link points there. With JavaScript, the timeline search covers every event.
 - Places lists its countries and regions; `places/<region>.html` holds each region's places, 100 to a page. The map is drawn by the script.
 - Sources writes its first 100 sources; `sources/page-<n>.html` holds the rest in title order. With JavaScript, the search covers every source.
+- Studies writes the 100 most recently updated studies; `studies/page-<n>.html` lists every study in title order, starting at `studies/page-1.html` because the studies page itself is in date order. Each study keeps its own page. With JavaScript, the search covers every study's title, summary and linked people; the shared data never carries a study's body.
 - Person menus on the tree, compare and connections pages are filled by the script. Relationships and claims are shown on their subject's page, and findings on the findings log and its archive.
 
 The paged pages are plain lists that need no script.

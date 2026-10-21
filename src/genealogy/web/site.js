@@ -162,6 +162,24 @@ function sourceSearch(){
   input.addEventListener('input',show);show();return;}
  const draw=()=>{let shown=0;rows.forEach(r=>{r.hidden=!norm(r.textContent).includes(norm(input.value));if(!r.hidden)shown++;});count.textContent=`${shown} of ${rows.length} sources shown`;};input.addEventListener('input',draw);draw();
 }
+// Study statuses as the pages word them (labels.CLAIM_STATUS and RESEARCH_STATUS).
+const STUDY_STATUS={asserted:'Asserted',supported:'Supported',disputed:'Disputed',rejected:'Rejected',open:'Open',draft:'Draft',closed:'Closed',resolved:'Resolved',final:'Final',abandoned:'Set aside',superseded:'Superseded',confirmed:'Confirmed',reviewed:'Reviewed',published:'Published','in progress':'In progress','in-progress':'In progress'};
+function studySearch(){
+ const host=$('[data-studies]');if(!host)return;const cards=$$('[data-study-id]',host);if(!cards.length)return;const input=el('input');input.type='search';input.placeholder='Title, summary or person';const bar=el('div',undefined,'toolbar');bar.append(field('Search studies',input));host.before(bar);const count=el('p',undefined,'result-count');host.before(count);
+ // Titles, summaries and the names of the people each study links; never the study's body.
+ const all=list('studies'),studyBy=new Map(all.map(s=>[s.id,s])),urls=Object.fromEntries(Object.entries(data.site?.study_urls||{}).map(([id,url])=>[id,window.GENEALOGY_SITE_DATA?root+url:url]));
+ const linked=s=>(s?.related_ids||[]).filter(id=>personBy.has(id)).map(id=>name(personBy.get(id)));
+ // A large site writes out the most recently updated studies only; the search covers every study in the shared data.
+ if(Number(host.dataset.total||0)>cards.length&&all.length>cards.length){const pages=$('[data-study-pages]'),results=el('ul',undefined,'record-list'),LIMIT=100;results.hidden=true;host.after(results);count.setAttribute('role','status');
+  const text=new Map(all.map(s=>[s.id,norm([s.title,s.summary,...linked(s)].join(' '))]));const sorted=[...all].sort((a,b)=>String(b.updated_on||'').localeCompare(String(a.updated_on||''))||String(b.title).localeCompare(String(a.title)));
+  const item=s=>{const li=el('li'),a=el('a',s.title||s.id),meta=el('p');if(urls[s.id])a.href=urls[s.id];li.append(a);const badge=el('span',STUDY_STATUS[String(s.status||'').toLowerCase()]||s.status||'Draft','badge');badge.dataset.status=s.status||'';meta.append(badge);if(s.updated_on)meta.append(' ',el('span',`Updated ${s.updated_on}`,'meta'));li.append(meta);return li;};
+  const show=()=>{const words=norm(input.value).trim().split(/\s+/).filter(Boolean);const searching=words.length>0;host.hidden=searching;if(pages)pages.hidden=searching;results.hidden=!searching;if(!searching){count.textContent=`${all.length.toLocaleString()} studies, the ${cards.length} most recently updated on this page. Search to find any study.`;return;}
+   const found=sorted.filter(s=>words.every(w=>text.get(s.id).includes(w)));results.replaceChildren(...found.slice(0,LIMIT).map(item));
+   count.textContent=found.length>LIMIT?`The first ${LIMIT} of ${found.length.toLocaleString()} matching studies, most recently updated first. Refine the search to see the others.`:`${found.length.toLocaleString()} of ${all.length.toLocaleString()} studies shown`;};
+  input.addEventListener('input',show);show();return;}
+ const texts=new Map(cards.map(c=>[c,norm([c.textContent,...linked(studyBy.get(c.dataset.studyId))].join(' '))]));
+ const draw=()=>{const words=norm(input.value).trim().split(/\s+/).filter(Boolean);let shown=0;cards.forEach(c=>{c.hidden=!words.every(w=>texts.get(c).includes(w));if(!c.hidden)shown++;});count.textContent=`${shown} of ${cards.length} studies shown`;};input.addEventListener('input',draw);draw();
+}
 function map(){
  const host=$('#map-output');if(!host)return;
  const located=places.filter(p=>typeof p.latitude==='number'&&typeof p.longitude==='number'&&Number.isFinite(p.latitude)&&Number.isFinite(p.longitude)&&Math.abs(p.latitude)<=90&&Math.abs(p.longitude)<=180);
@@ -189,5 +207,5 @@ function overview(){
 }
 function bookmarks(){
  if(view!=='person')return;const id=document.body.dataset.personId;if(!id)return;try{const key='genealogy-workbench-bookmarks',saved=new Set(JSON.parse(localStorage.getItem(key)||'[]'));const button=el('button');const render=()=>{button.textContent=saved.has(id)?'★ Saved on this device':'☆ Save on this device';button.setAttribute('aria-pressed',String(saved.has(id)));};render();button.addEventListener('click',()=>{saved.has(id)?saved.delete(id):saved.add(id);try{localStorage.setItem(key,JSON.stringify([...saved]));render();announce('Saved people updated on this device.');}catch(_){announce('Browser storage is unavailable.');}});($('.page-header')||$('main'))?.append(button);}catch(_){} }
-const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,map,bookmarks];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
+const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 })();

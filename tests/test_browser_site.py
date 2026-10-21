@@ -181,7 +181,7 @@ class BrowserSiteTests(unittest.TestCase):
             axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
             for route in ('tree.html', 'compare.html', 'research.html', 'sitemap.html', 'findings.html', 'findings/page-1.html',
                           'catalogue.html', 'catalogue/page-2.html', 'timeline.html', 'timeline/1700s.html', 'places.html', 'places/fableland.html',
-                          'sources.html', 'sources/page-2.html'):
+                          'sources.html', 'sources/page-2.html', 'studies.html', 'studies/page-2.html'):
                 with self.subTest(route=route):
                     self.page.goto(large + route, wait_until='networkidle')
                     self.page.add_script_tag(content=axe)
@@ -241,6 +241,30 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual(1, result.count())
         result.click()
         self.assertTrue(self.page.locator(':target').inner_text().startswith('Invented register volume 0390'))
+
+        # Studies: the newest are written out; the search covers every study, including linked people's names.
+        self.page.goto(large + 'studies.html', wait_until='networkidle')
+        self.assertIn(f'{people:,} studies, the 100 most recently updated on this page', self.page.locator('.result-count').inner_text())
+        self.assertEqual('status', self.page.locator('.result-count').get_attribute('role'))
+        self.assertEqual(100, self.page.locator('[data-study-id]:visible').count())
+        self.page.get_by_role('searchbox', name='Search studies').fill('0390 Fable')  # "Fable" is only in the linked person's name
+        self.assertFalse(self.page.locator('[data-studies]').is_visible())
+        self.assertFalse(self.page.locator('[data-study-pages]').is_visible())
+        self.assertIn(f'1 of {people:,} studies shown', self.page.locator('.result-count').inner_text())
+        result = self.page.get_by_role('link', name='Study of person 0390')
+        self.assertEqual(1, result.count())
+        self.assertIn('Updated 2025-07-27', result.locator('..').inner_text())
+        result.click()
+        self.assertEqual('Study of person 0390', self.page.locator('h1').inner_text())
+        self.page.go_back(wait_until='networkidle')
+        self.page.get_by_role('searchbox', name='Search studies').fill('weaver')
+        self.assertIn(f'The first 100 of {people:,} matching studies', self.page.locator('.result-count').inner_text())
+        self.page.get_by_role('searchbox', name='Search studies').fill('')
+        self.assertTrue(self.page.locator('[data-study-pages]').is_visible())
+        self.page.goto(large + 'studies/page-2.html', wait_until='networkidle')
+        self.assertEqual(0, self.page.get_by_role('searchbox').count())
+        self.page.get_by_role('link', name='Study of person 0150').click()
+        self.assertEqual('Study of person 0150', self.page.locator('h1').inner_text())
         self.page.goto(large + 'timeline/1700s.html', wait_until='networkidle')
         self.assertIn('Timeline: 1700s', self.page.locator('h1').inner_text())
         self.assertEqual([], self.errors)
@@ -289,6 +313,15 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.goto(self.base + 'sources.html')
         self.page.get_by_role('searchbox', name='Search sources').fill('no-such-synthetic-source')
         self.assertEqual(0, self.page.locator('[data-source-id]:visible').count())
+        self.page.goto(self.base + 'studies.html')
+        studies = self.page.locator('[data-study-id]')
+        self.assertGreater(studies.count(), 0)
+        self.page.get_by_role('searchbox', name='Search studies').fill('no-such-synthetic-study')
+        self.assertEqual(0, self.page.locator('[data-study-id]:visible').count())
+        self.page.get_by_role('searchbox', name='Search studies').fill('Mara Grove')  # a linked person named only in the data
+        self.assertEqual(1, self.page.locator('[data-study-id]:visible').count())
+        self.page.get_by_role('searchbox', name='Search studies').fill('')
+        self.assertEqual(studies.count(), self.page.locator('[data-study-id]:visible').count())
 
     def test_upload_gedcom_and_onetree_create_private_local_projects(self):
         for filename in ('family.ged', 'one-tree.json'):

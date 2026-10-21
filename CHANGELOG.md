@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The studies page can be searched by title, summary or the people a study links. Past 300 studies it writes the 100 most recently updated, `studies/page-<n>.html` lists every study by title, and the search covers every study from `data/site-data.js`, which carries no study bodies. The site index links to these pages instead of listing every study. See [Large sites](docs/deployment.md#large-sites).
+
 ## 0.6.0 — 20 October 2026
 
 - A citation can carry an `abstract`, your reading of the record in your own words; the site shows it with the citation. See [Summarise a record](docs/research.md#summarise-a-record).

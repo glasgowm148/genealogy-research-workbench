@@ -10,8 +10,9 @@ import unittest
 from genealogy.case import ResearchCase, validate_case
 from genealogy.config import ProjectConfig
 from genealogy.models import (AccessLevel as A, Citation, Claim, ClaimStatus, Event, Evidence, Finding,
-                              LivingStatus as L, Name, Person, Place, Relationship, Source)
-from genealogy.site import BROWSER_FIELDS, CATALOGUE_PER_PAGE, INLINE_LIMIT, PLACES_PER_PAGE, SOURCES_PER_PAGE, _anchor, build_site
+                              LivingStatus as L, Name, Person, Place, Relationship, Source, Study)
+from genealogy.site import (BROWSER_FIELDS, CATALOGUE_PER_PAGE, INLINE_LIMIT, PLACES_PER_PAGE, SOURCES_PER_PAGE, STUDIES_PER_PAGE,
+                            _anchor, build_site)
 from genealogy.sitecheck import check_site
 
 PEOPLE = INLINE_LIMIT + 100
@@ -39,6 +40,10 @@ def large_case(people: int = PEOPLE) -> ResearchCase:
             Evidence(f"{pid}-e", f"{pid}-c", f"{pid}-cit", "The register names the trade.", sensitivity=A.PUBLIC),
             Finding(f"{pid}-f", f"Finding about person {n:04d}.", related_ids=[pid], status="reviewed",
                     recorded_on=f"2026-{1 + n % 12:02d}-{1 + n % 28:02d}", sensitivity=A.PUBLIC),
+            # One study per person, so the studies also pass INLINE_LIMIT.
+            Study(f"{pid}-s", f"Study of person {n:04d}", summary="Whether the register entries describe one weaver.",
+                  body=f"Study body {n:04d}: BODY-ONLY-ON-THE-STUDY-PAGE.", related_ids=[pid], status="reviewed" if n % 3 else "draft",
+                  updated_on=f"2025-{1 + n % 12:02d}-{1 + n % 28:02d}", sensitivity=A.PUBLIC),
         ]
         if n % 40 == 0:
             records.append(Event(f"{pid}-res", "residence", place_id=place.id, participant_ids=[pid], sensitivity=A.PUBLIC))
@@ -46,6 +51,8 @@ def large_case(people: int = PEOPLE) -> ResearchCase:
             records.append(Relationship(f"{pid}-r", pid, f"p{(n - 1) // 2:04d}", "parent", sensitivity=A.PUBLIC))
     records.append(Finding("open-1", "An open question still being worked.", related_ids=["p0001"], status="draft",
                            recorded_on="2026-10-20", sensitivity=A.PUBLIC))
+    records.append(Study("withheld-study", "SECRET-STUDY title", summary="SECRET-STUDY summary", related_ids=["p0001"],
+                         updated_on="2026-01-01", sensitivity=A.PRIVATE))
     case.add_many(records)
     return case
 
@@ -91,7 +98,7 @@ class LargeSiteTests(unittest.TestCase):
     def test_pages_stay_small(self):
         sizes = {str(p.relative_to(self.out)): p.stat().st_size for p in self.out.rglob("*.html")}
         for name in ("tree.html", "compare.html", "connections.html", "research.html", "sitemap.html", "findings.html", "index.html",
-                     "catalogue.html", "timeline.html", "places.html"):
+                     "catalogue.html", "timeline.html", "places.html", "studies.html", "studies/page-1.html"):
             self.assertIn(name, sizes)
         for name, size in sizes.items():
             self.assertLess(size, 100_000, name)
@@ -152,10 +159,47 @@ class LargeSiteTests(unittest.TestCase):
         self.assertIn('"title": "Invented register volume 0390"', script)
         self.assertIn("sources/page-", script)
 
+    def test_studies_write_the_newest_and_keep_every_study_on_title_pages(self):
+        studies = self.text("studies.html")
+        shown = re.findall(r'data-study-id="([^"]+)"', studies)
+        self.assertIn(f'data-total="{PEOPLE}"', studies)
+        public = json.loads(self.text("data/site.json"))["studies"]
+        newest = sorted(public, key=lambda s: (s["updated_on"], s["title"]), reverse=True)[:STUDIES_PER_PAGE]
+        self.assertEqual([s["id"] for s in newest], shown)
+        self.assertNotIn("Study of person 0390", studies)
+        pages = sorted((self.out / "studies").glob("page-*.html"))
+        self.assertEqual(-(-PEOPLE // STUDIES_PER_PAGE), len(pages))
+        listed = re.findall(r'data-study-id="([^"]+)"', "".join(p.read_text() for p in pages))
+        self.assertEqual(sorted(f"p{n:04d}-s" for n in range(PEOPLE)), sorted(listed))
+        # The title pages start at 1: the studies page itself is newest first.
+        self.assertIn('href="studies/page-1.html">Study of person 0000 – Study of person 0099', studies)
+        second = self.text("studies/page-2.html")
+        self.assertIn('href="../studies/page-2.html" aria-current="page">Study of person 0100 – Study of person 0199', second)
+        self.assertIn('<a href="../studies/s-', second)
+        self.assertIn('<a href="../studies.html">Search the studies</a>', second)
+        self.assertIn("<title>Studies by title, page 2 —", second)
+        self.assertNotIn("Study of person 0123", self.text("sitemap.html"))
+        # The script can search every study, but never carries a study's body.
+        script = self.text("data/site-data.js")
+        self.assertIn('"title": "Study of person 0390"', script)
+        self.assertIn("studies/s-", script)
+        self.assertNotIn("BODY-ONLY-ON-THE-STUDY-PAGE", script)
+        study = next(p for p in (self.out / "studies").glob("s-*.html") if "<h1>Study of person 0390</h1>" in p.read_text()).read_text()
+        self.assertIn("BODY-ONLY-ON-THE-STUDY-PAGE", study)
+        self.assertEqual([], check_site(self.out)["broken"])
+
+    def test_a_withheld_study_is_in_no_output(self):
+        for path in self.out.rglob("*"):
+            if path.is_file():
+                text = path.read_text()
+                self.assertNotIn("SECRET-STUDY", text, path)
+                self.assertNotIn("withheld-study", text, path)
+
     def test_paged_pages_load_no_data_and_are_removed_when_no_longer_needed(self):
-        for page in ("catalogue/page-2.html", "timeline/1700s.html", "places/fableland.html", "sources/page-2.html"):
+        for page in ("catalogue/page-2.html", "timeline/1700s.html", "places/fableland.html", "sources/page-2.html", "studies/page-2.html"):
             self.assertNotIn("site-data.js", self.text(page), page)
         self.assertIn("site-data.js", self.text("catalogue.html"))
+        self.assertIn("site-data.js", self.text("studies.html"))
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
             config = ProjectConfig(name="Fictional")
@@ -163,6 +207,11 @@ class LargeSiteTests(unittest.TestCase):
             build_site(large_case(20), config, out)
             for folder in ("catalogue", "timeline", "places", "sources"):
                 self.assertEqual([], list((out / folder).glob("*.html")) if (out / folder).exists() else [], folder)
+            # The study pages stay; only the title pages go.
+            self.assertEqual([], list((out / "studies").glob("page-*.html")))
+            self.assertEqual(20, len(list((out / "studies").glob("s-*.html"))))
+            self.assertEqual(20, (out / "studies.html").read_text().count("data-study-id="))
+            self.assertNotIn("data-study-pages", (out / "studies.html").read_text())
             self.assertIn("data-event-id", (out / "timeline.html").read_text())
             self.assertEqual([], check_site(out)["broken"])
 
@@ -175,6 +224,9 @@ class LargeSiteTests(unittest.TestCase):
             self.assertTrue(all(set(row) <= set(fields) for row in data[key]), key)
         self.assertNotIn("sensitivity", script)
         self.assertEqual({"value", "surname"}, set(data["people"][0]["names"][0]))
+        # A study carries what the studies search reads, never its body or reasoning.
+        self.assertEqual({"id", "title", "summary", "status", "updated_on", "related_ids"}, set(data["studies"][0]))
+        self.assertEqual(PEOPLE, len(data["site"]["study_urls"]))
         # The full public export is still published beside it.
         full = json.loads(self.text("data/site.json"))
         self.assertEqual(len(full["people"]), len(data["people"]))
