@@ -3078,12 +3078,14 @@
       },
       {
         "id": "question:household",
+        "next_record": null,
         "priority": "normal",
         "question": "Which invented household return best connects the Willowmere branch to Lanternford?",
         "related_ids": [
           "person:11",
           "person:19"
         ],
+        "resolves": "An invented household return naming both branches at one address.",
         "sensitivity": "public",
         "status": "open"
       }

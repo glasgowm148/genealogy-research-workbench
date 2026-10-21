@@ -56,6 +56,7 @@ BROWSER_FIELDS = {
     # Never a study's body or reasoning: long prose, read on the study's own page.
     "studies": ("id", "title", "summary", "status", "updated_on", "related_ids"),
 }
+OUTSTANDING = ("open", "draft")  # research statuses the notebook lists first as work still to do
 BROAD_PRECISIONS = {"parish", "district", "county", "region", "country", "approximate"}
 ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
 MANIFEST = ".genealogy-site-manifest.json"
@@ -350,6 +351,14 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             parts.append('<p class="meta">Records:</p><ul class="finding-records">' + "".join(cited) + "</ul>")
         return "".join(parts)
 
+    def question_next(row: dict[str, Any], prefix: str = "") -> str:
+        """An open question's plan; a blank says so rather than leaving the reader to guess."""
+        if str(row.get("status", "open")).casefold() not in OUTSTANDING:
+            return ""
+        gap = f'<a class="not-identified" href="{prefix}evidence.html#not-yet-identified">Not yet identified</a>'
+        return ('<dl class="question-next">' + "".join(f'<dt>{label}</dt><dd>{_text(row[key]) if row.get(key) else gap}</dd>'
+                for key, label in (("resolves", "What would answer this"), ("next_record", "Next record to check"))) + '</dl>')
+
     def finding_kind(row: dict[str, Any]) -> str:
         return f' <span class="badge finding-kind" data-kind="{_text(row["kind"])}">{_text(str(row["kind"]).replace("-", " ").replace("_", " ").capitalize())}</span>' if row.get("kind") else ""
 
@@ -574,14 +583,14 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         + "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex" and c["id"] not in home_of)
         if compact_claims else "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex") or '<p>No public claims recorded.</p>')]
     for collection, heading, field in (("hypotheses", "Hypotheses", "statement"), ("questions", "Research questions", "question"), ("findings", "Findings", "conclusion")):
-        rows = sorted(project[collection], key=lambda r: (str(r.get("status", "open")).casefold() not in ("open", "draft"), r["id"]))
-        outstanding = sum(str(r.get("status", "open")).casefold() in ("open", "draft") for r in rows)
+        rows = sorted(project[collection], key=lambda r: (str(r.get("status", "open")).casefold() not in OUTSTANDING, r["id"]))
+        outstanding = sum(str(r.get("status", "open")).casefold() in OUTSTANDING for r in rows)
         if collection == "findings" and compact_findings:
             # The findings log and its archive hold every finding; the notebook keeps the open work.
             research.append(f'<h2>{heading}</h2><p class="result-count">{outstanding} of {len(rows):,} open or in draft. All findings are in the <a href="findings.html">findings log</a>.</p>'
-                            + empty([f'<li data-status="{_text(r.get("status", ""))}">{ref(r["id"], label=r[field])}{metadata(r)}</li>' for r in rows if str(r.get("status", "open")).casefold() in ("open", "draft")], "No open or draft findings."))
+                            + empty([f'<li data-status="{_text(r.get("status", ""))}">{ref(r["id"], label=r[field])}{metadata(r)}</li>' for r in rows if str(r.get("status", "open")).casefold() in OUTSTANDING], "No open or draft findings."))
             continue
-        research.append(f'<h2>{heading}</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r[field])}</h3>{metadata(r)}{finding_kind(r) if collection == "findings" else ""}{finding_details(r) if collection == "findings" else ""}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in rows]))
+        research.append(f'<h2>{heading}</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r[field])}</h3>{metadata(r)}{finding_kind(r) if collection == "findings" else ""}{finding_details(r) if collection == "findings" else ""}{question_next(r) if collection == "questions" else ""}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in rows]))
     pages["research.html"] = "".join(research)
     for route, heading, hook in (("compare.html", "Compare people", "compare"), ("connections.html", "Find a connection", "connection")):
         pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + browse_people
@@ -779,7 +788,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         content += family(pid)
         content += '<h2>Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2>Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
         content += '<h2>Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
-        content += '<h2>Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}</li>' for r in research_by_subject[pid]]) + '<h2>All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2>External identifiers</h2>' + empty(external)
+        content += '<h2>Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}{question_next(r, "../") if "question" in r else ""}</li>' for r in research_by_subject[pid]]) + '<h2>All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2>External identifiers</h2>' + empty(external)
         pages[people_urls[pid]] = content
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]

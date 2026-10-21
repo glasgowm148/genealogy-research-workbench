@@ -116,6 +116,7 @@ def guide_entries(grades: Mapping[str, Mapping[str, str]] | None = None) -> list
     rows += [(f"status-{key}", label, meaning, "Claim status") for key, (label, meaning) in CLAIM_STATUS.items()]
     rows += [(f"status-{key}", RESEARCH_STATUS[key], meaning, "Research status") for key, meaning in RESEARCH_MEANINGS.items()]
     rows.append(("research-status", "Other statuses", "A project's own wording for the state of a question, hypothesis, finding or study, printed as recorded.", "Research status"))
+    rows.append(("not-yet-identified", "Not yet identified", "Printed on an open question when the researcher has not yet recorded what evidence would answer it, or which record to check next. It marks a gap in the plan, not a search that found nothing.", "Research status"))
     rows.append(("pedigree", "Step, adoptive, foster, non-biological", "The supplied nature of a parent link. A link without one is a recorded parent whose nature was not stated.", "Relationship roles"))
     rows.append(("recorded-sibling", "Recorded sibling", "A sibling or half-sibling link recorded in its own right, not only inferred from parents in common. It carries its own label, and a sibling who also shares recorded parents is listed once, with that label.", "Relationship roles"))
     rows.append(("alternatives", "Competing parent records", "More recorded parents than one person can have by birth. Each is kept with its own label until research resolves it.", "Relationship roles"))

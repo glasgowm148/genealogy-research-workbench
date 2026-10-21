@@ -58,6 +58,26 @@ Use real IDs already in the selected case; validation rejects missing references
 
 The strict CLI adds records; it does not silently replace an existing record. To revise an existing assessment, back up the case and edit its typed JSON (or use the Python API), then run `genealogy validate`. Review all changed public text before rebuilding. To refresh a tree from a newer export while keeping the findings, questions and studies you added, use `genealogy import FILE --update` ([details](imports.md#importing-again)).
 
+## Record a research question
+
+A research question names something you have not yet established, such as a missing parent, a date or a household. While its `status` is `open` or `draft`, two optional fields record your plan for answering it:
+
+- `resolves`: what evidence would answer the question;
+- `next_record`: the next record you mean to check.
+
+```json
+{"id": "question:ann-parents", "question": "Who were Ann's parents?", "related_ids": ["gedcom:person:I1"],
+ "status": "open", "priority": "high",
+ "resolves": "A baptism or marriage entry that names Ann's father and mother.",
+ "next_record": "Harbour parish register, baptisms 1835–1840", "sensitivity": "public"}
+```
+
+```sh
+genealogy --project my-family record add ResearchQuestion --input question.json
+```
+
+On **Research** and in the dossier of each related person, an open question shows "What would answer this" and "Next record to check". A blank field prints "Not yet identified", so readers can see which steps are still unplanned. The toolkit never fills a blank in for you. Once a question is answered or closed (any other status), neither line is shown. There is no `question add` command: add questions with `record add`, and to change one, edit its JSON.
+
 ## Assess a relationship
 
 Imported links stay "Unassessed tree link" until you assess them. To record an assessment, edit the relationship's `confidence` (`documented`, `probable`, `possible` or `disproved`) and, if you work with probabilities, an `estimate` from 1 to 99 per cent. Record the reasoning in a claim, evidence assessment or finding linked to it. The site shows, for example, "Probable (70%)". A percentage is your assessed estimate: imports never set one, and import review clears any it finds.

@@ -255,6 +255,10 @@ class ResearchQuestion(Record):
     priority: str = "normal"
     status: str = "open"
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    # What evidence would answer the question, and the next record to check.
+    # Shown on open questions; a blank prints "Not yet identified", never a guess.
+    resolves: str | None = None
+    next_record: str | None = None
 
 
 @dataclass(slots=True)
