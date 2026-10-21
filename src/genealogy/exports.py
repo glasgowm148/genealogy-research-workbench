@@ -15,12 +15,13 @@ from .maps import geojson, render_map_html
 from .privacy import PrivacyPolicy
 from .timelines import render_timeline, render_timeline_html, timeline_items
 
-COLLECTIONS = ("people", "names", "events", "places", "relationships", "claims", "sources", "citations", "evidence", "hypotheses", "questions", "findings", "studies")
+COLLECTIONS = ("people", "names", "events", "places", "relationships", "claims", "sources", "citations", "evidence", "hypotheses", "questions", "findings", "studies", "searches")
 CASE_COLLECTIONS = {
     "Person": "people", "Name": "names", "Event": "events", "Place": "places",
     "Relationship": "relationships", "Claim": "claims", "Source": "sources",
     "Citation": "citations", "Evidence": "evidence", "Hypothesis": "hypotheses",
     "ResearchQuestion": "questions", "Finding": "findings", "Study": "studies",
+    "Search": "searches",
 }
 
 

@@ -166,6 +166,7 @@ def validate_case(case: ResearchCase) -> list[str]:
         "Finding": {"related_ids": None, "evidence_ids": "Evidence", "citation_ids": "Citation",
                     "changes[].record_id": ("Relationship", "Claim")},
         "Study": {"related_ids": None, "groups[].member_ids": "Person", "links[].evidence_ids": ("Evidence", "Citation")},
+        "Search": {"related_ids": None, "citation_ids": "Citation"},
         "ImportProvenance": {"entity_ids": None},
     }
     # A former id stays retired: it cannot be a current id or belong to two
@@ -356,6 +357,7 @@ def _validate_record_fields(record: Record) -> list[str]:
         "ResearchQuestion": ("question", "priority", "status"),
         "Finding": ("conclusion", "status"),
         "Study": ("title", "status"),
+        "Search": ("search", "result"),
         "ImportProvenance": ("adapter",),
     }
     for field_name in string_fields.get(type(record).__name__, ()):
@@ -398,7 +400,7 @@ def _validate_record_fields(record: Record) -> list[str]:
                     errors.append(f"{record.id}.names require a non-empty value")
                 if not isinstance(name.confidence, Confidence):
                     errors.append(f"{record.id}.names require recognised confidence")
-    for field_name in ("recorded_on", "updated_on"):
+    for field_name in ("recorded_on", "updated_on", "searched_on"):
         value = getattr(record, field_name, None)
         if value is not None and not (isinstance(value, str) and _iso_date(value)):
             errors.append(f"{record.id}.{field_name} must be an ISO date (YYYY, YYYY-MM or YYYY-MM-DD)")

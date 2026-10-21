@@ -27,6 +27,7 @@ from .maps import geojson
 # browse the paged pages instead. Keeps every page small at thousands of people.
 INLINE_LIMIT = 300
 LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are on archive pages
+LATEST_SEARCHES = 50  # research.html lists the newest searches; each dossier lists all of its own
 FINDINGS_PER_PAGE = 50
 CATALOGUE_PER_PAGE = 100  # people per catalogue page on a large site, in name order
 PLACES_PER_PAGE = 100  # places per region page on a large site
@@ -336,6 +337,19 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                     route = f"findings/page-{archive_page[row['id']]}.html" if row["id"] in archive_page else "findings.html"
                 route += "#" + _anchor(row["id"])
             record_routes[row["id"]] = route
+    # The research log: each search is listed, newest first (undated last), on
+    # the dossier of every person it was made for, and is addressed on the first
+    # of those. One made for no public person is addressed on research.html,
+    # anchored only while it is among the newest listed there.
+    searches_newest = sorted(project["searches"], key=lambda s: (str(s.get("searched_on") or ""), s["id"]), reverse=True)
+    searches_by_subject: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in searches_newest:
+        for rid in dict.fromkeys(row.get("related_ids", [])):
+            searches_by_subject[rid].append(row)
+    searches_logged = {row["id"] for row in searches_newest[:LATEST_SEARCHES]}
+    for row in searches_newest:
+        home = next((people_urls[rid] for rid in row.get("related_ids", []) if rid in people_urls), None)
+        record_routes[row["id"]] = (home or "research.html") + ("#" + _anchor(row["id"]) if home or row["id"] in searches_logged else "")
 
     def person_name(pid: str) -> str:
         p = people.get(pid, {})
@@ -1259,6 +1273,28 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 f'<p>{ref(newest["id"], "../", newest["conclusion"])}{metadata(newest, "../")}</p><p class="meta">Recorded {_text(newest["recorded_on"])}</p>'
                 f'<p class="meta research-date">Research last recorded {_text(last)}</p></aside>')
 
+    def search_item(row: dict[str, Any], prefix: str = "", *, omit: str | None = None) -> str:
+        """One search: when, where it looked, what it found (often nothing), what it could not cover and the records found."""
+        found = [f"<li>{record_link(cid, prefix)}</li>" for cid in row.get("citation_ids", []) if cid in citations]
+        others = [ref(rid, prefix, record_label(rid)) for rid in row.get("related_ids", []) if rid != omit]
+        details = [("Searched", _text(row["search"])), ("Result", _text(row["result"]))]
+        details += [("Limits", _text(row["limitation"]))] if row.get("limitation") else []
+        details += [("Records found", '<ul class="finding-records">' + "".join(found) + "</ul>")] if found else []
+        details += [("Also for" if omit else "For", ", ".join(others))] if others else []
+        return (f'<li id="{_anchor(row["id"])}"><p class="search-date"><strong>{_text(row.get("searched_on") or "Date not recorded")}</strong></p>'
+                '<dl class="search-details">' + "".join(f"<dt>{label}</dt><dd>{value}</dd>" for label, value in details) + "</dl></li>")
+
+    def research_log(pid: str) -> str:
+        rows = searches_by_subject[pid]
+        return ('<h2 id="research-log">Research log</h2>' + ('<p class="meta">Searches made for this person, newest first, including those that found nothing.</p>' if rows else "")
+                + empty([search_item(r, "../", omit=pid) for r in rows], "No public searches recorded for this person.").replace('class="record-list"', 'class="record-list research-log"', 1))
+
+    total_searches = len(searches_newest)
+    pages["research.html"] += ('<h2 id="research-log">Research log</h2><p>Where each search looked and what it found, including searches that found nothing, so that they need not be repeated.</p>'
+                               + (f'<p class="result-count">The newest {LATEST_SEARCHES} of {total_searches:,} searches. Each person\'s page lists every search made for them.</p>' if total_searches > LATEST_SEARCHES
+                                  else f'<p class="result-count">{total_searches} search{"" if total_searches == 1 else "es"}, newest first.</p>' if total_searches else "")
+                               + empty([search_item(r) for r in searches_newest[:LATEST_SEARCHES]], "No public searches recorded.").replace('class="record-list"', 'class="record-list research-log"', 1))
+
     for pid, person in people.items():
         related_events = events_by_person[pid]
         subject_ids = {pid, *(e["id"] for e in related_events)}
@@ -1279,7 +1315,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         family_rows = parents_of[pid] or partners_of[pid] or children_of[pid] or [r for r, _ in siblings_of[pid] if r.get("confidence") != "disproved"]
         jumps = [("names", "Names", name_items), ("biography", "Biography", person.get("notes")), ("family-heading", "Family", family_rows),
                  ("events", "Events", related_events), ("claims", "Claims and evidence", personal_claims), ("studies", "Studies", studies_by_subject[pid]),
-                 ("research", "Research", research_by_subject[pid]), ("relationships", "All relationships", related_rels), ("external", "External identifiers", external)]
+                 ("research", "Research", research_by_subject[pid]), ("research-log", "Research log", searches_by_subject[pid]), ("relationships", "All relationships", related_rels), ("external", "External identifiers", external)]
         if any(filled for _, _, filled in jumps):
             content += '<nav class="page-sections" aria-label="On this page"><ul>' + "".join(f'<li><a href="#{key}">{label}</a></li>' for key, label, filled in jumps if filled) + "</ul></nav>"
         explore = [(f"tree.html?person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
@@ -1296,7 +1332,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         content += family(pid)
         content += '<h2 id="events">Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2 id="claims">Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
         content += '<h2 id="studies">Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
-        content += '<h2 id="research">Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}{question_next(r, "../") if "question" in r else ""}</li>' for r in research_by_subject[pid]]) + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
+        content += '<h2 id="research">Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}{question_next(r, "../") if "question" in r else ""}</li>' for r in research_by_subject[pid]]) + research_log(pid) + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
         if "corrections.html" in routes:
             content += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
                                                            if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"

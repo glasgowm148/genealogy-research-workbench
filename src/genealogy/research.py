@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable, TypeVar
 
 from .case import NESTED_REFERENCES, CaseStore, ResearchCase, reference_values, validate_case
-from .models import MODEL_TYPES, Claim, Evidence, Finding, Hypothesis, Record, ResearchQuestion
+from .models import MODEL_TYPES, Claim, Evidence, Finding, Hypothesis, Record, ResearchQuestion, Search
 
 
 TRecord = TypeVar("TRecord", bound=Record)
@@ -101,6 +101,9 @@ class ResearchService:
 
     def add_finding(self, case_id: str, finding: Finding) -> Finding:
         return self._add(case_id, finding)
+
+    def add_search(self, case_id: str, search: Search) -> Search:
+        return self._add(case_id, search)
 
     def add_hypothesis(self, case_id: str, hypothesis: Hypothesis) -> Hypothesis:
         return self._add(case_id, hypothesis)

@@ -18,7 +18,7 @@ from .exports import (
     build_public_views, configured_views, project_for_public_export, render, safe_output_path,
 )
 from .artifacts import read_case_artifact_bundle, write_case_artifact_bundle
-from .models import AccessLevel, Confidence, Finding, MODEL_TYPES, Record, record_from_dict
+from .models import AccessLevel, Confidence, Finding, MODEL_TYPES, Record, Search, record_from_dict
 from .research import ResearchService
 
 def load_case(directory: Path, case_id: str | None = None) -> tuple[ResearchCase, ProjectConfig]:
@@ -175,7 +175,21 @@ def build_project(case: ResearchCase, config: ProjectConfig, output: Path) -> No
     build_site(case, config, output)
 
 
-def parser() -> argparse.ArgumentParser:
+def logs_search(argv: list[str]) -> bool:
+    """Whether the command is ``search add ID TEXT ...`` rather than a search for the word "add"."""
+    index = 0
+    while index < len(argv):
+        word = argv[index]
+        if word in ("--project", "--case"):
+            index += 2
+        elif word.startswith("-"):
+            index += 1
+        else:
+            return word == "search" and argv[index + 1:index + 2] == ["add"] and len(argv) > index + 2
+    return False
+
+
+def parser(log_search: bool = False) -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(prog="genealogy", description="Portable genealogy research toolkit")
     try:
         installed_version = version("genealogy-research-workbench")
@@ -254,9 +268,28 @@ def parser() -> argparse.ArgumentParser:
         choices=(AccessLevel.PUBLIC, AccessLevel.PRIVATE, AccessLevel.RESTRICTED, AccessLevel.LICENSED),
         default=AccessLevel.PRIVATE,
     )
-    search = commands.add_parser("search", help="search typed records in the selected case")
-    search.add_argument("query")
-    search.add_argument("--kind", help="optional model type, such as Person or Source")
+    search = commands.add_parser("search", help="search typed records in the selected case; 'search add' logs a search you made")
+    if log_search:
+        # Kept apart from the record search so "genealogy search TEXT" still works.
+        search_commands = search.add_subparsers(dest="search_command", required=True)
+        add_search = search_commands.add_parser("add", help="log a search made, including one that found nothing")
+        add_search.add_argument("search_id")
+        add_search.add_argument("search", help="what was searched: repository, collection, years and names")
+        add_search.add_argument("--result", required=True, help='what was found, including "nothing"')
+        add_search.add_argument("--on", dest="searched_on", help="ISO date of the search (YYYY, YYYY-MM or YYYY-MM-DD)")
+        add_search.add_argument("--for", dest="related", nargs="+", action="extend", required=True, metavar="RELATED_ID",
+                                help="the people, places or sources searched for")
+        add_search.add_argument("--cite", nargs="+", action="extend", default=[], metavar="CITATION_ID",
+                                help="a record the search found")
+        add_search.add_argument("--limitation", help="what the search could not cover, e.g. an index only, or missing years")
+        add_search.add_argument(
+            "--sensitivity",
+            choices=(AccessLevel.PUBLIC, AccessLevel.PRIVATE, AccessLevel.RESTRICTED, AccessLevel.LICENSED),
+            default=AccessLevel.PRIVATE,
+        )
+    else:
+        search.add_argument("query")
+        search.add_argument("--kind", help="optional model type, such as Person or Source")
     report = commands.add_parser("report", help="summarise unresolved work and evidence completeness")
     report.add_argument("--format", choices=("json", "markdown"), default="json")
     report.add_argument("--output", type=Path)
@@ -264,7 +297,8 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv)
+    argv = sys.argv[1:] if argv is None else argv
+    args = parser(logs_search(argv)).parse_args(argv)
     try:
         if args.command == "init":
             target = args.directory
@@ -380,6 +414,19 @@ def main(argv: list[str] | None = None) -> int:
             record = record_payload(args.input, args.record_type)
             service.add_record(case.id, record)
             print(f"Recorded {args.record_type} {record.id} in case {case.id}.")
+            return 0
+        if args.command == "search" and getattr(args, "search_command", None) == "add":
+            search = Search(
+                id=args.search_id, search=args.search, result=args.result, related_ids=args.related,
+                searched_on=args.searched_on, limitation=args.limitation, citation_ids=args.cite,
+                sensitivity=AccessLevel(args.sensitivity),
+            )
+            case.add(search)
+            errors = validate_case(case)
+            if errors:
+                raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
+            service.add_search(case.id, search)
+            print(f"Logged search {args.search_id} in case {case.id}.")
             return 0
         if args.command == "search":
             matches = service.search_records(case.id, args.query, kind=args.kind)

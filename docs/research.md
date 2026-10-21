@@ -83,6 +83,29 @@ genealogy --project my-family record add ResearchQuestion --input question.json
 
 On **Research** and in the dossier of each related person, an open question shows "What would answer this" and "Next record to check". A blank field prints "Not yet identified", so readers can see which steps are still unplanned. The toolkit never fills a blank in for you. Once a question is answered or closed (any other status), neither line is shown. There is no `question add` command: add questions with `record add`, and to change one, edit its JSON.
 
+## Log a search
+
+Record each search you make, and especially the ones that found nothing. A negative result is evidence too: it shows which records have been checked, so neither you nor the next researcher repeats the search, and it is part of showing that a search was reasonably exhaustive.
+
+```sh
+genealogy --project my-family search add search:ada-baptism \
+  "Invented Harbour parish register, baptisms 1795–1810, Fable and Fabel" \
+  --result "Nothing found for Ada or any Fable child." \
+  --on 2026-03-02 --for gedcom:person:I1 place:harbour \
+  --limitation "The 1799 pages are missing from the film." --sensitivity public
+```
+
+- The search text says what was searched: the repository, the collection, the years and the names or spellings tried.
+- `--result` is required. Write "nothing" or what you found, in your own words.
+- `--for` lists the people, places or sources the search was made for (one or more IDs; `--for` may be repeated).
+- `--on` dates the search (YYYY, YYYY-MM or YYYY-MM-DD).
+- `--cite` links a citation for a record the search found (one or more; record the citation first).
+- `--limitation` says what the search could not cover, such as an index rather than the register, or missing years.
+
+In the case JSON a `Search` record is `{"id", "search", "result", "related_ids", "searched_on", "limitation", "citation_ids", "sensitivity"}`; you can also add one with `record add Search --input search.json`. Validation requires the search text and the result, checks the date, and checks that every related ID exists and every cited ID is a citation.
+
+Each person's page has a **Research log** section after **Research**, listing every search made for them, newest first (undated searches last), with the date, the search, the result, its limits, the records found and any other people or places it was made for. **Research** (`research.html`) ends with a **Research log** of the newest 50 searches and the total. A search is withheld from every page and download when it is not public itself, or when any person, place, source or citation it names is withheld, for example a living person.
+
 ## Assess a relationship
 
 Imported links stay "Unassessed tree link" until you assess them. To record an assessment, edit the relationship's `confidence` (`documented`, `probable`, `possible` or `disproved`) and, if you work with probabilities, an `estimate` from 1 to 99 per cent. Record the reasoning in a claim, evidence assessment or finding linked to it. The site shows, for example, "Probable (70%)". A percentage is your assessed estimate: imports never set one, and import review clears any it finds.

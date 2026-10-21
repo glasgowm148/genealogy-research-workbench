@@ -573,3 +573,23 @@ class BrowserSiteTests(unittest.TestCase):
                 self.assertTrue(all(c['status'] == 'asserted' for c in payload['claims']))
             denied = self.page.request.get(self.upload.origin + '/private/previews/')
             self.assertEqual(404, denied.status)
+
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'set GENEALOGY_AXE_PATH to an axe-core axe.min.js')
+    def test_research_log_passes_axe(self):
+        from test_research_log import LOG, log_case
+        build_site(log_case(*LOG), ProjectConfig(name='Fictional research log'), self.root / 'research-log')
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        dossier = next(p for p in (self.root / 'research-log' / 'people').glob('*.html') if 'data-person-id="ada"' in p.read_text())
+        for width in (1440, 390):
+            for route in (f'people/{dossier.name}', 'research.html'):
+                with self.subTest(width=width, route=route):
+                    self.page.set_viewport_size({'width': width, 'height': 900})
+                    self.page.goto(urljoin(self.base, f'../research-log/{route}'), wait_until='networkidle')
+                    self.assertEqual(3, self.page.locator('.research-log .search-details').count())
+                    self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                    self.page.add_script_tag(content=axe)
+                    violations = self.page.evaluate(
+                        "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                        "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                        ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                    self.assertEqual([], violations)

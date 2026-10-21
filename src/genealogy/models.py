@@ -332,6 +332,25 @@ class Study(Record):
 
 
 @dataclass(slots=True)
+class Search(Record):
+    """One search made for the research log: where you looked and what you found.
+
+    A search that found nothing is recorded like any other, so the next
+    researcher need not repeat it. ``related_ids`` lists the people, places or
+    sources searched for; ``citation_ids`` the records found, if any. A search
+    is published only when every related and cited record is public.
+    """
+
+    search: str  # repository, collection, years and names searched
+    result: str  # what was found, including "nothing"
+    related_ids: list[str] = field(default_factory=list)
+    searched_on: str | None = None  # ISO date (YYYY, YYYY-MM or YYYY-MM-DD)
+    limitation: str | None = None  # what the search could not cover: gaps, indexes only
+    citation_ids: list[str] = field(default_factory=list)
+    sensitivity: Sensitivity = Sensitivity.PRIVATE
+
+
+@dataclass(slots=True)
 class ImportProvenance(Record):
     """Durable, non-raw audit metadata for one adapter ingestion batch."""
 
@@ -344,7 +363,7 @@ class ImportProvenance(Record):
 MODEL_TYPES: dict[str, type[Record]] = {
     cls.__name__: cls
     for cls in (Place, Event, Person, Relationship, Source, Citation, Claim,
-                Evidence, Hypothesis, ResearchQuestion, Finding, Study, ImportProvenance)
+                Evidence, Hypothesis, ResearchQuestion, Finding, Study, Search, ImportProvenance)
 }
 # Evidence Explained terms: an original record, a derivative (copy, transcript,
 # abstract or index) or an authored work; primary information from someone with
