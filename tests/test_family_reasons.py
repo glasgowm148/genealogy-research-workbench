@@ -10,7 +10,7 @@ from genealogy.case import ResearchCase, grade_errors, validate_case
 from genealogy.config import ProjectConfig
 from genealogy.models import (AccessLevel as A, Citation, Claim, Confidence as C, Event, Evidence, Finding, LivingStatus as L,
                               Name, Person, Place, Relationship, Source, Study, record_from_dict)
-from genealogy.site import _anchor, build_site
+from genealogy.site import _anchor, _key, build_site
 from genealogy.sitecheck import check_site
 
 GRADES = {"ruled_out": {"label": "Ruled out", "meaning": "The records exclude this link.", "confidence": "disproved"}}
@@ -161,7 +161,7 @@ class FamilyReasonTests(unittest.TestCase):
         # Only rejected links: no relatives are listed.
         self.assertEqual("Corin Vale was born 1770.", intro("corin"))
         self.assertIsNone(intro("quill"))  # no events and no current links: nothing is written
-        self.assertIn('<a href="../places.html#' + _anchor("parish") + '">Invented Parish</a>', self.dossier("ada"))
+        self.assertIn('<a href="../places/pl-' + _key("parish") + '.html">Invented Parish</a>', self.dossier("ada"))
 
     def test_notes_replace_the_opening_sentences(self):
         tobin = self.dossier("tobin")

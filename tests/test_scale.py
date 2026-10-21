@@ -251,7 +251,10 @@ class LargeSiteTests(unittest.TestCase):
             self.assertTrue((out / "sources/type-register--3.html").is_file())
             build_site(large_case(20), config, out)
             for folder in ("catalogue", "timeline", "places", "sources"):
-                self.assertEqual([], list((out / folder).glob("*.html")) if (out / folder).exists() else [], folder)
+                pages = list((out / folder).glob("*.html")) if (out / folder).exists() else []
+                self.assertEqual([], [p for p in pages if not p.name.startswith("pl-")], folder)
+            # Each place with an event keeps its own page; only the region pages go.
+            self.assertEqual(20, len(list((out / "places").glob("pl-*.html"))))
             # The study pages stay; only the title pages go.
             self.assertEqual([], list((out / "studies").glob("page-*.html")))
             self.assertEqual(20, len(list((out / "studies").glob("s-*.html"))))

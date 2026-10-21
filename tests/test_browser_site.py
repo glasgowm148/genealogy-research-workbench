@@ -593,3 +593,24 @@ class BrowserSiteTests(unittest.TestCase):
                         "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
+
+    def test_place_pages_pass_axe(self):
+        from test_place_pages import case as places_case, page as place_page
+        build_site(places_case(), ProjectConfig(name='Fictional places'), self.root / 'place-pages')
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        for width in (1440, 390):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            # A country with only a sub-place, a parish with a marker map and people, a town three levels down.
+            for pid in ('fableland', 'parish', 'town'):
+                with self.subTest(width=width, place=pid):
+                    self.page.goto(urljoin(self.base, f'../place-pages/{place_page(pid)}'), wait_until='networkidle')
+                    self.assertEqual(1, self.page.locator('h1').count())
+                    if pid == 'parish':
+                        self.assertTrue(self.page.locator('.place-locator svg').is_visible())
+                    self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                    self.page.add_script_tag(content=axe)
+                    violations = self.page.evaluate(
+                        "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                        "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                        ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                    self.assertEqual([], violations)

@@ -45,3 +45,8 @@
 .next-records{padding-left:1.2rem}
 .research-log .search-date{margin:0 0 .3rem}.search-details{display:grid;grid-template-columns:minmax(7rem,9rem) 1fr;gap:.3rem 1rem;margin:0;font-size:.9rem}.search-details dt{color:var(--muted)}.search-details dd{margin:0}.search-details .finding-records{margin:0;padding-left:1rem}
 @media(max-width:640px){.search-details{grid-template-columns:1fr}.search-details dd{margin-bottom:.4rem}}
+.place-locator{max-width:28rem;margin:1rem 0;padding:.6rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.place-locator svg{display:block;width:100%;height:auto}
+.place-locator circle{stroke:var(--forest);stroke-width:1}
+.place-locator figcaption{font-size:.8rem;color:var(--muted);margin-top:.4rem}
+.place-chain{margin:.2rem 0 .6rem}

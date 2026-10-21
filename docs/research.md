@@ -277,6 +277,10 @@ The study page lists each group with its members (linked, with their recorded ye
 
 Coordinates supplied for a whole parish, county or country should not be read as an exact address. Set `precision` on a place to one of `exact`, `building`, `street`, `settlement`, `parish`, `district`, `county`, `region`, `country` or `approximate`. Places at parish level or broader are drawn as a dashed ring on the map, and every place says how precisely it is located. Imports leave `precision` unset; nothing is guessed.
 
+## Place hierarchy
+
+To say that a place lies within another, set the smaller place's `parent_id` to the larger place's ID: a town's parent is its parish, the parish's its county, the county's its country. Each place with a public event or a place within it gets a page of its own, which names the places it lies within (broadest first, each linked), the places recorded within it, and the people, surnames, years and studies recorded there. Nothing is inferred from a place's name; a place with no `parent_id` stands alone. A place whose parent is withheld is withheld with it, so record the hierarchy with public places.
+
 ## Python API
 
 ```python

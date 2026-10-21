@@ -71,6 +71,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `data/` | Public JSON, CSV, GeoJSON, GEDCOM 5.5.1 (`public-tree.ged`) and route index |
 | `data/redirects.json` | Each moved person address and the address it now leads to (only when a public person has former IDs) |
 | `_redirects` | The same moves as permanent (301) redirects, one `/people/p-<old>.html /people/p-<new>.html 301` line each, prefixed with the path of `site.base_url` (only when `site.base_url` is set and a public person has former IDs) |
+| `places/pl-<hash>.html` | Stable page for each place with a public event or a sub-place ([Place hierarchy](research.md#place-hierarchy)): the places it lies within (from `parent_id`, linked, broadest first), the places within it, coordinates and precision with a small marker map on the bundled basemap, the people with events there (linked, with each event's kind and date, in date order), the surnames recorded there with counts, the span of recorded years, and the studies that list or mention it. Each list stops at 200 entries (fewer when its entries are long) and counts the rest, so the page stays under 100 KB. Every link to a place leads here; a place without a page keeps its entry on `places.html` (or its region page) |
 
 Every page and download is generated from the same privacy-filtered projection, so a withheld person is absent from HTML, search, maps, data files, the GEDCOM download and the sitemap alike. Labels such as "Unassessed tree link" or "tree-marked uncertain" link to `evidence.html`, which explains them.
 
