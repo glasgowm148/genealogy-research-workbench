@@ -181,9 +181,11 @@ function tree(){
  const requested=new URLSearchParams(location.search).get('person');if(requested&&personBy.has(requested))root.value=requested;
  const controls=el('div',undefined,'tree-controls'),out=el('button','−'),inn=el('button','+'),reset=el('button','Fit tree'),help=el('span','Drag to pan · wheel or buttons to zoom','hint');out.setAttribute('aria-label','Zoom out');inn.setAttribute('aria-label','Zoom in');controls.append(out,inn,reset,help);output.before(controls);
  let tx=0,ty=0,scale=1,group,svg,initial,mode=new URLSearchParams(location.search).get('person')&&personBy.has(new URLSearchParams(location.search).get('person'))?'family':'whole',wholeController;
- const modes=el('div',undefined,'tree-modes');modes.setAttribute('role','group');modes.setAttribute('aria-label','Tree view');const modeButtons=new Map;for(const [value,label] of [['whole','Whole tree'],['family','Focus family'],['branches','Branch cards']]){const button=el('button',label);button.dataset.treeView=value;button.setAttribute('aria-pressed',String(mode===value));button.addEventListener('click',()=>{mode=value;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});modes.append(button);modeButtons.set(value,button);}controls.before(modes);
+ const modes=el('div',undefined,'tree-modes');modes.setAttribute('role','group');modes.setAttribute('aria-label','Tree view');const modeButtons=new Map;for(const [value,label] of [['whole','Whole tree'],['family','Focus family'],['branches','Branch cards'],['hourglass','Hourglass'],['sun','Family sun'],['lanes','Lanes']]){const button=el('button',label);button.dataset.treeView=value;button.setAttribute('aria-pressed',String(mode===value));button.addEventListener('click',()=>{mode=value;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});modes.append(button);modeButtons.set(value,button);}controls.before(modes);
+ // ?view=hourglass, sun or lanes opens that view (with ?person=, around that person).
+ {const asked=new URLSearchParams(location.search).get('view');if(TREE_VIEWS[asked]){mode=asked;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));}}
  function transform(){group?.setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`);}
- function draw(){wholeController?.dispose();wholeController=null;output.replaceChildren();if(mode==='whole'){wholeController=wholeTree(output,root,()=>{mode='family';modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});return;}const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return;}
+ function draw(){wholeController?.dispose();wholeController=null;output.replaceChildren();if(mode==='whole'){wholeController=wholeTree(output,root,()=>{mode='family';modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});return;}if(TREE_VIEWS[mode]){wholeController=TREE_VIEWS[mode](output,root,id=>{root.value=id;draw();});return;}const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return;}
  const nodes=new Map([[id,{id,depth:0}]]),edges=[];let frontier=[id];for(let depth=0;depth<3;depth++){const next=[];for(const n of frontier){for(const r of relationships){const sibling=SIBLING_KINDS.includes(r.kind);if(r.confidence==='disproved'||!(sibling||['parent','father','mother','parent_child','child','biological_parent','adoptive_parent'].includes(r.kind)))continue;if(r.subject_id!==n&&r.object_id!==n)continue;const other=r.subject_id===n?r.object_id:r.subject_id;if(!personBy.has(other))continue;const d=nodes.get(n).depth+(sibling?0:r.subject_id===n?-1:1);if(!nodes.has(other)&&nodes.size<70){nodes.set(other,{id:other,depth:d});next.push(other);}if(nodes.has(other)&&!edges.some(e=>e.id===r.id))edges.push(r);}}frontier=next;}
  const columns=new Map;nodes.forEach(n=>{if(!columns.has(n.depth))columns.set(n.depth,[]);columns.get(n.depth).push(n);});let minD=Math.min(...columns.keys());columns.forEach((col,depth)=>col.forEach((n,i)=>{n.x=(depth-minD)*235+25;n.y=i*82+30;}));const width=(Math.max(...columns.keys())-minD+1)*235+25,height=Math.max(1,...[...columns.values()].map(c=>c.length))*82+30;
  const viewport=el('div',undefined,'tree-viewport');svg=svgEl('svg',{viewBox:`0 0 ${width} ${Math.max(height,270)}`,role:'img','aria-label':`Family connections around ${name(personBy.get(id))}`});group=svgEl('g');svg.append(group);edges.forEach(r=>{const a=nodes.get(r.subject_id),b=nodes.get(r.object_id);if(!a||!b)return;const side=a.x===b.x;group.append(svgEl('path',{d:side?`M${a.x+200},${a.y+27} C${a.x+228},${a.y+27} ${b.x+228},${b.y+27} ${b.x+200},${b.y+27}`:`M${a.x+100},${a.y+25} C${(a.x+b.x)/2+100},${a.y+25} ${(a.x+b.x)/2+100},${b.y+25} ${b.x+100},${b.y+25}`,class:`tree-edge ${SIBLING_KINDS.includes(r.kind)?'sibling':''} ${['documented','probable'].includes(r.confidence)?'':'uncertain'}`}));});nodes.forEach(n=>{const p=personBy.get(n.id),g=svgEl('g',{class:`tree-node ${n.id===id?'focus':''}`,transform:`translate(${n.x} ${n.y})`,tabindex:0,role:'button','aria-label':`Focus on ${name(p)}`});g.append(svgEl('rect',{width:200,height:55,rx:6}));const t=svgEl('text',{x:12,y:23});t.textContent=name(p).length>25?name(p).slice(0,24)+'…':name(p);const m=svgEl('text',{x:12,y:42,class:'node-meta'});m.textContent=dates(p).join(' – ');g.append(t,m);const focus=()=>{root.value=p.id;draw();};g.addEventListener('click',focus);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();focus();}});group.append(g);});viewport.append(svg);output.append(viewport);const note=el('p',`Showing ${nodes.size} people within three connection steps. Dashed lines mark uncertain relationships. Recorded connections are not proof.`,'hint');output.append(note);
@@ -219,6 +221,170 @@ function wholeTree(output,root,focusFamily){
  let drag;canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,tx,ty,moved:false};canvas.setPointerCapture(e.pointerId);});canvas.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;tx=drag.tx+dx;ty=drag.ty+dy;schedule();});canvas.addEventListener('pointerup',e=>{if(drag&&!drag.moved){const rect=canvas.getBoundingClientRect(),x=(e.clientX-rect.left-tx)/scale,y=(e.clientY-rect.top-ty)/scale;let nearest=null,distance=(12/scale)**2;for(const n of nodes){if(!visible(n))continue;const d=(n.x-x)**2+(n.y-y)**2;if(d<distance){nearest=n;distance=d;}}if(nearest)inspect(nearest);}drag=null;});canvas.addEventListener('pointercancel',()=>drag=null);canvas.addEventListener('wheel',e=>{e.preventDefault();const rect=canvas.getBoundingClientRect();zoom(e.deltaY>0?.88:1.14,e.clientX-rect.left,e.clientY-rect.top);},{passive:false});canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-'].includes(e.key)){e.preventDefault();if(e.key==='ArrowLeft')tx+=35;if(e.key==='ArrowRight')tx-=35;if(e.key==='ArrowUp')ty+=35;if(e.key==='ArrowDown')ty-=35;if(e.key==='+'||e.key==='=')zoom(1.25);if(e.key==='-')zoom(.8);schedule();}});
  const observer=typeof ResizeObserver==='function'?new ResizeObserver(schedule):null;observer?.observe(viewport);inspect(selected);fit();return{zoom,fit,dispose(){dead=true;if(frame)cancelAnimationFrame(frame);observer?.disconnect();}};
 }
+// Hourglass, family sun and lanes read parent, child and partner links as the dossier does; disproved links are left out.
+// The tree views share the catalogue's kind lists above.
+const firm=r=>['documented','probable'].includes(r?.confidence);
+const bornIn=id=>year(dates(personBy.get(id))[0])??Infinity;
+const byBirth=(a,b)=>bornIn(a)-bornIn(b)||name(personBy.get(a)).localeCompare(name(personBy.get(b)))||a.localeCompare(b);
+let KIN=null;
+function kin(){
+ if(KIN)return KIN;const parents=new Map,children=new Map,partners=new Map;
+ // A pair recorded twice is one link, shown at its firmer assessment.
+ const add=(m,a,b,r)=>{if(!m.has(a))m.set(a,[]);const row=m.get(a),old=row.find(x=>x.id===b);if(!old)row.push({id:b,r});else if(!firm(old.r)&&firm(r))old.r=r;};
+ for(const r of relationships){const k=String(r.kind||'').toLowerCase();if(r.confidence==='disproved'||r.subject_id===r.object_id||!personBy.has(r.subject_id)||!personBy.has(r.object_id))continue;if(PARENT_KINDS.includes(k)){add(parents,r.subject_id,r.object_id,r);add(children,r.object_id,r.subject_id,r);}else if(PARTNER_KINDS.includes(k)){add(partners,r.subject_id,r.object_id,r);add(partners,r.object_id,r.subject_id,r);}}
+ for(const m of [parents,children,partners])m.forEach(row=>row.sort((a,b)=>byBirth(a.id,b.id)));
+ return KIN={parents,children,partners};
+}
+// More than two parent links means the parents compete; an unconfirmed one among them is a candidate.
+const candidate=(child,r)=>!firm(r)&&(kin().parents.get(child)||[]).length>2;
+const NO_VIEW={zoom(){},fit(){},dispose(){}};
+const ordinal=n=>n+(n%10===1&&n%100!==11?'st':n%10===2&&n%100!==12?'nd':n%10===3&&n%100!==13?'rd':'th');
+const generationName=(g,up)=>g<4?(up?['Focus person','Parents','Grandparents','Great-grandparents']:['Focus person','Children','Grandchildren','Great-grandchildren'])[g]:`${ordinal(g-2)} great-${up?'grandparents':'grandchildren'}`;
+const singular=s=>s.toLowerCase().replace(/ren$/,'').replace(/s$/,'');
+const shorten=(s,n)=>s.length>n?s.slice(0,n-1)+'…':s;
+// Pan and zoom for the SVG views, driven by the same −, + and Fit buttons as the whole tree; a drag starts off the people.
+function svgPanZoom(svg,group,width,height){
+ let tx=0,ty=0,scale=1,drag;const set=()=>group.setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`);
+ const zoom=f=>{const next=Math.min(4,Math.max(.3,scale*f)),ratio=next/scale;tx=width/2-(width/2-tx)*ratio;ty=height/2-(height/2-ty)*ratio;scale=next;set();};
+ svg.addEventListener('pointerdown',e=>{if(e.button||e.target.closest('[tabindex],a'))return;drag={x:e.clientX,y:e.clientY,tx,ty};svg.setPointerCapture(e.pointerId);});
+ svg.addEventListener('pointermove',e=>{if(!drag)return;const rect=svg.getBoundingClientRect(),k=Math.max(width/rect.width,height/rect.height);tx=drag.tx+(e.clientX-drag.x)*k;ty=drag.ty+(e.clientY-drag.y)*k;set();});
+ const stop=()=>drag=null;svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop);
+ svg.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY>0?.9:1.1);},{passive:false});
+ return {zoom,fit(){tx=ty=0;scale=1;set();},dispose(){}};
+}
+// The text version of a view: one list per heading, each person linked to their dossier with a button to centre the view on them.
+function viewText(summary,groups,refocus){
+ const d=el('details',undefined,'tree-text');d.append(el('summary',summary));
+ for(const [heading,rows] of groups){if(!rows.length)continue;d.append(el('h2',heading));const ul=el('ul');for(const {id,note} of rows){const p=personBy.get(id),li=el('li');li.append(personLink(p));if(note)li.append(el('span',` · ${note}`,'meta'));if(refocus){const b=el('button','Centre here');b.setAttribute('aria-label',`Centre here on ${name(p)}`);b.addEventListener('click',()=>refocus(id));li.append(' ',b);}ul.append(li);}d.append(ul);}
+ return d;
+}
+const activate=(node,act)=>{node.addEventListener('click',act);node.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();act();}});};
+
+// Hourglass: ancestors above the focus person, descendants below, one row per generation; a person's card opens or folds their line.
+function hourglassTree(output,root,refocus){
+ const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return NO_VIEW;}
+ const {parents,children,partners}=kin(),CAP=60,MAX=5,SHOWN=2,W=184,H=60,GAP=16,ROW=104,open=new Set,shut=new Set,host=el('div'),status=el('p','','sr-only');status.setAttribute('role','status');output.append(host,status);let pz=NO_VIEW;
+ function build(keep){
+  const focus={id,gen:0,side:'focus',up:[],down:[],partners:[],capped:0},seen=new Map([[id,focus]]),edges=[];let over=0;
+  const want=n=>n.gen<MAX&&(open.has(n.id)||n.gen<SHOWN&&!shut.has(n.id));
+  const take=(owner,rows,side,list)=>{for(const {id:pid,r} of rows){if(seen.has(pid)){edges.push({side,a:owner,b:seen.get(pid),r});continue;}if(seen.size>=CAP){owner.capped++;over++;continue;}const m={id:pid,gen:owner.gen+(side==='partner'?0:1),side,up:[],down:[],partners:[],capped:0,r,from:owner};seen.set(pid,m);list.push(m);edges.push({side,a:owner,b:m,r});}};
+  take(focus,partners.get(id)||[],'partner',focus.partners);
+  // Nearer generations on both sides fill the 60-person limit before farther ones.
+  let up=[focus],down=[focus];
+  for(let g=0;g<MAX&&(up.length||down.length);g++){const nu=[],nd=[];
+   for(const n of up){n.above=(parents.get(n.id)||[]).length;if(n.above&&want(n)){n.openUp=true;take(n,parents.get(n.id),'up',n.up);nu.push(...n.up);}}
+   for(const n of down){n.below=(children.get(n.id)||[]).length;if(n.below&&want(n)){n.openDown=true;take(n,children.get(n.id),'down',n.down);for(const c of n.down)take(c,partners.get(c.id)||[],'partner',c.partners);nd.push(...n.down);}}
+   up=nu;down=nd;}
+  for(const n of down)n.below=(children.get(n.id)||[]).length;for(const n of up)n.above=(parents.get(n.id)||[]).length;
+  // Tidy layout: each line is as wide as its widest generation and a card sits centred over the cards it leads to.
+  const measure=(n,key,u)=>{const inner=n[key].reduce((s,k)=>s+measure(k,key,u),0)+GAP*Math.max(0,n[key].length-1);return n['w'+key]=Math.max(u(n),inner);};
+  const place=(n,key,u,x0,pos)=>{const inner=n[key].reduce((s,k)=>s+k['w'+key],0)+GAP*Math.max(0,n[key].length-1);pos.set(n,x0+(n['w'+key]-u(n))/2);let x=x0+(n['w'+key]-inner)/2;for(const k of n[key]){place(k,key,u,x,pos);x+=k['w'+key]+GAP;}};
+  const unit=n=>W+n.partners.length*(W+GAP),card=()=>W,downPos=new Map,upPos=new Map;measure(focus,'down',unit);measure(focus,'up',card);place(focus,'down',unit,0,downPos);place(focus,'up',card,0,upPos);
+  const shift=downPos.get(focus)-upPos.get(focus),all=[...seen.values()],maxUp=Math.max(0,...all.filter(n=>n.side==='up').map(n=>n.gen)),maxDown=Math.max(0,...all.filter(n=>n.side==='down').map(n=>n.gen));
+  upPos.forEach((x,n)=>{if(n!==focus)n.x=x+shift;});downPos.forEach((x,n)=>{n.x=x;n.partners.forEach((s,i)=>s.x=x+(i+1)*(W+GAP));});
+  all.forEach(n=>{const owner=n.side==='partner'?n.from:n;n.y=(owner.side==='up'?maxUp-owner.gen:maxUp+owner.gen)*ROW+20;});
+  const minX=Math.min(...all.map(n=>n.x));all.forEach(n=>n.x+=20-minX);
+  const width=Math.max(...all.map(n=>n.x))+W+20,height=Math.max(270,(maxUp+maxDown)*ROW+H+40),count=side=>all.filter(n=>n.side===side).length;
+  const plural=(n,one,many)=>`${n} ${n===1?one:many}`,label=`Hourglass tree for ${name(personBy.get(id))}: ${plural(count('up'),'ancestor','ancestors')} in ${plural(maxUp,'generation','generations')} above, ${plural(count('down'),'descendant','descendants')} in ${plural(maxDown,'generation','generations')} below, ${plural(count('partner'),'spouse or partner','spouses or partners')} beside.`;
+  const viewport=el('div',undefined,'tree-viewport hourglass-viewport'),svg=svgEl('svg',{viewBox:`0 0 ${width} ${height}`,role:'group','aria-label':label}),group=svgEl('g');svg.dataset.hourglass='';svg.append(group);
+  for(const {side,a,b,r} of edges){const dashed=!firm(r),cls=`tree-edge ${dashed?'uncertain':''} ${side==='partner'?'partner':''}`;if(side==='partner'){const [l,rr]=a.x<b.x?[a,b]:[b,a];group.append(svgEl('path',{d:`M${l.x+W},${l.y+H/2} H${rr.x}`,class:cls}));continue;}const [parent,child]=side==='up'?[b,a]:[a,b],px=parent.x+W/2,py=parent.y+H,cx=child.x+W/2,cy=child.y;group.append(svgEl('path',{d:`M${px},${py} V${(py+cy)/2} H${cx} V${cy}`,class:cls+(candidate(child.id,r)?' candidate':'')}));}
+  for(const n of all){
+   const p=personBy.get(n.id),side=n.side==='focus'?null:n.side==='partner'?'partner':n.side,relation=side==='partner'?`spouse or partner of ${name(personBy.get(n.from.id))}`:side?singular(generationName(n.gen,side==='up')):'focus person';
+   const cand=side==='up'&&candidate(n.from.id,n.r),open_=side==='up'?n.openUp:n.openDown,hidden=side==='up'?n.above:side==='down'?n.below:0,canToggle=(side==='up'||side==='down')&&hidden>0&&(open_||n.gen<MAX);
+   const extra=n.capped?`${n.capped} more not drawn`:cand?'Candidate parent':side&&side!=='partner'&&hidden&&!open_?`${hidden} ${side==='up'?(hidden===1?'parent':'parents'):(hidden===1?'child':'children')} ${canToggle?'folded':'beyond this view'}`:side&&n.r&&!firm(n.r)?relLabel(n.r):'';
+   const g=svgEl(!side&&links[id]?'a':'g',{class:`tree-node hourglass-node ${side?'':'focus'} ${cand?'candidate':''} ${n.r&&!firm(n.r)?'uncertain':''}`,transform:`translate(${n.x} ${n.y})`});g.dataset.person=n.id;
+   g.append(svgEl('rect',{width:W,height:H,rx:6}));const t=svgEl('text',{x:12,y:20});t.textContent=shorten(name(p),26);const m=svgEl('text',{x:12,y:36,class:'node-meta'});m.textContent=lifespan(p)||'Dates not recorded';g.append(t,m);if(extra){const x=svgEl('text',{x:12,y:51,class:'node-meta node-extra'});x.textContent=extra;g.append(x);}
+   const assessed=n.r?` (${relLabel(n.r)}${cand?', candidate parent':''})`:'',who=`${name(p)}, ${relation}${assessed}, ${lifespan(p)||'dates not recorded'}`;
+   if(!side){if(links[id]){g.setAttribute('href',links[id]);g.setAttribute('aria-label',`${who}. Open the dossier`);}else{g.setAttribute('role','img');g.setAttribute('aria-label',who);}}
+   else{g.setAttribute('tabindex',0);g.setAttribute('role','button');
+    if(canToggle){const noun=side==='up'?(hidden===1?'parent':'parents'):(hidden===1?'child':'children');g.setAttribute('aria-expanded',String(!!open_));g.setAttribute('aria-label',`${who}. ${open_?'Fold':'Show'} ${hidden} ${noun}`);const badge=svgEl('g',{class:'hourglass-toggle','aria-hidden':'true',transform:`translate(${W/2} ${side==='up'?0:H})`});badge.append(svgEl('circle',{r:8}));const s=svgEl('text',{y:4,'text-anchor':'middle'});s.textContent=open_?'−':'+';badge.append(s);g.append(badge);
+     activate(g,()=>{if(open_){shut.add(n.id);open.delete(n.id);}else{open.add(n.id);shut.delete(n.id);}build(n.id);status.textContent=`${open_?'Folded':'Showing'} the ${noun} of ${name(p)}.`;});}
+    else{g.setAttribute('aria-label',`${who}. Centre the tree here`);activate(g,()=>refocus(n.id));}}
+   group.append(g);}
+  viewport.append(svg);
+  const note=el('p',`Showing ${all.length} people. Select a card to show or fold that line, up to ${MAX} generations each way; a card with nothing to open centres the tree on that person. Dashed lines and outlines mark uncertain or candidate parents. Recorded connections are not proof.`+(over?` ${over} more not drawn (${CAP}-person limit); centre on a relative to see them.`:''),'hint');
+  const groups=[[generationName(0,true),[{id,note:lifespan(personBy.get(id))}]]];
+  const row=n=>({id:n.id,note:[n.side==='partner'?`spouse or partner of ${name(personBy.get(n.from.id))}`:`${n.side==='up'?'parent':'child'} of ${name(personBy.get(n.from.id))}`,n.r?relLabel(n.r):'',n.side==='up'&&candidate(n.from.id,n.r)?'candidate parent':'',lifespan(personBy.get(n.id))].filter(Boolean).join(' · ')});
+  for(let g=1;g<=maxUp;g++)groups.push([generationName(g,true),all.filter(n=>n.side==='up'&&n.gen===g).map(row)]);
+  groups.push(['Spouses and partners',all.filter(n=>n.side==='partner').map(row)]);
+  for(let g=1;g<=maxDown;g++)groups.push([generationName(g,false),all.filter(n=>n.side==='down'&&n.gen===g).map(row)]);
+  const text=viewText('Text version of this hourglass tree',groups,refocus),wasOpen=host.querySelector('details')?.open;text.open=!!wasOpen;
+  host.replaceChildren(viewport,note,text);pz=svgPanZoom(svg,group,width,height);
+  if(keep)svg.querySelector(`[data-person="${CSS.escape(keep)}"]`)?.focus();
+ }
+ build();return {zoom:f=>pz.zoom(f),fit:()=>pz.fit(),dispose(){}};
+}
+
+// Family sun: the focus person's descendants as rings, one per generation; a slice's angle is its share of the descendants.
+function familySun(output,root,refocus){
+ const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return NO_VIEW;}
+ const {children}=kin(),R0=66,T=58,MAXG=12,LINES=6,seen=new Set,rings=[];let maxGen=0;
+ // A person reached by a second line is drawn again as an outline and not followed further.
+ const make=(pid,gen,from,r)=>{const again=seen.has(pid);seen.add(pid);const n={id:pid,gen,kids:[],size:1,again,from,r};maxGen=Math.max(maxGen,gen);if(!again&&gen<MAXG)for(const c of children.get(pid)||[]){const k=make(c.id,gen+1,n,c.r);n.kids.push(k);n.size+=k.size;}return n;};
+ const sun=make(id,0,null),focusName=name(personBy.get(id));
+ if(!sun.kids.length){output.append(empty(`No descendants of ${focusName} are recorded. Choose someone with recorded children to draw a family sun.`));return NO_VIEW;}
+ const lay=(n,a0,a1,line)=>{n.a0=a0;n.a1=a1;n.line=line;(rings[n.gen]||(rings[n.gen]=[])).push(n);let a=a0;for(const [i,c] of n.kids.entries()){const w=(a1-a0)*c.size/(n.size-1);lay(c,a,a+w,n.gen?line:i%LINES);a+=w;}};lay(sun,-Math.PI/2,Math.PI*1.5,null);
+ const S=R0+maxGen*T+12,viewport=el('div',undefined,'tree-viewport sun-viewport'),unique=seen.size-1;
+ const svg=svgEl('svg',{viewBox:`0 0 ${2*S} ${2*S}`,role:'group','aria-label':`Family sun for ${focusName}: ${unique} recorded descendants in ${maxGen} generations. Each ring is a generation; a slice's width is its share of the descendants. Select a slice to centre the sun on that person.`}),pan=svgEl('g'),group=svgEl('g',{transform:`translate(${S} ${S})`});svg.dataset.sun='';pan.append(group);svg.append(pan);
+ const readout=el('p','Hover over or focus a slice to see who it is.','sun-readout');readout.setAttribute('aria-live','polite');
+ const pt=(r,a)=>`${(r*Math.cos(a)).toFixed(2)},${(r*Math.sin(a)).toFixed(2)}`;
+ const arc=(r0,r1,a0,a1)=>{if(a1-a0>Math.PI*2-1e-6)return `M${r1},0A${r1},${r1} 0 1 1 ${-r1},0A${r1},${r1} 0 1 1 ${r1},0ZM${r0},0A${r0},${r0} 0 1 0 ${-r0},0A${r0},${r0} 0 1 0 ${r0},0Z`;const large=a1-a0>Math.PI?1:0;return `M${pt(r1,a0)}A${r1},${r1} 0 ${large} 1 ${pt(r1,a1)}L${pt(r0,a1)}A${r0},${r0} 0 ${large} 0 ${pt(r0,a0)}Z`;};
+ const describe=n=>{const p=personBy.get(n.id);return `${name(p)}${lifespan(p)?` (${lifespan(p)})`:''}, generation ${n.gen}, ${singular(generationName(n.gen,false))} of ${name(personBy.get(n.from.id))}${firm(n.r)?'':` (${relLabel(n.r)})`}, ${n.again?'also descends through another line':`${n.size-1} descendant${n.size===2?'':'s'}`}`;};
+ const centre=svgEl('circle',{r:R0-4,class:'sun-centre'});group.append(centre);
+ const words=focusName.split(' '),half=Math.ceil(words.length/2);[words.slice(0,half).join(' '),words.slice(half).join(' ')].filter(Boolean).forEach((line,i,all)=>{const t=svgEl('text',{y:(i-(all.length-1)/2)*14+4,'text-anchor':'middle',class:'sun-centre-label','aria-hidden':'true'});t.textContent=shorten(line,14);group.append(t);});
+ for(let g=1;g<=maxGen;g++)for(const n of rings[g]||[]){const r0=R0+(g-1)*T,r1=R0+g*T,s=svgEl('path',{d:arc(r0,r1,n.a0,n.a1),'fill-rule':'evenodd',class:`sun-slice sun-line-${n.line} ${n.again?'again':''} ${firm(n.r)?'':'uncertain'}`,tabindex:0,role:'button','aria-label':`${describe(n)}. Centre the sun here`,'fill-opacity':Math.max(.5,1-(g-1)*.1).toFixed(2)});s.dataset.person=n.id;s.dataset.generation=g;
+  const show=()=>{readout.textContent=describe(n);};s.addEventListener('pointerenter',show);s.addEventListener('focus',show);activate(s,()=>refocus(n.id));group.append(s);
+  // Names that fit run along a wide slice, or out along the radius of a narrow one.
+  const mid=(n.a0+n.a1)/2,rm=r0+T/2,length=(n.a1-n.a0)*rm,deg=mid*180/Math.PI;let text=null,rot=0;
+  if(length>=64){text=shorten(name(personBy.get(n.id)),Math.floor((length-8)/6.4));rot=deg+90+(Math.sin(mid)>0?180:0);}else if(length>=13){text=shorten(name(personBy.get(n.id)).split(' ')[0],8);rot=deg+(Math.cos(mid)<0?180:0);}
+  if(text){const t=svgEl('text',{transform:`translate(${pt(rm,mid)}) rotate(${rot.toFixed(1)})`,'text-anchor':'middle',y:4,class:'sun-label','aria-hidden':'true'});t.textContent=text;group.append(t);}}
+ viewport.append(svg);
+ const legend=el('div',undefined,'sun-legend'),lines=el('ul'),gens=el('ul');for(const [heading,items] of [['Lines from each child',lines],['Generations',gens]]){const part=el('div');part.append(el('p',heading,'meta'),items);legend.append(part);}
+ sun.kids.forEach((c,i)=>{const li=el('li'),sw=el('span',undefined,`sun-swatch sun-line-${i%LINES}`);sw.setAttribute('aria-hidden','true');li.append(sw,`${name(personBy.get(c.id))}: ${c.size-1} descendant${c.size===2?'':'s'}`);lines.append(li);});
+ const firstSeen=g=>(rings[g]||[]).filter(n=>!n.again);
+ for(let g=1;g<=maxGen;g++){const again=(rings[g]||[]).length-firstSeen(g).length;gens.append(el('li',`Generation ${g} · ${generationName(g,false).toLowerCase()}: ${firstSeen(g).length}${again?` (and ${again} reached again through another line)`:''}`));}
+ const note=el('p',`${unique} recorded descendants of ${focusName}. Select a slice, or a person in the text version, to centre the sun on them.${maxGen>=MAXG?` Generations past ${MAXG} are not drawn.`:''} Recorded connections are not proof.`,'hint');
+ const text=viewText('Text version of this family sun',Array.from({length:maxGen},(_,i)=>[`Generation ${i+1} · ${generationName(i+1,false)} (${firstSeen(i+1).length})`,(rings[i+1]||[]).map(n=>({id:n.id,note:[`${n.gen===1?'child':'descendant'} of ${name(personBy.get(n.from.id))}`,firm(n.r)?'':relLabel(n.r),n.again?'also descends through another line':`${n.size-1} descendant${n.size===2?'':'s'}`,lifespan(personBy.get(n.id))].filter(Boolean).join(' · ')}))]),refocus);
+ output.append(viewport,readout,legend,note,text);const pz=svgPanZoom(svg,pan,2*S,2*S);return {zoom:pz.zoom,fit:pz.fit,dispose(){}};
+}
+
+// Lanes: the focus person's parents' family, their own family and each child's family, as lifespan bars on one time axis.
+function familyLanes(output,root,refocus){
+ const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return NO_VIEW;}
+ const {parents,children,partners}=kin(),ids=(m,pid)=>(m.get(pid)||[]).map(x=>x.id),who=pid=>name(personBy.get(pid)),lanes=[];
+ const parentIds=ids(parents,id),siblings=new Set(parentIds.flatMap(p=>ids(children,p)));
+ for(const r of relationsByPerson.get(id)||[])if(SIBLING_KINDS.includes(r.kind)&&r.confidence!=='disproved'){const o=r.subject_id===id?r.object_id:r.subject_id;if(personBy.has(o)&&o!==id)siblings.add(o);}
+ if(parentIds.length||siblings.size){siblings.add(id);lanes.push({title:`Parents' family${parentIds.length?`: ${parentIds.map(who).join(' & ')}`:''}`,rows:[...parentIds.map(p=>[p,'parent']),...[...siblings].sort(byBirth).map(s=>[s,s===id?'focus person':'sibling'])]});}
+ const family=(pid,role,title)=>({title,rows:[[pid,role],...ids(partners,pid).map(s=>[s,'spouse or partner']),...ids(children,pid).map(c=>[c,role==='focus person'?'child':'grandchild'])]});
+ lanes.push(family(id,'focus person',`Own family: ${who(id)}`));
+ for(const c of ids(children,id))if(ids(partners,c).length||ids(children,c).length)lanes.push(family(c,'child',`Family of ${who(c)}`));
+ // A bar runs from birth to death; without them, from the first to the last dated event.
+ const span=pid=>{const ev=pe(personBy.get(pid)).filter(e=>year(e.date)!==null).sort(byDate),ys=ev.map(e=>year(e.date)),b=ev.find(e=>e.kind==='birth'),d=ev.find(e=>e.kind==='death');return {ev,start:b?year(b.date):ys[0]??null,end:d?year(d.date):ys[ys.length-1]??null,closed:!!d};};
+ const spans=new Map;lanes.forEach(l=>l.rows.forEach(([pid])=>{if(!spans.has(pid))spans.set(pid,span(pid));}));
+ const known=[...spans.values()].filter(s=>s.start!==null),lo=known.length?Math.min(...known.map(s=>s.start)):0,hi=known.length?Math.max(...known.map(s=>s.end)):0;
+ const step=hi-lo>200?50:hi-lo>80?20:hi-lo>30?10:5,from=Math.floor(lo/step)*step,to=Math.max(from+step,Math.ceil(hi/step)*step),W=900,X0=214,X1=W-24,ROW=24,HEAD=30,AXIS=34;
+ const x=y=>X0+(y-from)/(to-from)*(X1-X0),height=AXIS+lanes.reduce((s,l)=>s+HEAD+l.rows.length*ROW+8,0)+10;
+ const viewport=el('div',undefined,'tree-viewport lanes-viewport'),bars=lanes.reduce((s,l)=>s+l.rows.filter(([pid])=>spans.get(pid).start!==null).length,0);
+ const svg=svgEl('svg',{viewBox:`0 0 ${W} ${height}`,role:'group','aria-label':`Family lanes around ${who(id)}: ${lanes.length} famil${lanes.length===1?'y':'ies'}, ${bars} lifespan bars${known.length?` from ${lo} to ${hi}`:''}.`}),group=svgEl('g');svg.dataset.lanes='';svg.append(group);
+ if(known.length)for(let y=from;y<=to;y+=step){group.append(svgEl('line',{x1:x(y),x2:x(y),y1:AXIS-6,y2:height-10,class:'lane-grid'}));const t=svgEl('text',{x:x(y),y:AXIS-12,'text-anchor':'middle',class:'lane-year'});t.textContent=y;group.append(t);}
+ let top=AXIS;
+ for(const lane of lanes){const head=svgEl('text',{x:8,y:top+20,class:'lane-head'});head.textContent=shorten(lane.title,110);group.append(head);top+=HEAD;
+  for(const [pid,role] of lane.rows){const p=personBy.get(pid),s=spans.get(pid),cy=top+ROW/2,row=svgEl('g',{class:`lane-row ${pid===id?'focus':''}`});
+   const nameNode=svgEl(links[pid]?'a':'g',{});if(links[pid])nameNode.setAttribute('href',links[pid]);nameNode.setAttribute('aria-label',`${name(p)}, ${role}, ${lifespan(p)||'no dated events'}`);if(!links[pid])nameNode.setAttribute('role','img');
+   const t=svgEl('text',{x:18,y:cy+4,class:'lane-name'});t.textContent=shorten(name(p),27);nameNode.append(t);row.append(nameNode);
+   if(s.start===null){const n=svgEl('text',{x:X0,y:cy+4,class:'lane-year','aria-hidden':'true'});n.textContent='No dated events';row.append(n);}
+   else{row.append(svgEl('rect',{x:x(s.start),y:cy-5,width:Math.max(4,x(s.end)-x(s.start)),height:10,rx:5,class:`lane-bar ${pid===id?'focus':''} ${s.closed?'':'open'}`}));
+    for(const e of s.ev){const c=svgEl('circle',{cx:x(year(e.date)),cy,r:3,class:'lane-event'});const title=svgEl('title');title.textContent=`${name(p)}: ${e.kind} ${e.date}`;c.append(title);row.append(c);}}
+   group.append(row);top+=ROW;}
+  top+=8;}
+ viewport.append(svg);
+ const undated=new Map;spans.forEach((_,pid)=>pe(personBy.get(pid)).filter(e=>year(e.date)===null).forEach(e=>undated.set(e.id+'\u0000'+pid,[pid,e])));
+ const extra=el('div',undefined,'lanes-undated');extra.append(el('h2','Events without a year'));if(undated.size){const ul=el('ul');for(const [pid,e] of [...undated.values()].sort((a,b)=>byBirth(a[0],b[0])||a[1].id.localeCompare(b[1].id))){const li=el('li');li.append(personLink(personBy.get(pid)),` · ${e.kind}${e.date?` (${e.date})`:' (date not recorded)'}`);ul.append(li);}extra.append(ul);}else extra.append(el('p','Every recorded event of these people has a year.','meta'));
+ const note=el('p',`${lanes.length} famil${lanes.length===1?'y':'ies'}, ${bars} lifespan bars on one time axis. A bar runs from a recorded birth to a recorded death; a faded bar runs between the first and last dated events instead. Dots mark dated events.`,'hint');
+ const text=viewText('Text version of these lanes',lanes.map(l=>[l.title,l.rows.map(([pid,role])=>({id:pid,note:[role,lifespan(personBy.get(pid))||'no dated events'].join(' · ')}))]),refocus);
+ output.append(viewport,note,extra,text);const pz=svgPanZoom(svg,group,W,height);return {zoom:pz.zoom,fit:pz.fit,dispose(){}};
+}
+const TREE_VIEWS={hourglass:hourglassTree,sun:familySun,lanes:familyLanes};
 function comparison(){
  const a=$('[data-compare-a]'),b=$('[data-compare-b]'),out=$('#compare-result');if(!a||!b||!out)return;fillPeople(a);fillPeople(b);preselect(a,b);
  function draw(){out.replaceChildren();const pa=personBy.get(a.value),pb=personBy.get(b.value);if(!pa||!pb){out.append(empty('Choose two people to compare the recorded details.'));return;}const grid=el('div',undefined,'comparison');for(const p of [pa,pb]){const card=el('section',undefined,'card');card.append(el('h2',name(p)));const dl=el('dl');const add=(k,v)=>dl.append(el('dt',k),el('dd',v));add('Birth',dates(p)[0]);add('Death',dates(p)[1]);add('Names',(p.names||[]).map(n=>n.value).join('; ')||'No name recorded');add('Places',[...new Set(pe(p).map(e=>placeBy.get(e.place_id)?.name).filter(Boolean))].join('; ')||'No place recorded');add('Relatives',relativeIds(p.id).map(id=>name(personBy.get(id))).join('; ')||'No public relationships recorded');const cs=claimsByPerson.get(p.id)||[];add('Claims',`${cs.length} recorded · ${cs.filter(c=>c.status==='supported').length} supported`);card.append(dl,personLink(p));grid.append(card);}out.append(grid,el('p','Similar details are research leads. Comparison does not establish identity or authorize a merge.','note'));}
