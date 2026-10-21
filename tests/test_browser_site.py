@@ -642,6 +642,30 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.wait_for_url('**/people/*.html#family-heading')
         self.assertEqual('Ada Fable', self.page.locator('h1').inner_text())
 
+
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'set GENEALOGY_AXE_PATH to an axe-core axe.min.js')
+    def test_progress_page_and_its_history_chart_pass_axe(self):
+        from test_progress_page import C, build, case, finding
+        out = self.root / 'progress'
+        build(out)
+        build(out, case([finding('f1', '2026-03-01'), finding('f9', '2026-10-02', [('gwen-finn', 'unknown', 'probable')])], C.PROBABLE))
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        for width in (1440, 390):
+            with self.subTest(width=width):
+                self.page.set_viewport_size({'width': width, 'height': 900})
+                self.page.goto(urljoin(self.base, '../progress/progress.html'), wait_until='networkidle')
+                self.assertTrue(self.page.locator('svg.progress-chart').is_visible())
+                self.page.locator('.progress-history-text summary').click()
+                self.assertTrue(self.page.locator('.progress-history-text table').is_visible())
+                self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                self.page.add_script_tag(content=axe)
+                violations = self.page.evaluate(
+                    "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                    "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                    ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                self.assertEqual([], violations)
+
+
     def test_statistics_page_reads_without_javascript_and_passes_axe(self):
         from test_statistics import config as statistics_config, statistics_case
         build_site(statistics_case(), statistics_config(), self.root / 'statistics')

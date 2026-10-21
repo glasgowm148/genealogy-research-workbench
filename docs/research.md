@@ -63,6 +63,8 @@ Use real IDs already in the selected case; validation rejects missing references
 
 The strict CLI adds records; it does not silently replace an existing record. To revise an existing assessment, back up the case and edit its typed JSON (or use the Python API), then run `genealogy validate`. Review all changed public text before rebuilding. To refresh a tree from a newer export while keeping the findings, questions and studies you added, use `genealogy import FILE --update` ([details](imports.md#importing-again)).
 
+The site's **Research progress** page (`progress.html`) measures the work from these records: how many people have an assessed parent link, each connected group's weakest link, the family heads still without parents, open questions and draft findings, and the newest findings with changes. Its history adds a snapshot each time the newest finding's `recorded_on` date moves on, so date your findings to see progress over time ([details](deployment.md#build-and-inspect)).
+
 ## Record a research question
 
 A research question names something you have not yet established, such as a missing parent, a date or a household. While its `status` is `open` or `draft`, two optional fields record your plan for answering it:

@@ -47,6 +47,7 @@ ROUTES = {
     "tree.html": ("tree", "Family tree"), "branches.html": ("branches", "Families & branches"),
     "timeline.html": ("timeline", "Timeline"), "places.html": ("map", "Places"), "sources.html": ("sources", "Sources"),
     "studies.html": ("studies", "Studies"), "research.html": ("research", "Research"),
+    "progress.html": ("progress", "Research progress"),
     "findings.html": ("findings", "Latest findings"), "compare.html": ("compare", "Compare"),
     "connections.html": ("connections", "Connections"), "evidence.html": ("evidence", "Reading the evidence"),
     "sitemap.html": ("sitemap", "Site index"),
@@ -57,6 +58,10 @@ ROUTES = {
 OPTIONAL_ROUTES = {"corrections.html": ("corrections", "Corrections")}
 DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
               "data/public-tree.ged", "sitemap.xml", "findings.xml", "data/redirects.json", "_redirects"}
+DATA_FILES.add("data/progress-history.json")  # kept between builds: the progress page appends to it
+# The counts a progress snapshot keeps; a previous build's file is read back only for these.
+PROGRESS_COUNTS = ("people", "with_assessed_parent", "parent_links", "assessed_parent_links", "connected_groups", "family_heads",
+                   "open_questions", "draft_findings")
 # The fields the browser script reads. ``data/site.json`` keeps every public
 # field; the shared script carries only these, so it stays small to download
 # and parse on a large site.
@@ -1645,6 +1650,143 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + (people_tables or '<p class="empty-state">No public people are available.</p>')
                 + ('<h2 id="research-progress">Research progress</h2>' + research_tables if research_tables else ""))
     pages["statistics.html"] = statistics()
+    # Research progress: how far the research has got, not what the record
+    # contains. Counted from the public projection only, like every other page.
+    progress_order = list(dict.fromkeys(key for standard in ("documented", "probable", "possible", "unknown", "disproved")
+                                        for key in [*(g for g, grade in config.grades.items() if grade["confidence"] == standard), standard]))
+    progress_rank = {key: index for index, key in enumerate(progress_order)}  # strongest first
+
+    def assessed_as(row: dict[str, Any]) -> str:
+        return row["grade"] if row.get("grade") in config.grades else str(row.get("confidence") or "unknown")
+
+    def assessed_words(key: str, prefix: str = "") -> str:
+        """A link grade in the project's wording, linked to its guide entry."""
+        words = str(config.grades[key]["label"]) if key in config.grades else confidence_label(key, relationship=True)
+        anchor = f"grade-{key}" if key in config.grades else "confidence-tree-link" if key == "unknown" else f"confidence-{key}"
+        return f'<a href="{prefix}evidence.html#{_text(anchor)}">{_text(words)}</a>'
+
+    def progress_table(caption: str, head: tuple[str, ...], rows: list[str]) -> str:
+        return (f'<div class="table-wrap"><table class="progress-table"><caption>{_text(caption)}</caption><thead><tr>'
+                + "".join(f'<th scope="col">{_text(h)}</th>' for h in head) + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
+
+    def progress_chart(snapshots: list[dict[str, Any]]) -> str:
+        """A static line of the share of people with an assessed parent link, one point per snapshot, with the figures as a table."""
+        share = lambda s: 100 * s["with_assessed_parent"] / s["people"] if s["people"] else 0.0
+        rows = [f'<tr><th scope="row">{_text(s["date"])}</th><td>{s["people"]:,}</td><td>{s["with_assessed_parent"]:,}</td><td>{share(s):.1f}%</td></tr>'
+                for s in reversed(snapshots)]
+        table = ('<details class="progress-history-text"><summary>Snapshots as a table</summary>'
+                 + progress_table("Share of people with an assessed parent link, newest first", ("Newest finding", "People", "With an assessed parent", "Share"), rows) + "</details>")
+        if len(snapshots) < 2:
+            return '<p class="meta">One snapshot so far; a line is drawn once the newest finding date changes.</p>' + table
+        width, left, right, top, bottom = 640, 44, 620, 12, 172
+        x = lambda i: left + (right - left) * i / (len(snapshots) - 1)
+        y = lambda value: bottom - (bottom - top) * value / 100
+        grid = "".join(f'<path class="grid" d="M{left} {y(v):.1f}H{right}"/><text x="{left - 8}" y="{y(v) + 4:.1f}" text-anchor="end">{v}%</text>' for v in (0, 25, 50, 75, 100))
+        line = '<path class="share-line" d="' + "".join(f'{"M" if i == 0 else "L"}{x(i):.1f} {y(share(s)):.1f}' for i, s in enumerate(snapshots)) + '"/>'
+        points = "".join(f'<circle cx="{x(i):.1f}" cy="{y(share(s)):.1f}" r="4.5"><title>{_text(s["date"])}: {share(s):.1f}% of {s["people"]:,} people</title></circle>'
+                         for i, s in enumerate(snapshots))
+        dates = (f'<text x="{left}" y="{bottom + 20}" text-anchor="start">{_text(snapshots[0]["date"])}</text>'
+                 f'<text x="{right}" y="{bottom + 20}" text-anchor="end">{_text(snapshots[-1]["date"])}</text>')
+        summary = (f"Share of people with an assessed parent link over {len(snapshots)} snapshots, from {share(snapshots[0]):.1f}% on {snapshots[0]['date']}"
+                   f" to {share(snapshots[-1]):.1f}% on {snapshots[-1]['date']}")
+        return (f'<figure class="progress-history"><svg class="progress-chart" viewBox="0 0 {width} {bottom + 28}" role="img" aria-label="{_text(summary)}">'
+                f'{grid}{line}{points}{dates}</svg><figcaption>{_text(summary)}. Snapshots are evenly spaced, not drawn to scale in time.</figcaption></figure>' + table)
+
+    progress_path = exports.safe_output_path(directory, "data/progress-history.json")
+    snapshots: dict[str, dict[str, Any]] = {}
+    if progress_path.is_file():
+        # Only well-formed counts carry forward: the file is generated, but it sits
+        # in a directory anyone may have edited, and nothing else of it is printed.
+        try:
+            loaded = json.loads(progress_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            loaded = {}
+        for row in (loaded.get("snapshots") if isinstance(loaded, dict) else None) or []:
+            if (isinstance(row, dict) and isinstance(row.get("date"), str) and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", row["date"])
+                    and all(type(row.get(k)) is int and row[k] >= 0 for k in ("people", "with_assessed_parent"))):
+                snapshots[row["date"]] = {k: row[k] for k in ("date", *PROGRESS_COUNTS) if k == "date" or (type(row.get(k)) is int and row[k] >= 0)}
+    parent_links = [r for r in project["relationships"] if str(r["kind"]).casefold() in PARENT_KINDS and r["subject_id"] in people and r["object_id"] in people]
+    with_assessed_parent = {r["subject_id"] for r in parent_links if str(r.get("confidence") or "unknown") != "unknown"}
+    by_assessment = Counter(assessed_as(r) for r in parent_links)
+    group_links: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in project["relationships"]:  # the links that join the connected groups on the branches page
+        if row.get("confidence") != "disproved" and row["subject_id"] in people and row["object_id"] in people:
+            group_links[find(row["subject_id"])].append(row)
+    group_rows, weakest = [], Counter()
+    for number, members in enumerate(connected, 1):
+        link_grades = sorted((assessed_as(r) for r in group_links[find(members[0])]), key=progress_rank.__getitem__)
+        weakest[link_grades[-1]] += 1
+        if number <= 60:
+            names = Counter(canonical_surname(pid) for pid in members if surname(pid))
+            group_rows.append(f'<tr><th scope="row">Group {number}</th><td>{len(members)}</td><td>{len(link_grades)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td>'
+                              f'<td>{assessed_words(link_grades[0])}</td><td>{assessed_words(link_grades[-1])}</td></tr>')
+    children_by_parent: dict[str, set[str]] = defaultdict(set)
+    for r in parent_links:
+        if not rejected(r):
+            children_by_parent[r["object_id"]].add(r["subject_id"])
+    has_parent = {child for children in children_by_parent.values() for child in children}
+
+    def descendants(pid: str) -> int:
+        seen, todo = {pid}, [pid]
+        while todo:  # a recorded loop is counted once, never followed forever
+            for child in children_by_parent.get(todo.pop(), ()):
+                if child not in seen:
+                    seen.add(child)
+                    todo.append(child)
+        return len(seen) - 1
+    heads = sorted(((descendants(pid), pid) for pid in people if pid not in has_parent and pid in children_by_parent),
+                   key=lambda item: (-item[0], person_name(item[1]).casefold(), item[1]))
+    alone = sum(1 for pid in people if pid not in has_parent and pid not in children_by_parent)
+    open_questions = sum(1 for q in project["questions"] if str(q.get("status") or "open").casefold() == "open")
+    draft_findings = sum(1 for f in project["findings"] if str(f.get("status") or "draft").casefold() == "draft")
+    if dated:
+        # Dated by the newest finding, never the clock: a rebuild of the same
+        # research writes the same file, and a new finding date adds a snapshot.
+        snapshots[dated[0]["recorded_on"]] = {"date": dated[0]["recorded_on"], "people": len(people), "with_assessed_parent": len(with_assessed_parent),
+                                              "parent_links": len(parent_links), "assessed_parent_links": sum(n for k, n in by_assessment.items() if k != "unknown"),
+                                              "connected_groups": len(connected), "family_heads": len(heads), "open_questions": open_questions, "draft_findings": draft_findings}
+    history = [snapshots[d] for d in sorted(snapshots)][-60:]
+    percent = lambda n, total: f"{100 * n / total:.1f}%" if total else "—"
+    stat = lambda value, words: f'<div class="stat"><strong>{value}</strong><small>{_text(words)}</small></div>'
+    changed = [f for f in dated if f.get("changes")][:20]
+    recent = [f'<li><p class="meta">{_text(f["recorded_on"])}</p><p>{ref(f["id"], "", f["conclusion"])}</p><ul class="finding-changes">'
+              + "".join(f'<li>{ref(c["record_id"], "", changed_label(c["record_id"]))} <span class="badge change">{_text(shift(c))}</span></li>' for c in f["changes"])
+              + "</ul></li>" for f in changed]
+    pages["progress.html"] = (
+        '<h1>Research progress</h1><p>How far the research has got: which family links have been assessed against records, how well the connected groups hold together, '
+        'and which families still have no recorded parents. Counts cover the public records on this site only.</p>'
+        + '<div class="stats">' + stat(percent(len(with_assessed_parent), len(people)), "people with an assessed parent link")
+        + stat(f"{len(parent_links):,}", "parent links") + stat(f"{len(connected):,}", "connected groups")
+        + stat(f"{open_questions:,}", "open questions") + stat(f"{draft_findings:,}", "draft findings") + "</div>"
+        + f'<p>{len(with_assessed_parent):,} of {len(people):,} people have at least one parent link that has been assessed, whatever the outcome; '
+        'an unassessed tree link does not count. <a href="research.html">Open questions and draft findings</a> are on the research page.</p>'
+        + '<h2 id="parent-links">Parent links by grade</h2>'
+        + (progress_table("Parent links by grade, strongest first", ("Grade", "Links", "Share"),
+                          [f'<tr><th scope="row">{assessed_words(k)}</th><td>{by_assessment[k]:,}</td><td>{percent(by_assessment[k], len(parent_links))}</td></tr>'
+                           for k in progress_order if by_assessment[k]]) if parent_links else '<p class="empty-state">No public parent links recorded yet.</p>')
+        + '<h2 id="connected-groups">Connected groups by grade</h2>'
+        + ('<p>A group holds together only as well as its weakest link. Groups are numbered as on <a href="branches.html">Families and branches</a>; '
+           'disproved links join nothing.</p>'
+           + progress_table("Groups by their weakest link", ("Weakest link", "Groups"),
+                            [f'<tr><th scope="row">{assessed_words(k)}</th><td>{weakest[k]:,}</td></tr>' for k in progress_order if weakest[k]])
+           + progress_table("Each group's strongest and weakest link", ("Group", "People", "Links", "Main surnames", "Strongest link", "Weakest link"), group_rows)
+           + (f'<p class="meta">{len(connected) - 60:,} smaller groups are not listed.</p>' if len(connected) > 60 else "")
+           if connected else '<p class="empty-state">No recorded relationships connect public people yet.</p>')
+        + '<h2 id="family-heads">Family heads</h2>'
+        + ('<p>People with descendants but no recorded parent, most descendants first: each is where a line currently stops. '
+           'A rejected parent link does not count as a recorded parent.</p>'
+           + progress_table("Family heads, most descendants first", ("Person", "Children", "Descendants"),
+                            [f'<tr><th scope="row">{ref(pid)}' + (f' <span class="meta">{_text(lifespan(pid))}</span>' if lifespan(pid) else "")
+                             + f'</th><td>{len(children_by_parent[pid]):,}</td><td>{n:,}</td></tr>' for n, pid in heads[:50]])
+           + (f'<p class="meta">{len(heads) - 50:,} more family heads are not listed.</p>' if len(heads) > 50 else "")
+           if heads else '<p class="empty-state">No public parent links recorded yet.</p>')
+        + (f'<p class="meta">{alone:,} {"person has" if alone == 1 else "people have"} neither a recorded parent nor recorded children.</p>' if alone else "")
+        + '<h2 id="recently-assessed">Most recently assessed</h2>'
+        + ('<p>The newest findings that changed how a link or claim is graded. <a href="findings.html">Latest findings</a> has every finding.</p>'
+           '<ul class="record-list progress-recent">' + "".join(recent) + "</ul>" if recent else '<p class="empty-state">No public finding has recorded a change of grade yet.</p>')
+        + ('<h2 id="history">Over time</h2><p>A snapshot of these counts is kept for each date of the newest finding, up to the latest 60; '
+            'they are also in <a href="data/progress-history.json">data/progress-history.json</a>.</p>' + progress_chart(history) if history else ""))
+    progress_history = json.dumps({"snapshots": history}, indent=2, sort_keys=True) + "\n" if history else None
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
@@ -1662,6 +1804,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         "data/site-data.js": "window.GENEALOGY_SITE_DATA=" + _json(shared) + ";\n",
     }
     outputs["data/routes.json"] = json.dumps(sorted(pages), indent=2) + "\n"
+    if progress_history:
+        outputs["data/progress-history.json"] = progress_history
     if base_url:
         outputs["sitemap.xml"] = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "".join(
             f"  <url><loc>{xml_escape(base_url + quote(path))}</loc></url>\n" for path in sorted(pages)) + "</urlset>\n"
