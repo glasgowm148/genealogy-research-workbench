@@ -1493,13 +1493,19 @@
         "confidence": "possible",
         "evidence_ids": [],
         "id": "hypothesis:42",
+        "objections": [
+          "No independent entry names Person 41 as a parent."
+        ],
         "related_ids": [
           "person:41",
           "person:42"
         ],
         "sensitivity": "public",
         "statement": "Person 42 may be the child of Person 41; the supplied family sketch is suggestive but no independent matching entry is represented.",
-        "status": "open"
+        "status": "open",
+        "supports": [
+          "The supplied family sketch places Person 42 in Person 41's household."
+        ]
       }
     ],
     "Person": [

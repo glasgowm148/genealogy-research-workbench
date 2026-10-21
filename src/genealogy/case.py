@@ -12,7 +12,7 @@ from typing import Any
 from .markup import references as prose_references
 from .models import (
     CASE_SCHEMA_VERSION, CITATION_INFORMATION, CITATION_QUALITIES, MODEL_TYPES, Citation, Claim, ClaimStatus,
-    Confidence, Evidence, ExternalIdentifier, Finding, ImportProvenance, LivingStatus, Name, PLACE_PRECISIONS,
+    Confidence, Evidence, ExternalIdentifier, Finding, Hypothesis, ImportProvenance, LivingStatus, Name, PLACE_PRECISIONS,
     Person, Place, Record, ResearchQuestion, access_level, is_raw_dna, record_from_dict,
 )
 
@@ -430,6 +430,11 @@ def _validate_record_fields(record: Record) -> list[str]:
                         errors.append(f"{record.id}.changes[{index}].{key} must be a string or null")
     if type(record).__name__ == "Study":
         errors.extend(_study_group_errors(record))
+    if isinstance(record, Hypothesis):
+        for field_name in ("supports", "objections"):
+            points = getattr(record, field_name)
+            if not (isinstance(points, list) and all(isinstance(item, str) and item.strip() for item in points)):
+                errors.append(f"{record.id}.{field_name} must be a list of non-empty text points")
     if isinstance(record, ImportProvenance):
         if not isinstance(record.observations, list) or not all(isinstance(item, dict) for item in record.observations):
             errors.append(f"{record.id}.observations must be a list of objects")

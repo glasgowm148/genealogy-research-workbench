@@ -674,3 +674,27 @@ class BrowserSiteTests(unittest.TestCase):
             self.assertIn('Tobin Fable', page.locator('#families + p + .table-wrap').inner_text())
         finally:
             nojs.close()
+
+    def test_competing_hypotheses_pass_axe(self):
+        from test_hypotheses_compare import case as hypotheses_case
+        build_site(hypotheses_case(), ProjectConfig(name='Fictional hypotheses'), self.root / 'hypotheses')
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        dossier = next(p for p in (self.root / 'hypotheses' / 'people').glob('*.html') if 'data-person-id="p0001"' in p.read_text())
+        for width in (1440, 390):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            for route in ('research.html', f'people/{dossier.name}'):
+                with self.subTest(width=width, route=route):
+                    self.page.goto(urljoin(self.base, f'../hypotheses/{route}'), wait_until='networkidle')
+                    cards = self.page.locator('.hypotheses-compare .hypothesis-card')
+                    self.assertEqual(2, cards.count())
+                    self.assertTrue(self.page.locator('.points-note').first.is_visible())
+                    first, second = cards.nth(0).bounding_box(), cards.nth(1).bounding_box()
+                    # Side by side where there is room, stacked on a phone.
+                    self.assertEqual(width > 900, abs(first['y'] - second['y']) < 1, (first, second))
+                    self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                    self.page.add_script_tag(content=axe)
+                    violations = self.page.evaluate(
+                        "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                        "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                        ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                    self.assertEqual([], violations)

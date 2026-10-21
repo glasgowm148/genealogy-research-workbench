@@ -496,6 +496,70 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return ('<dl class="question-next">' + "".join(f'<dt>{label}</dt><dd>{_text(row[key]) if row.get(key) else gap}</dd>'
                 for key, label in (("resolves", "What would answer this"), ("next_record", "Next record to check"))) + '</dl>')
 
+    # Competing hypotheses: open ones about the same people (the same set of
+    # related_ids) are set side by side, each with the researcher's own points
+    # for and against. Nothing is scored, ranked or concluded for the reader.
+    evidence_by_id = {e["id"]: e for e in project["evidence"]}
+
+    def competing(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        """Each compared hypothesis's id -> its group, in id order so none is placed first on merit."""
+        groups: dict[tuple[str, ...], list[dict[str, Any]]] = defaultdict(list)
+        for r in rows:
+            if "statement" in r and r.get("related_ids") and str(r.get("status", "open")).casefold() not in ("rejected", "disproved") and not rejected(r):
+                groups[tuple(sorted(set(r["related_ids"])))].append(r)
+        return {r["id"]: members for members in (sorted(g, key=lambda m: m["id"]) for g in groups.values() if len(g) > 1) for r in members}
+
+    def hypothesis_points(row: dict[str, Any], prefix: str = "", *, compared: bool = False) -> str:
+        """For and Against as recorded; a blank side says so. A lone hypothesis with neither shows nothing."""
+        if not (compared or row.get("supports") or row.get("objections")):
+            return ""
+        side = lambda key: '<ul>' + "".join(f'<li>{_text(p)}</li>' for p in row[key]) + '</ul>' if row.get(key) else '<p class="meta">None recorded</p>'
+        return (f'<dl class="hypothesis-points"><dt>For</dt><dd class="points-for">{side("supports")}</dd><dt>Against</dt><dd class="points-against">{side("objections")}</dd></dl>'
+                + ("" if compared else f'<p class="meta points-note"><a href="{prefix}evidence.html#for-and-against">Recorded points, not a tally</a></p>'))
+
+    def hypothesis_evidence(row: dict[str, Any], prefix: str = "") -> str:
+        """The hypothesis's evidence assessments, each named by the claim it assesses."""
+        links = []
+        for eid in row.get("evidence_ids", []):
+            e = evidence_by_id.get(eid, {})
+            c = claims_by_id.get(e.get("claim_id"))
+            links.append(ref(eid, prefix, f'{c["predicate"]}: {c["value"]}' if c else "Evidence assessment")
+                         + ("" if e.get("supports", True) else ' <span class="meta">(challenges)</span>'))
+        return '<p class="meta hypothesis-evidence">Evidence: ' + ", ".join(links) + "</p>" if links else ""
+
+    def hypotheses_compare(members: list[dict[str, Any]], prefix: str = "", *, here: bool = False) -> str:
+        """One list item holding a group's cards; on research.html (here) each card is its hypothesis's anchor."""
+        caption = f'compare-{_anchor(members[0]["id"])}'
+        cards = "".join(f'<article class="card hypothesis-card"' + (f' id="{_anchor(r["id"])}"' if here else "") + f' data-status="{_text(r.get("status", ""))}">'
+                        + f'<h3>{_text(r["statement"]) if here else ref(r["id"], prefix, r["statement"])}</h3>{metadata(r, prefix)}'
+                        + hypothesis_points(r, prefix, compared=True) + hypothesis_evidence(r, prefix) + "</article>" for r in members)
+        return (f'<li class="hypotheses-group"><p class="compare-caption" id="{caption}">Competing hypotheses about '
+                + ", ".join(ref(rid, prefix) for rid in sorted(set(members[0]["related_ids"])))
+                + f'. For and Against are the researcher\'s recorded points, not a tally (<a href="{prefix}evidence.html#for-and-against">how to read them</a>).</p>'
+                + f'<div class="hypotheses-compare" role="group" aria-labelledby="{caption}">{cards}</div></li>')
+
+    def with_competing(rows: list[dict[str, Any]], item: Any, prefix: str = "", *, here: bool = False) -> list[str]:
+        """List items in order, each group of competing hypotheses once, where its first member falls."""
+        groups, shown, items = competing(rows), set(), []
+        for r in rows:
+            if r["id"] not in groups:
+                items.append(item(r))
+            elif r["id"] not in shown:
+                shown.update(m["id"] for m in groups[r["id"]])
+                items.append(hypotheses_compare(groups[r["id"]], prefix, here=here))
+        return items
+
+    def hypotheses_section(rows: list[dict[str, Any]], outstanding: int) -> str:
+        """research.html's Hypotheses: a lone hypothesis as before, with its points inline."""
+        item = lambda r: (f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r["statement"])}</h3>{metadata(r)}{hypothesis_points(r)}<p>'
+                          + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>')
+        return '<h2>Hypotheses</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty(with_competing(rows, item, here=True))
+
+    def research_items(pid: str) -> list[str]:
+        """A dossier's Research list; a lone hypothesis shows its points inline."""
+        return with_competing(research_by_subject[pid], lambda r: f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}'
+                              + f'{question_next(r, "../") if "question" in r else ""}{hypothesis_points(r, "../") if "statement" in r else ""}</li>', "../")
+
     def finding_kind(row: dict[str, Any]) -> str:
         return f' <span class="badge finding-kind" data-kind="{_text(row["kind"])}">{_text(str(row["kind"]).replace("-", " ").replace("_", " ").capitalize())}</span>' if row.get("kind") else ""
 
@@ -870,6 +934,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     for collection, heading, field in (("hypotheses", "Hypotheses", "statement"), ("questions", "Research questions", "question"), ("findings", "Findings", "conclusion")):
         rows = sorted(project[collection], key=lambda r: (str(r.get("status", "open")).casefold() not in OUTSTANDING, r["id"]))
         outstanding = sum(str(r.get("status", "open")).casefold() in OUTSTANDING for r in rows)
+        if collection == "hypotheses":
+            research.append(hypotheses_section(rows, outstanding))
+            continue
         if collection == "findings" and compact_findings:
             # The findings log and its archive hold every finding; the notebook keeps the open work.
             research.append(f'<h2>{heading}</h2><p class="result-count">{outstanding} of {len(rows):,} open or in draft. All findings are in the <a href="findings.html">findings log</a>.</p>'
@@ -1397,7 +1464,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         content += family(pid)
         content += '<h2 id="events">Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2 id="claims">Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
         content += '<h2 id="studies">Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
-        content += '<h2 id="research">Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}{question_next(r, "../") if "question" in r else ""}</li>' for r in research_by_subject[pid]]) + research_log(pid) + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
+        content += '<h2 id="research">Research</h2>' + empty(research_items(pid)) + research_log(pid) + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
         if "corrections.html" in routes:
             content += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
                                                            if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"

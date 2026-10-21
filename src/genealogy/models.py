@@ -262,6 +262,10 @@ class Hypothesis(Record):
     confidence: Confidence = Confidence.UNKNOWN
     sensitivity: Sensitivity = Sensitivity.PRIVATE
     grade: str | None = None  # see Relationship.grade
+    # The researcher's own points for and against, one plain sentence each.
+    # Printed as recorded beside competing hypotheses; never counted or scored.
+    supports: list[str] = field(default_factory=list)
+    objections: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

@@ -105,6 +105,25 @@ genealogy --project my-family search add search:ada-baptism \
 In the case JSON a `Search` record is `{"id", "search", "result", "related_ids", "searched_on", "limitation", "citation_ids", "sensitivity"}`; you can also add one with `record add Search --input search.json`. Validation requires the search text and the result, checks the date, and checks that every related ID exists and every cited ID is a citation.
 
 Each person's page has a **Research log** section after **Research**, listing every search made for them, newest first (undated searches last), with the date, the search, the result, its limits, the records found and any other people or places it was made for. **Research** (`research.html`) ends with a **Research log** of the newest 50 searches and the total. A search is withheld from every page and download when it is not public itself, or when any person, place, source or citation it names is withheld, for example a living person.
+## Record a hypothesis
+
+A hypothesis is a possible answer you are still testing, such as one of two candidate fathers. Record each candidate as its own hypothesis, with the same `related_ids`, and list your points on each side in two optional fields:
+
+- `supports`: the points for it, one plain sentence each;
+- `objections`: the points against it.
+
+```json
+{"id": "hypothesis:ann-father-tobin", "statement": "Ann's father was Tobin Fable", "related_ids": ["gedcom:person:I1"],
+ "status": "open", "confidence": "probable", "evidence_ids": ["evidence:banns-1838"],
+ "supports": ["The banns name a Tobin Fable of the same parish.", "Tobin's will leaves a cottage to 'my daughter Ann'."],
+ "objections": ["Tobin would have been sixteen at Ann's baptism."], "sensitivity": "public"}
+```
+
+```sh
+genealogy --project my-family record add Hypothesis --input hypothesis.json
+```
+
+Each point must be non-empty text. When two or more open hypotheses have the same set of `related_ids`, **Research** and the dossier of each of those people set them side by side as cards: the statement, its label, "For" and "Against" as you recorded them ("None recorded" for a side left blank) and links to its evidence assessments. The cards are in id order, so neither is placed first on merit. A hypothesis whose `status` is `rejected` or `disproved`, or whose confidence or grade counts as disproved, is listed on its own, as is one about a different set of people; both still show their points. The site never counts the points, scores or ranks the hypotheses, or picks one: **Reading the evidence** explains that For and Against are your recorded points, not a tally. Record the hypothesis's assessment in its `confidence` or `grade`, and the conclusion, once you reach it, in a finding.
 
 ## Assess a relationship
 
