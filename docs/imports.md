@@ -20,7 +20,7 @@ Imports keep the original bytes in `private/imports/` with a SHA-256 identity, a
 
 Before `--update` or `--replace` changes anything, the previous case is copied to `private/imports/backups/<case>-<time>.json`. To recover, copy that file back to `cases/<case>.json`.
 
-`--update` refuses, and changes nothing, when research you kept would point at a person or record that the new export no longer contains, or when one of your record IDs collides with a newly imported ID. The error lists the references. Correct them, restore the person in your tree program, or use `--replace`. Edits made directly to previously imported records are replaced by the new export; put lasting research in your own records rather than editing imported ones. Identity across exports relies on the exporter keeping its record identifiers (`@I12@`, WikiTree IDs): an export that renumbers everyone is a different tree.
+`--update` refuses, and changes nothing, when research you kept would point at a person or record that the new export no longer contains, or when one of your record IDs collides with a newly imported ID. The error lists the references. Correct them, restore the person in your tree program, or use `--replace`. Edits made directly to previously imported records are replaced by the new export, except the `former_ids` you record on a person after a merge ([Record a merge or a changed ID](research.md#record-a-merge-or-a-changed-id)); put lasting research in your own records rather than editing imported ones. Identity across exports relies on the exporter keeping its record identifiers (`@I12@`, WikiTree IDs): an export that renumbers everyone is a different tree.
 
 ## GEDCOM
 

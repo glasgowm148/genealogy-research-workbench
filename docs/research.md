@@ -126,6 +126,24 @@ On the site, **Families & branches** then has one Fable row covering everyone re
 
 Case does not matter, and a spelling can belong to one surname only: `genealogy.toml` is rejected if a spelling is listed under two surnames, or if a surname you group under is also listed as another one's variant. The list is published with the site in `data/site-data.js`, except for a surname that no public person is recorded under, so list spellings, not people.
 
+## Record a merge or a changed ID
+
+When two person records turn out to be one person, or a person's ID changes, keep one record and list the IDs it replaced in its `former_ids`. A person's page address comes from their ID, so without this every link to the old page, from another site, a bookmark or a search engine, would stop working.
+
+To record a merge of `person:ada-fable-2` into `person:ada-fable`:
+
+1. Point every reference at the person you keep: relationships, event participants, claims, the `related_ids` of findings, questions, hypotheses and studies, and `[[person:ada-fable-2]]` in study prose. Move across any names, events and claims worth keeping, then remove the other person record.
+2. Add the removed ID to the kept person: `"former_ids": ["person:ada-fable-2"]`.
+3. Run `genealogy validate`.
+
+There is no command for editing a record, so back up the case and edit its JSON (or use the Python API), as for any revision.
+
+Validation keeps former IDs retired. Each must be a non-empty string, must not be the ID of any current record, and may be listed by one person only, whether or not that person is public. References stay strict: a `related_ids` entry or `[[…]]` reference that names a former ID is an error, and the message names the ID to use instead (`… (a former id of person:ada-fable; refer to person:ada-fable)`). The case keeps one ID per person; the site keeps the old addresses working.
+
+For each public person, the site writes a small page at the address each former ID had. It sends readers on to the current page, with a visible "This person's page has moved" link for browsers that do not follow it, and asks search engines not to index it. `data/redirects.json` lists the old and new addresses, and with `site.base_url` set the build also writes a `_redirects` file for hosts that read one ([Static hosting](deployment.md#static-hosting)). A withheld person's former IDs produce no page and no entry. Remove a former ID and the next build removes its page.
+
+When you import again with `--update` ([details](imports.md#importing-again)), a former ID you recorded on an imported person is kept as long as the new export still has that person's ID. An export does not say which profiles were merged, so an import never sets `former_ids` itself. After a merge in your tree program, run `--update` first: the merged-away person disappears (if your research still refers to them, the update stops and lists the references to repoint), and then add the old ID to the person you kept.
+
 ## Summarise a record
 
 A citation can carry an `abstract`: your reading of the record, in your own words. Write what the record states (who, what, when, where, and the relationships it names) and keep your interpretation for claims, evidence assessments and findings:

@@ -1,7 +1,8 @@
 """Find internal links and asset references in a static site that point at nothing.
 
 The checker walks every ``*.html`` file below a site root and resolves each
-internal ``href``/``src``/``srcset``/``poster`` the way a plain static server
+internal ``href``/``src``/``srcset``/``poster``, and the target of a
+``<meta http-equiv="refresh">`` redirect, the way a plain static server
 does: ``/x/`` needs ``x/index.html``; ``/x`` needs the file ``x`` or the
 directory ``x/`` with an ``index.html``. A link that exists only as ``x.html``
 is reported as ``html-fallback`` because many static servers do not add the
@@ -32,6 +33,9 @@ _COMMENT = re.compile(r"<!--.*?-->", re.S)
 _RAW_BODY = re.compile(r"(<(script|style|textarea)\b[^>]*>).*?</\2\s*>", re.I | re.S)
 _TAG = re.compile(r"<([a-zA-Z][a-zA-Z0-9-]*)(\s[^>]*)>", re.S)
 _BASE = re.compile(r"""<base\b[^>]*?\bhref\s*=\s*["']([^"']*)["']""", re.I)
+_REFRESH = re.compile(r"""\bhttp-equiv\s*=\s*["']?refresh\b""", re.I)
+_CONTENT = re.compile(r"""\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')""", re.I)
+_REFRESH_URL = re.compile(r"""^\s*\d+(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?['"]?([^'"]+?)['"]?\s*$""", re.I)
 _ID = re.compile(r"""\s(?:id|name)\s*=\s*["']([^"']+)["']""", re.I)
 _SKIP_SCHEMES = ("mailto:", "tel:", "javascript:", "data:", "blob:", "about:", "sms:", "file:")
 _TEMPLATE = ("${", "{{", "<%", "' +", "\" +")
@@ -142,36 +146,46 @@ def scan(relative: str, site_root: str) -> dict[str, Any]:
     broken, anchors, refs, cache = [], [], set(), {}
     checked = internal = 0
     anchor_pages = _STATE["anchors"]
+
+    def links(name: str, attrs: str) -> Iterable[tuple[str, str]]:
+        for attr in _STATE["attr"].finditer(attrs):
+            raw = next(group for group in attr.groups()[1:] if group is not None)
+            for value in _values(attr.group(1), raw):
+                yield attr.group(1).lower(), value
+        # A refresh redirect leads somewhere too: <meta http-equiv="refresh" content="0; url=…">.
+        content = _CONTENT.search(attrs) if name == "meta" and _REFRESH.search(attrs) else None
+        target = _REFRESH_URL.match(unescape(content.group(1) or content.group(2) or "")) if content else None
+        if target:
+            yield "content", target.group(1).strip()
+
     for tag in _TAG.finditer(clean):
         name, attrs = tag.group(1).lower(), tag.group(2)
         if name in _SKIP_TAGS:
             continue
-        for attr in _STATE["attr"].finditer(attrs):
-            raw = next(group for group in attr.groups()[1:] if group is not None)
-            for value in _values(attr.group(1), raw):
-                checked += 1
-                low = value.lower()
-                if not value or value.startswith("#") or low.startswith(_SKIP_SCHEMES) or any(t in value for t in _TEMPLATE):
-                    continue
-                try:
-                    parts = urlsplit(urljoin(base, value))
-                except ValueError:
-                    broken.append((name, attr.group(1).lower(), value[:300], value[:300], "invalid-url"))
-                    continue
-                if parts.scheme not in ("http", "https") or parts.netloc.casefold() not in options.local_hosts:
-                    continue
-                internal += 1
-                path = parts.path or "/"
-                if path not in cache:
-                    cache[path] = resolve(path, files)
-                target, how = cache[path]
-                if target is None:
-                    broken.append((name, attr.group(1).lower(), value[:300], unquote(path), how))
-                    continue
-                if options.generated_prefixes and target.startswith(options.generated_prefixes):
-                    refs.add(target)
-                if parts.fragment and target.endswith(".html") and target != relative and (anchor_pages is None or anchor_pages.fullmatch(target)):
-                    anchors.append((target, unquote(parts.fragment), value[:300]))
+        for attr_name, value in links(name, attrs):
+            checked += 1
+            low = value.lower()
+            if not value or value.startswith("#") or low.startswith(_SKIP_SCHEMES) or any(t in value for t in _TEMPLATE):
+                continue
+            try:
+                parts = urlsplit(urljoin(base, value))
+            except ValueError:
+                broken.append((name, attr_name, value[:300], value[:300], "invalid-url"))
+                continue
+            if parts.scheme not in ("http", "https") or parts.netloc.casefold() not in options.local_hosts:
+                continue
+            internal += 1
+            path = parts.path or "/"
+            if path not in cache:
+                cache[path] = resolve(path, files)
+            target, how = cache[path]
+            if target is None:
+                broken.append((name, attr_name, value[:300], unquote(path), how))
+                continue
+            if options.generated_prefixes and target.startswith(options.generated_prefixes):
+                refs.add(target)
+            if parts.fragment and target.endswith(".html") and target != relative and (anchor_pages is None or anchor_pages.fullmatch(target)):
+                anchors.append((target, unquote(parts.fragment), value[:300]))
     ids = None
     if relative.endswith(".html") and (anchor_pages is None or anchor_pages.fullmatch(relative)):
         found = set(_ID.findall(clean))

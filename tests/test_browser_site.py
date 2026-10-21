@@ -462,6 +462,30 @@ class BrowserSiteTests(unittest.TestCase):
                     ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                 self.assertEqual([], violations)
 
+    def test_moved_person_page_sends_the_reader_on_and_passes_axe(self):
+        from test_former_ids import case as merges_case, config as merges_config, page as person_page
+        build_site(merges_case(), merges_config(), self.root / 'merges')
+        stub_url = urljoin(self.base, f'../merges/{person_page("p0009")}')
+        self.page.goto(stub_url)
+        self.page.wait_for_url(urljoin(self.base, f'../merges/{person_page("p0001")}'))
+        self.assertEqual('Ada Fable', self.page.locator('h1').inner_text())
+        if os.environ.get('GENEALOGY_AXE_PATH'):
+            # The stub itself, held still: served without its refresh so axe can read it.
+            html = (self.root / 'merges' / person_page('p0009')).read_text(encoding='utf-8')
+            still = html.replace(html[html.index('<meta http-equiv="refresh"'):].split('>', 1)[0] + '>', '')
+            self.page.route(stub_url, lambda route: route.fulfill(body=still, content_type='text/html'))
+            try:
+                self.page.goto(stub_url, wait_until='networkidle')
+                self.assertEqual("This person's page has moved", self.page.locator('h1').inner_text())
+                self.page.add_script_tag(content=Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8'))
+                violations = self.page.evaluate(
+                    "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                    "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                    ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                self.assertEqual([], violations)
+            finally:
+                self.page.unroute(stub_url)
+
     def test_map_controls_and_source_timeline_filters(self):
         self.page.goto(self.base + 'places.html')
         svg = self.page.locator('#map-output svg')

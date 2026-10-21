@@ -46,7 +46,7 @@ ROUTES = {
 # off, so a rebuild removes them.
 OPTIONAL_ROUTES = {"corrections.html": ("corrections", "Corrections")}
 DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
-              "data/public-tree.ged", "sitemap.xml", "findings.xml"}
+              "data/public-tree.ged", "sitemap.xml", "findings.xml", "data/redirects.json", "_redirects"}
 # The fields the browser script reads. ``data/site.json`` keeps every public
 # field; the shared script carries only these, so it stays small to download
 # and parse on a large site.
@@ -172,6 +172,10 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     sources = {s["id"]: s for s in project["sources"]}
     citations = {c["id"]: c for c in project["citations"]}
     people_urls = {pid: "people/p-" + _key(pid) + ".html" for pid in people}
+    # The address each public person's former id had, after a merge or an id
+    # change, and the page it now leads to. A withheld person's former ids are
+    # never seen here: the person is not in the projection.
+    moved = {"people/p-" + _key(former) + ".html": people_urls[pid] for pid, p in people.items() for former in p.get("former_ids", [])}
     studies = {s["id"]: s for s in project.get("studies", [])}
     study_urls = {sid: "studies/s-" + _key(sid) + ".html" for sid in studies}
     events_by_person: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1148,6 +1152,22 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
         outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
+    # A moved page is a stub, not a route: it stays out of routes.json and the
+    # sitemap, and asks search engines to index the current page instead.
+    for old, new in moved.items():
+        target = _text(new.split("/")[1])
+        canonical = f'<link rel="canonical" href="{_text(base_url + quote(new))}">' if base_url else ""
+        outputs[old] = (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+                        f'<meta name="robots" content="noindex"><meta http-equiv="refresh" content="0; url={target}"><title>Page moved — {_text(config.name)}</title>{canonical}'
+                        '<link rel="icon" href="../assets/favicon.svg"><link rel="stylesheet" href="../assets/site.css"></head><body><main id="main-content">'
+                        f'<h1>This person\'s page has moved</h1><p>Their page is now <a href="{target}">{_text(person_titles[new])}</a>. Please update any link or bookmark.</p></main></body></html>')
+    if moved:
+        outputs["data/redirects.json"] = json.dumps(dict(sorted(moved.items())), indent=2) + "\n"
+    if moved and base_url:
+        # Hosts that read this file answer the old address with a real 301
+        # (Netlify only with "301!", as the stub exists; see deployment.md).
+        root = urlsplit(base_url).path
+        outputs["_redirects"] = "".join(f"{root}{old} {root}{new} 301\n" for old, new in sorted(moved.items()))
     asset_root = Path(__file__).with_name("web")
     for filename in ASSETS:
         asset = asset_root / filename

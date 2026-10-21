@@ -168,6 +168,22 @@ def validate_case(case: ResearchCase) -> list[str]:
         "Study": {"related_ids": None},
         "ImportProvenance": {"entity_ids": None},
     }
+    # A former id stays retired: it cannot be a current id or belong to two
+    # people, or its old address would send readers to the wrong page.
+    former_of: dict[str, str] = {}
+    listed = case.records(Person)
+    for person in listed if isinstance(listed, list) else []:
+        if not isinstance(person, Person) or not _string_list(person.former_ids):
+            continue  # reported with the record's other fields
+        for former in person.former_ids:
+            if former in seen:
+                errors.append(f"{person.id}.former_ids lists {former}, which is a current record id")
+            elif former_of.setdefault(former, person.id) != person.id:
+                errors.append(f"{person.id}.former_ids lists {former}, which {former_of[former]} also lists")
+
+    def missing(reference: str) -> str:
+        # References stay strict; a retired id says which id replaced it.
+        return f" (a former id of {former_of[reference]}; refer to {former_of[reference]})" if reference in former_of else ""
     for kind, records in case.record_sets.items():
         if not isinstance(records, list):
             continue
@@ -178,7 +194,7 @@ def validate_case(case: ResearchCase) -> list[str]:
                 expected = (expected_kind,) if isinstance(expected_kind, str) else expected_kind
                 for reference in reference_values(record, reference_field):
                     if reference and reference not in seen:
-                        errors.append(f"{record.id}.{reference_field} references missing record: {reference}")
+                        errors.append(f"{record.id}.{reference_field} references missing record: {reference}{missing(reference)}")
                     elif reference and expected and id_kinds.get(reference) not in expected:
                         errors.append(f"{record.id}.{reference_field} must reference a {' or '.join(expected)}: {reference}")
             if kind == "Study":
@@ -186,7 +202,7 @@ def validate_case(case: ResearchCase) -> list[str]:
                     text = getattr(record, text_field, None)
                     for reference in prose_references(text if isinstance(text, str) else ""):
                         if reference not in seen:
-                            errors.append(f"{record.id}.{text_field} refers to missing record [[{reference}]]")
+                            errors.append(f"{record.id}.{text_field} refers to missing record [[{reference}]]{missing(reference)}")
             sensitivity = access_level(getattr(record, "sensitivity", None))
             if sensitivity is None:
                 errors.append(f"{record.id} has an invalid sensitivity")
@@ -347,7 +363,7 @@ def _validate_record_fields(record: Record) -> list[str]:
         errors.append(f"{record.id}.grade must be a grade key (lower-case letters, digits, '_' or '-') or null")
     list_fields = (
         "event_ids", "participant_ids", "claim_ids", "citation_ids", "related_ids",
-        "evidence_ids", "entity_ids",
+        "evidence_ids", "entity_ids", "former_ids",
     )
     for field_name in list_fields:
         if hasattr(record, field_name) and not _string_list(getattr(record, field_name)):

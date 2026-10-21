@@ -52,6 +52,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `index.html` | Overview, counts and research entry points |
 | `catalogue.html` | Search, surname, year and evidence filters, sort and pagination; the surname filter and search fold the spellings listed under `[names.variants]` into one surname |
 | `people/p-<hash>.html` | Stable person dossier. Without notes, it opens with sentences written from the public record ("Ada Fable was born ABT 1801 in Invented Parish, and died 12 MAR 1870 in Invented Town. This page lists Tobin Fable and Wren Fable as parents, one spouse or partner and two children."); a missing event or relative leaves its clause out. Then a **Latest finding** box (the newest dated public finding about the person and "Research last recorded", the latest of those findings and related studies), and the family (parents, partners, children, siblings, each with its reason and supporting records, and rejected links set apart), events, claims, sources and research An **On this page** menu links each section that has something in it (kept in view on screens 1450px and wider), and an **Explore** line opens the family tree focused on the person (`tree.html?person=<id>`), Connections and Compare with the person chosen (`?a=<id>`), and the catalogue filtered to their surname |
+| `people/p-<hash>.html` (moved) | For each former ID of a public person ([Record a merge or a changed ID](research.md#record-a-merge-or-a-changed-id)), a small page at the old address that sends readers on to the current dossier; marked `noindex`, with a canonical link to the current page when `site.base_url` is set. Not listed in `data/routes.json` or `sitemap.xml` |
 | `tree.html` | Whole-tree canvas, family focus and branch cards |
 | `timeline.html` | Recorded life events with filters |
 | `places.html` | Place/event list and supplied-coordinate map |
@@ -68,6 +69,8 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `sitemap.xml` | Search-engine sitemap (only when `site.base_url` is set) |
 | `data/site-data.js` | The fields of the public records that the interactive pages read, shared by every interactive page; `data/site.json` has every public field |
 | `data/` | Public JSON, CSV, GeoJSON, GEDCOM 5.5.1 (`public-tree.ged`) and route index |
+| `data/redirects.json` | Each moved person address and the address it now leads to (only when a public person has former IDs) |
+| `_redirects` | The same moves as permanent (301) redirects, one `/people/p-<old>.html /people/p-<new>.html 301` line each, prefixed with the path of `site.base_url` (only when `site.base_url` is set and a public person has former IDs) |
 
 Every page and download is generated from the same privacy-filtered projection, so a withheld person is absent from HTML, search, maps, data files, the GEDCOM download and the sitemap alike. Labels such as "Unassessed tree link" or "tree-marked uncertain" link to `evidence.html`, which explains them.
 
@@ -94,16 +97,18 @@ The paged pages are plain lists that need no script.
 genealogy --project my-family check-links
 ```
 
-This checks every internal link, image, script and `#anchor` in `dist/` the way a plain static server resolves them, and exits non-zero when something points at nothing. A link to `page` that exists only as `page.html` is reported, because many hosts do not add the extension. When you add your own hand-written pages, record any known breakage once with `--baseline known-links.json --update-baseline`. From then on only new breakage fails, and later updates only ever remove pairs. The checker is also importable as `genealogy.sitecheck` for projects with their own site builders.
+This checks every internal link, image, script, refresh redirect and `#anchor` in `dist/` the way a plain static server resolves them, and exits non-zero when something points at nothing. A link to `page` that exists only as `page.html` is reported, because many hosts do not add the extension. When you add your own hand-written pages, record any known breakage once with `--baseline known-links.json --update-baseline`. From then on only new breakage fails, and later updates only ever remove pairs. The checker is also importable as `genealogy.sitecheck` for projects with their own site builders.
 
 ## Rebuilds
 
-Builds overwrite their owned outputs. The `.genealogy-site-manifest.json` tracks generated files, allowing obsolete person pages to be removed when people become private or are removed. Unrelated files outside that manifest are preserved. Do not hand-edit generated person pages; put durable research into the case.
+Builds overwrite their owned outputs. The `.genealogy-site-manifest.json` tracks generated files, allowing obsolete person pages to be removed when people become private or are removed, and a moved page, `data/redirects.json` or `_redirects` once no former ID needs it. Unrelated files outside that manifest are preserved. Do not hand-edit generated person pages; put durable research into the case.
 
 Deployed hosting must also remove obsolete pages. Replace the old site directory with the reviewed new build, or use your host’s delete/synchronization option. Simply copying new files over an old deployment can leave a withdrawn person page accessible.
 
 ## Static hosting
 
 Deploy only the contents of the reviewed `dist/` folder to your static host or web server. The toolkit needs no application server, database, external scripts, font provider, analytics, or geocoding service. It supports a URL subdirectory because links are relative.
+
+Moved person pages work on any host: the page at the old address sends the browser on. Hosts that read a `_redirects` file can answer with a real 301 redirect instead, which search engines follow best. Cloudflare Pages applies these rules even though the moved page exists. Netlify serves an existing file in preference to a rule, so there the moved page still does the redirect; to have Netlify answer with the 301, change `301` to `301!` in your deployment step. The build owns `_redirects` while it writes one, so keep other redirect rules in your host's own configuration.
 
 The package does not automatically deploy, create hosting accounts, upload research, or edit WikiTree. Keep the local upload server private; it is not a production hosting server. The same distinction applies to research bundles: a complete bundle is private, even if its corresponding website is public.

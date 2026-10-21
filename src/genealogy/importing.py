@@ -196,6 +196,11 @@ def import_file(directory: Path, case: ResearchCase, config: ProjectConfig, sour
     retained: list[Record] = []
     if update:
         new_ids = {record.id for records in imported.record_sets.values() for record in records}
+        # An export cannot say which profiles were merged; former ids are the
+        # researcher's record of that, kept on the person who still has the id.
+        former = {person.id: person.former_ids for person in case.records("Person") if person.id in owned and person.former_ids}
+        for person in imported.records("Person"):
+            person.former_ids = person.former_ids or list(former.get(person.id, []))
         retained = [record for records in case.record_sets.values() for record in records if record.id not in owned]
         clashes = [record.id for record in retained if record.id in new_ids]
         if clashes:
@@ -214,7 +219,8 @@ def import_file(directory: Path, case: ResearchCase, config: ProjectConfig, sour
     warnings = list(batch.warnings)
     if update:
         warnings.append(f"Updated the imported tree and kept {len(retained)} research records added to the case. "
-                        "Edits made directly to previously imported records were replaced by the new export.")
+                        "Edits made directly to previously imported records, except a person's former ids, "
+                        "were replaced by the new export.")
     if not publish_deceased:
         warnings.append("Publication review was not selected; default-private imported people remain private.")
     warnings.append("Imported tree assertions are unverified; review original sources before treating them as conclusions.")

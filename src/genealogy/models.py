@@ -153,6 +153,10 @@ class Person(Record):
     living: LivingStatus | bool | None = LivingStatus.UNKNOWN
     notes: str | None = None
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    # Ids this person was known by before a merge or an id change. The site keeps
+    # a page at each old address that sends readers to this one; references in
+    # the case must still use the current id.
+    former_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
