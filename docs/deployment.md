@@ -27,6 +27,14 @@ corrections_note = "Replies can take a few weeks."   # optional, shown as writte
 
 Either contact is enough. With `contact_email`, the person's link opens an email whose subject is `Correction: <name> (<record ID>)`; with `base_url` also set, the message starts with the page address. With only `contact_url`, the link leads to the Corrections page. The contact is taken only from these settings, never from the case, and it is public: use an address you are happy to publish. `corrections_note` is used only when a contact is set. Remove the settings and rebuild to take the page and links down.
 
+When a site has more than one record type, the sources page groups sources by their recorded `source_type`, printed as written with a capital first letter ("Parish register"); types written in different styles, such as `parish_register` and "Parish register", are one type. To give a type a reader's label, or a caution printed at the top of its section, add a table per type. The key uses lower-case letters, digits, `_` or `-`, and each table takes `label`, `note` or both:
+
+```toml
+[source_types.banns]
+label = "Marriage banns"
+note = "Banns alone do not prove a wedding took place."
+```
+
 `[project].case_directory` and `default_case` select the case; use the CLI `--case` option for a different one. Existing catalogue/maps/timelines format/output settings control compatible standalone exports as well as the cohesive website built by the CLI.
 
 ## Build and inspect
@@ -47,7 +55,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `tree.html` | Whole-tree canvas, family focus and branch cards |
 | `timeline.html` | Recorded life events with filters |
 | `places.html` | Place/event list and supplied-coordinate map |
-| `sources.html` | Bibliography and citations |
+| `sources.html` | Sources and their citations, grouped by record type (`source_type`) with a table of types; each source lists what it is cited for: the people whose claims rest on it (with the claims, such as "birth, occupation"), the findings citing it and the family links whose claims cite it, the first 20 of each then a count; past 300 sources, `sources/type-<type>.html` lists each type's sources |
 | `research.html` | Claims, evidence, hypotheses, questions and findings, outstanding work first |
 | `branches.html` | Surname groups and connected groups of recorded relatives, linked to the catalogue and tree; spellings listed under `[names.variants]` share one group, with the spellings recorded ([Group spellings of a surname](research.md#group-spellings-of-a-surname)) |
 | `studies.html`, `studies/s-<hash>.html` | Written research studies with rationale, conclusion and linked subjects, most recently updated first, with a search by title, summary or linked person; past 300 studies, `studies/page-<n>.html` lists them by title |
@@ -74,7 +82,7 @@ Past 300 people, events, places, sources or studies (300 relationships, claims o
 - The catalogue writes its first 100 people; `catalogue/page-<n>.html` holds the rest in name order. With JavaScript, search, filters and pages cover everyone from `data/site-data.js`.
 - The timeline lists its decades; `timeline/<decade>s.html` (and `timeline/undated.html`) holds each decade's events, and an event's link points there. With JavaScript, the timeline search covers every event.
 - Places lists its countries and regions; `places/<region>.html` holds each region's places, 100 to a page. The map is drawn by the script.
-- Sources writes its first 100 sources; `sources/page-<n>.html` holds the rest in title order. With JavaScript, the search covers every source.
+- Sources writes its first 100 sources; `sources/page-<n>.html` holds the rest in title order. Its record-type table links to `sources/type-<type>.html` (then `type-<type>--2.html` and on), which list each type's sources in title order, 100 to a page. With JavaScript, the search covers every source.
 - Studies writes the 100 most recently updated studies; `studies/page-<n>.html` lists every study in title order, starting at `studies/page-1.html` because the studies page itself is in date order. Each study keeps its own page. With JavaScript, the search covers every study's title, summary and linked people; the shared data never carries a study's body.
 - Person menus on the tree, compare and connections pages are filled by the script. Relationships and claims are shown on their subject's page, and findings on the findings log and its archive.
 

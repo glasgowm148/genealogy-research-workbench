@@ -204,7 +204,7 @@ class BrowserSiteTests(unittest.TestCase):
             axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
             for route in ('tree.html', 'compare.html', 'research.html', 'sitemap.html', 'findings.html', 'findings/page-1.html',
                           'catalogue.html', 'catalogue/page-2.html', 'timeline.html', 'timeline/1700s.html', 'places.html', 'places/fableland.html',
-                          'sources.html', 'sources/page-2.html', 'studies.html', 'studies/page-2.html'):
+                          'sources.html', 'sources/page-2.html', 'sources/type-register.html', 'studies.html', 'studies/page-2.html'):
                 with self.subTest(route=route):
                     self.page.goto(large + route, wait_until='networkidle')
                     self.page.add_script_tag(content=axe)
@@ -383,6 +383,11 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.goto(self.base + 'sources.html')
         self.page.get_by_role('searchbox', name='Search sources').fill('no-such-synthetic-source')
         self.assertEqual(0, self.page.locator('[data-source-id]:visible').count())
+        self.assertEqual(0, self.page.locator('[data-source-type]:visible').count())
+        # A record type's section is shown only while one of its sources matches.
+        self.page.get_by_role('searchbox', name='Search sources').fill('Family Letters')
+        self.assertEqual(1, self.page.locator('[data-source-id]:visible').count())
+        self.assertEqual(['Fictional letter collection'], self.page.locator('[data-source-type]:visible > h2').all_inner_texts())
         self.page.goto(self.base + 'studies.html')
         studies = self.page.locator('[data-study-id]')
         self.assertGreater(studies.count(), 0)

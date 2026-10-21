@@ -31,6 +31,7 @@ CATALOGUE_PER_PAGE = 100  # people per catalogue page on a large site, in name o
 PLACES_PER_PAGE = 100  # places per region page on a large site
 SOURCES_PER_PAGE = 100  # sources per page on a large site, in title order
 STUDIES_PER_PAGE = 100  # studies on a large site's studies page (newest) and on each title page
+CITED_FOR_LIMIT = 20  # people, findings or family links listed under a source's "Cited for"
 UNPLACED_REGION = "Places without a broader jurisdiction"
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
@@ -125,7 +126,7 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
 def _owned(name: str) -> bool:
     return (name in ROUTES or name in OPTIONAL_ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
             or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources|studies)/page-[1-9][0-9]*\.html"
-                                 r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html", name)))
+                                 r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html|sources/type-[a-z0-9-]+\.html", name)))
 
 
 def _slug(value: str) -> str:
@@ -216,6 +217,22 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         evidence_by_claim[row["claim_id"]].append(row)
     for row in project["citations"]:
         citations_by_source[row["source_id"]].append(row)
+    # What each citation supports, for "Cited for" on its source: a claim cites
+    # it directly or through an evidence assessment. Built once, not per source.
+    claims_by_citation: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+    for row in project["claims"]:
+        for cid in [*row.get("citation_ids", []), *(e["citation_id"] for e in evidence_by_claim[row["id"]])]:
+            claims_by_citation[cid][row["id"]] = row
+    findings_by_citation: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in project["findings"]:
+        for cid in dict.fromkeys(row.get("citation_ids", [])):
+            findings_by_citation[cid].append(row)
+    relationships_by_claim: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in project["relationships"]:
+        for cid in dict.fromkeys(row.get("claim_ids", [])):
+            relationships_by_claim[cid].append(row)
+    relationships_by_id = {r["id"]: r for r in project["relationships"]}
+    events_by_id = {e["id"]: e for e in project["events"]}
     studies_by_subject: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in studies.values():
         for rid in dict.fromkeys([*row.get("related_ids", []), *(r for text in (row.get("summary"), row.get("rationale"), row.get("body"), row.get("conclusion")) for r in prose_references(text))]):
@@ -591,13 +608,89 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                      + "".join(region_rows) + '</tbody></table></div>') if len(region_rows) > 1 or compact_places else ""
     pages["places.html"] = ('<h1>Places</h1><p>This offline coordinate overview uses supplied coordinates only. No geocoding or external map service is used. Basemap: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain).</p>'
                             + map_block + summary_table + ("" if compact_places else "".join(place_rows) if place_rows else empty([])))
-    def source_card(src: dict[str, Any], prefix: str = "") -> str:
+    def cited_for(sid: str) -> tuple[dict[str, list[str]], list[dict[str, Any]], list[dict[str, Any]]]:
+        """The public people (with claim predicates), findings and family links resting on a source's citations."""
+        claimed: dict[str, dict[str, Any]] = {}
+        found: dict[str, dict[str, Any]] = {}
+        for c in citations_by_source[sid]:
+            claimed.update(claims_by_citation[c["id"]])
+            found.update((f["id"], f) for f in findings_by_citation[c["id"]])
+        who: dict[str, dict[str, None]] = defaultdict(dict)
+        links: dict[str, dict[str, Any]] = {}
+        for row in claimed.values():
+            if row.get("predicate") == "sex":  # never listed as a claim on the site either
+                continue
+            subject = row["subject_id"]
+            # A claim about an event is shown on its people's pages, so it is cited for them.
+            if subject in events_by_id:
+                subjects = set(events_by_id[subject].get("participant_ids", [])) | event_owners[subject]
+            else:
+                subjects = {subject}
+            for pid in subjects & people.keys():
+                who[pid][str(row["predicate"])] = None
+            for rel in [*relationships_by_claim[row["id"]], *([relationships_by_id[subject]] if subject in relationships_by_id else [])]:
+                links[rel["id"]] = rel
+        ordered = sorted(who, key=lambda pid: (person_name(pid).casefold(), pid))
+        return ({pid: list(who[pid]) for pid in ordered}, list(found.values()),
+                sorted(links.values(), key=lambda r: (person_name(r["subject_id"]).casefold(), r["id"])))
+
+    support = {sid: cited_for(sid) for sid in sources}
+
+    def capped(items: list[str], noun: str) -> str:
+        # A source cited hundreds of times stays short; each person's page has the rest.
+        more = len(items) - CITED_FOR_LIMIT
+        return ('<ul>' + "".join(items[:CITED_FOR_LIMIT]) + "</ul>"
+                + (f'<p class="meta">and {more:,} more {noun}</p>' if more > 0 else ""))
+
+    def source_card(src: dict[str, Any], prefix: str = "", level: int = 2) -> str:
         link = _url(src.get("url"))
         fields = "".join(f'<p><strong>{_text(k.replace("_", " ").capitalize())}:</strong> {_text(src[k])}</p>' for k in ("author", "publication", "source_type", "repository", "access_note", "licence") if src.get(k))
-        return (f'<article class="record-card card" data-source-id="{_text(src["id"])}" id="{_anchor(src["id"])}"><h2>{_text(src["title"])}</h2>{fields}' + (f'<p><a href="{_text(link)}" rel="noreferrer">Open original source</a></p>' if link else "")
-                + '<h3>Citations</h3>' + empty(["<li>" + citation(c, prefix, canonical=True) + "</li>" for c in citations_by_source[src["id"]]]) + '</article>')
+        who, found, links = support[src["id"]]
+        uses = []
+        if who:
+            uses.append("<dt>People</dt><dd>" + capped([f'<li>{ref(pid, prefix)} <span class="meta">— {_text(", ".join(predicates))}</span></li>' for pid, predicates in who.items()], "people") + "</dd>")
+        if found:
+            uses.append("<dt>Findings</dt><dd>" + capped([f'<li>{ref(f["id"], prefix, f["conclusion"])}</li>' for f in found], "findings") + "</dd>")
+        if links:
+            uses.append("<dt>Family links</dt><dd>" + capped([f'<li>{ref(r["id"], prefix, person_name(r["subject_id"]) + " — " + str(r["kind"]) + " → " + person_name(r["object_id"]))}</li>' for r in links], "family links") + "</dd>")
+        sub = f"h{level + 1}"
+        return (f'<article class="record-card card" data-source-id="{_text(src["id"])}" id="{_anchor(src["id"])}"><h{level}>{_text(src["title"])}</h{level}>{fields}' + (f'<p><a href="{_text(link)}" rel="noreferrer">Open original source</a></p>' if link else "")
+                + (f'<{sub}>Cited for</{sub}><dl class="cited-for">' + "".join(uses) + "</dl>" if uses else "")
+                + f'<{sub}>Citations</{sub}>' + empty(["<li>" + citation(c, prefix, canonical=True) + "</li>" for c in citations_by_source[src["id"]]]) + '</article>')
 
-    sources_intro = '<h1>Sources and citations</h1><p>Consult original records when assessing a claim. A citation identifies the specific record or passage.</p>'
+    # Sources by record type, as recorded in ``source_type``. Types written in
+    # different styles ("Parish register", "parish-register") are one type, and
+    # [source_types.<key>] in genealogy.toml may give a type a label and a caution.
+    type_wording = {_slug(key): value for key, value in config.source_types.items()}
+    by_type: dict[str, list[str]] = defaultdict(list)
+    for sid in (sources_ordered if compact_sources else sources):
+        by_type[_slug(str(sources[sid].get("source_type") or "")) or "unknown"].append(sid)
+    type_order = sorted(by_type, key=lambda t: (-len(by_type[t]), t))
+
+    def type_label(slug: str) -> str:
+        if type_wording.get(slug, {}).get("label"):
+            return type_wording[slug]["label"]
+        raw = Counter(str(sources[sid].get("source_type") or "unknown") for sid in by_type[slug]).most_common(1)[0][0]
+        return raw[:1].upper() + raw[1:]
+
+    def type_note(slug: str) -> str:
+        note = type_wording.get(slug, {}).get("note")
+        return f'<p class="note source-type-note"><strong>Reading these records:</strong> {_text(note)}</p>' if note else ""
+
+    type_pages = {slug: [f"sources/type-{slug}.html" if n == 0 else f"sources/type-{slug}--{n + 1}.html"
+                         for n in range(-(-len(by_type[slug]) // SOURCES_PER_PAGE))] for slug in type_order} if compact_sources else {}
+    grouped = compact_sources or len(by_type) > 1 or any(slug in type_wording for slug in by_type)
+    type_rows = []
+    for slug in type_order:
+        members = by_type[slug]
+        cited_people = {pid for sid in members for pid in support[sid][0]}
+        target = type_pages[slug][0] if compact_sources else f"#type-{slug}"
+        type_rows.append(f'<tr><td><a href="{target}">{_text(type_label(slug))}</a></td><td>{len(members):,}</td>'
+                         f'<td>{sum(len(citations_by_source[sid]) for sid in members):,}</td><td>{len(cited_people):,}</td></tr>')
+    type_table = ('<h2>By record type</h2><p class="meta">Grouped by each source\'s recorded type. People cited: public people with a claim resting on the type\'s citations.</p>'
+                  '<div class="table-wrap"><table><thead><tr><th>Record type</th><th>Sources</th><th>Citations</th><th>People cited</th></tr></thead><tbody>'
+                  + "".join(type_rows) + '</tbody></table></div>') if grouped and sources else ""
+    sources_intro = '<h1>Sources and citations</h1><p>Consult original records when assessing a claim. A citation identifies the specific record or passage. Each source lists the people, findings and family links its citations support.</p>' + type_table
     if compact_sources:
         # The first page is written out; the script searches every source from the shared data.
         chunks = [sources_ordered[i:i + SOURCES_PER_PAGE] for i in range(0, len(sources_ordered), SOURCES_PER_PAGE)]
@@ -613,6 +706,22 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             pages[source_page_url(n)] = (f'<h1>Sources and citations, page {n} of {len(chunks)}</h1><p>{len(sources):,} sources in title order. '
                                          '<a href="../sources.html">Search the sources</a>.</p>' + "".join(source_card(sources[sid], "../") for sid in chunk) + source_page_nav("../", n))
             extra_titles[source_page_url(n)] = ("sources", f"Sources, page {n}")
+        # Each record type has pages of its own, in title order, 100 sources to a page.
+        for slug, urls in type_pages.items():
+            label = type_label(slug)
+            for n, url in enumerate(urls):
+                chunk = by_type[slug][n * SOURCES_PER_PAGE:(n + 1) * SOURCES_PER_PAGE]
+                nav = ('<nav class="pagination" aria-label="Pages for this record type"><div>' + "".join(
+                    f'<a href="{other.split("/")[1]}"' + (' aria-current="page"' if other == url else "") + f'>Page {i + 1}</a>' for i, other in enumerate(urls)) + "</div></nav>") if len(urls) > 1 else ""
+                page_note = f", page {n + 1} of {len(urls)}" if len(urls) > 1 else ""
+                pages[url] = (f'<h1>Sources: {_text(label)}</h1>' + type_note(slug)
+                              + f'<p>{len(by_type[slug]):,} source{"" if len(by_type[slug]) == 1 else "s"} of this type{page_note}, in title order. <a href="../sources.html">All sources and record types</a>.</p>'
+                              + nav + "".join(source_card(sources[sid], "../") for sid in chunk) + nav)
+                extra_titles[url] = ("sources", f"Sources: {label}" + (f", page {n + 1}" if n else ""))
+    elif grouped:
+        pages["sources.html"] = sources_intro + '<div data-sources>' + "".join(
+            f'<section class="source-type" id="type-{slug}" data-source-type="{_text(slug)}"><h2>{_text(type_label(slug))}</h2>' + type_note(slug)
+            + "".join(source_card(sources[sid], level=3) for sid in by_type[slug]) + '</section>' for slug in type_order) + '</div>'
     else:
         pages["sources.html"] = sources_intro + '<div data-sources>' + ("".join(source_card(src) for src in sources.values()) or '<p class="empty-state">No public sources recorded.</p>') + '</div>'
     research = ['<h1>Research notebook</h1><p>Claims and their evidence first, then the work still outstanding: hypotheses, open questions and draft or reviewed findings. <a href="evidence.html">Reading the evidence</a>.</p><h2>Claims</h2>', (

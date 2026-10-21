@@ -17,6 +17,8 @@ from genealogy.sitecheck import check_site
 
 PEOPLE = INLINE_LIMIT + 100
 COUNTRIES = ("Fableland", "Inventia", "Nowhere Isles")
+SOURCE_TYPES = ("census-transcription", "Will", "register", "register", "register")
+CENSUS_NOTE = "A transcription can misread a name or an age; check the original schedule."
 
 
 def large_case(people: int = PEOPLE) -> ResearchCase:
@@ -33,12 +35,13 @@ def large_case(people: int = PEOPLE) -> ResearchCase:
             Person(pid, names=[Name(f"Person {n:04d} Fable", surname="Fable")], living=L.DECEASED,
                    event_ids=[f"{pid}-b"], sensitivity=A.PUBLIC),
             Event(f"{pid}-b", "birth", date=str(1700 + n % 150), place_id=place.id, participant_ids=[pid], sensitivity=A.PUBLIC),
-            Source(f"{pid}-src", f"Invented register volume {n:04d}", "register", repository=f"Archive {n % 4}", sensitivity=A.PUBLIC),
+            # Three record types; "register" has enough sources for several type pages.
+            Source(f"{pid}-src", f"Invented register volume {n:04d}", SOURCE_TYPES[n % 5], repository=f"Archive {n % 4}", sensitivity=A.PUBLIC),
             Citation(f"{pid}-cit", f"{pid}-src", locator=f"folio {n}", sensitivity=A.PUBLIC),
             Claim(f"{pid}-c", pid, "occupation", "weaver", citation_ids=["register-1", f"{pid}-cit"], status=ClaimStatus.SUPPORTED,
                   sensitivity=A.PUBLIC),
             Evidence(f"{pid}-e", f"{pid}-c", f"{pid}-cit", "The register names the trade.", sensitivity=A.PUBLIC),
-            Finding(f"{pid}-f", f"Finding about person {n:04d}.", related_ids=[pid], status="reviewed",
+            Finding(f"{pid}-f", f"Finding about person {n:04d}.", related_ids=[pid], status="reviewed", citation_ids=[f"{pid}-cit"] if n % 10 == 0 else [],
                     recorded_on=f"2026-{1 + n % 12:02d}-{1 + n % 28:02d}", sensitivity=A.PUBLIC),
             # One study per person, so the studies also pass INLINE_LIMIT.
             Study(f"{pid}-s", f"Study of person {n:04d}", summary="Whether the register entries describe one weaver.",
@@ -64,7 +67,8 @@ class LargeSiteTests(unittest.TestCase):
         cls.out = Path(cls.directory.name)
         case = large_case()
         assert validate_case(case) == []
-        build_site(case, ProjectConfig(name="Fictional", raw={"site": {"base_url": "https://example.invalid/"}}), cls.out)
+        build_site(case, ProjectConfig(name="Fictional", raw={"site": {"base_url": "https://example.invalid/"}},
+                                       source_types={"census_transcription": {"label": "Census transcriptions", "note": CENSUS_NOTE}}), cls.out)
 
     @classmethod
     def tearDownClass(cls):
@@ -162,6 +166,41 @@ class LargeSiteTests(unittest.TestCase):
         self.assertIn('"title": "Invented register volume 0390"', script)
         self.assertIn("sources/page-", script)
 
+    def test_each_record_type_has_pages_of_its_own(self):
+        sources = self.text("sources.html")
+        rows = re.findall(r'<tr><td><a href="(sources/type-[a-z0-9-]+\.html)">([^<]+)</a></td><td>([\d,]+)</td><td>([\d,]+)</td><td>([\d,]+)</td></tr>', sources)
+        per_type = PEOPLE // 5
+        self.assertEqual([("sources/type-register.html", "Register", str(PEOPLE - 2 * per_type + 1), str(PEOPLE - 2 * per_type + 1), str(PEOPLE)),
+                          ("sources/type-census-transcription.html", "Census transcriptions", str(per_type), str(per_type), str(per_type)),
+                          ("sources/type-will.html", "Will", str(per_type), str(per_type), str(per_type))], rows)
+        census = self.text("sources/type-census-transcription.html")
+        self.assertIn(f'<h1>Sources: Census transcriptions</h1><p class="note source-type-note"><strong>Reading these records:</strong> {CENSUS_NOTE}</p>', census)
+        self.assertIn("<title>Sources: Census transcriptions —", census)
+        self.assertEqual(per_type, census.count("data-source-id="))
+        self.assertNotIn("site-data.js", census)
+        # 241 register sources: three pages of 100, every one listed once, in title order.
+        register = [self.text(f"sources/type-register{suffix}.html") for suffix in ("", "--2", "--3")]
+        self.assertFalse((self.out / "sources/type-register--4.html").exists())
+        listed = [sid for page in register for sid in re.findall(r'data-source-id="([^"]+)"', page)]
+        self.assertEqual(SOURCES_PER_PAGE, register[0].count("data-source-id="))
+        self.assertEqual(sorted(["register"] + [f"p{n:04d}-src" for n in range(PEOPLE) if n % 5 > 1]), sorted(listed))
+        self.assertEqual("register", listed[0])
+        self.assertIn('href="type-register--2.html">Page 2</a>', register[0])
+        self.assertIn("<title>Sources: Register, page 2 —", register[1])
+        self.assertNotIn("Reading these records", register[0])
+
+    def test_a_source_cited_by_everyone_lists_twenty_people(self):
+        sources = self.text("sources.html")
+        start = sources.index(f'id="{_anchor("register")}"')
+        card = sources[start:sources.index('<article class="record-card', start)]
+        self.assertEqual(20, card.count('<span class="meta">— occupation</span>'))
+        self.assertIn(f'<p class="meta">and {PEOPLE - 20:,} more people</p>', card)
+        # A finding citing a record directly is listed with its source.
+        census = self.text("sources/type-census-transcription.html")
+        self.assertRegex(census, r'<dt>Findings</dt><dd><ul><li><a href="\.\./findings/page-\d+\.html#'
+                         + _anchor("p0010-f") + '">Finding about person 0010.</a>')
+        self.assertEqual([], check_site(self.out)["broken"])
+
     def test_studies_write_the_newest_and_keep_every_study_on_title_pages(self):
         studies = self.text("studies.html")
         shown = re.findall(r'data-study-id="([^"]+)"', studies)
@@ -207,6 +246,7 @@ class LargeSiteTests(unittest.TestCase):
             out = Path(directory)
             config = ProjectConfig(name="Fictional")
             build_site(large_case(), config, out)
+            self.assertTrue((out / "sources/type-register--3.html").is_file())
             build_site(large_case(20), config, out)
             for folder in ("catalogue", "timeline", "places", "sources"):
                 self.assertEqual([], list((out / folder).glob("*.html")) if (out / folder).exists() else [], folder)

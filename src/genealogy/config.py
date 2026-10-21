@@ -97,6 +97,10 @@ class ProjectConfig:
     grades: dict[str, dict[str, str]] = field(default_factory=dict)
     # ``[names] variants``: canonical surname -> other spellings found in records.
     names: dict[str, Any] = field(default_factory=dict)
+    # Reader wording per ``Source.source_type``: key -> {label, note}. The note
+    # is a caution printed with that type's sources ("banns alone do not prove
+    # a wedding took place"). Keys match source types written in any style.
+    source_types: dict[str, dict[str, str]] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -119,6 +123,7 @@ class ProjectConfig:
             paths=_table(data, "paths"),
             grades=_table(data, "grades"),
             names=_table(data, "names"),
+            source_types=_table(data, "source_types"),
             raw=data,
         )
         config.validate()
@@ -158,6 +163,26 @@ class ProjectConfig:
                     raise ValueError(f"{setting}.{name} must be a non-empty string")
             if grade.get("confidence") not in {c.value for c in Confidence}:
                 raise ValueError(f"{setting}.confidence must be one of: {', '.join(c.value for c in Confidence)}")
+        seen: dict[str, str] = {}
+        for key, wording in self.source_types.items():
+            setting = f"source_types.{key}"
+            if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", key):
+                raise ValueError(f"{setting}: a source type key uses lower-case letters, digits, '_' or '-'")
+            if not isinstance(wording, dict):
+                raise ValueError(f"[{setting}] must be a table")
+            unknown = set(wording) - {"label", "note"}
+            if unknown:
+                raise ValueError(f"{setting} has unknown settings: {', '.join(sorted(unknown))}")
+            if not wording:
+                raise ValueError(f"{setting} needs a label or a note")
+            for name in wording:
+                if not isinstance(wording[name], str) or not wording[name].strip():
+                    raise ValueError(f"{setting}.{name} must be a non-empty string")
+            # "parish_register" and "parish-register" match the same sources.
+            same = key.replace("_", "-")
+            if same in seen:
+                raise ValueError(f"{setting} names the same source type as source_types.{seen[same]}")
+            seen[same] = key
 
         unknown = set(self.names) - {"variants"}
         if unknown:
@@ -202,4 +227,6 @@ class ProjectConfig:
             data["grades"] = self.grades
         if self.names:
             data["names"] = self.names
+        if self.source_types:
+            data["source_types"] = self.source_types
         return data

@@ -172,7 +172,7 @@ function sourceSearch(){
    const found=sorted.filter(s=>words.every(w=>text.get(s.id).includes(w)));results.replaceChildren(...found.slice(0,LIMIT).map(item));
    count.textContent=found.length>LIMIT?`The first ${LIMIT} of ${found.length.toLocaleString()} matching sources. Refine the search to see the others.`:`${found.length.toLocaleString()} of ${all.length.toLocaleString()} sources shown`;};
   input.addEventListener('input',show);show();return;}
- const draw=()=>{let shown=0;rows.forEach(r=>{r.hidden=!norm(r.textContent).includes(norm(input.value));if(!r.hidden)shown++;});count.textContent=`${shown} of ${rows.length} sources shown`;};input.addEventListener('input',draw);draw();
+ const draw=()=>{let shown=0;rows.forEach(r=>{r.hidden=!norm(r.textContent).includes(norm(input.value));if(!r.hidden)shown++;});$$('[data-source-type]',host).forEach(s=>{s.hidden=$$('[data-source-id]',s).every(r=>r.hidden);});count.textContent=`${shown} of ${rows.length} sources shown`;};input.addEventListener('input',draw);draw();
 }
 // Study statuses as the pages word them (labels.CLAIM_STATUS and RESEARCH_STATUS).
 const STUDY_STATUS={asserted:'Asserted',supported:'Supported',disputed:'Disputed',rejected:'Rejected',open:'Open',draft:'Draft',closed:'Closed',resolved:'Resolved',final:'Final',abandoned:'Set aside',superseded:'Superseded',confirmed:'Confirmed',reviewed:'Reviewed',published:'Published','in progress':'In progress','in-progress':'In progress'};
