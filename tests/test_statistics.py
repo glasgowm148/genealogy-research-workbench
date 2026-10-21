@@ -112,7 +112,9 @@ class StatisticsPageTests(unittest.TestCase):
 
     def test_given_names_and_canonical_surnames(self):
         # "Ada /Fable/" counts as Ada; a recorded given name is used as given.
-        self.assertEqual([(("Ada",), 2), (("Bram",), 1), (("Iris",), 1), (("Nell",), 1), (("Tobin",), 1)], rows(self.html, "given-names"))
+        # A name only one person bears is counted, not listed.
+        self.assertEqual([(("Ada",), 2)], rows(self.html, "given-names"))
+        self.assertIn("4 names recorded once.", self.html)
         # Iris Fabel is counted under Fable, the surname [names.variants] groups her spelling under.
         self.assertEqual([(("Fable",), 4), (("Vale",), 2)], rows(self.html, "surnames"))
         self.assertIn('href="catalogue.html?surname=Fable">Fable</a>', self.html)
@@ -128,21 +130,19 @@ class StatisticsPageTests(unittest.TestCase):
         self.assertIn("1 person was born and died in the same one.", self.html)
         self.assertEqual([(("Birth",), 4), (("Death",), 3), (("Marriage",), 2), (("Baptism",), 1), (("Burial",), 1)], rows(self.html, "event-kinds"))
 
-    def test_research_progress_links_each_label_to_the_guide(self):
-        self.assertEqual([(("Supported",), 2), (("Disputed",), 1)], rows(self.html, "claim-status"))
-        self.assertEqual([(("Unassessed tree link",), 2), (("Checked by records",), 1), (("Disproved",), 1), (("Documented",), 1), (("Ruled out",), 1)],
-                         rows(self.html, "relationship-confidence"))
-        self.assertEqual([(("2026",), 2), (("2025",), 1), (("Undated",), 1)], rows(self.html, "findings-by-year"))
-        for anchor in ("status-supported", "confidence-tree-link", "grade-checked", "confidence-disproved"):
-            self.assertIn(f'href="evidence.html#{anchor}"', self.html)
-        self.assertIn('<h2 id="research-progress">Research progress</h2><h3 id="claim-status">', self.html)
+    def test_research_progress_is_left_to_its_own_page(self):
+        # The research tables duplicated progress.html; the page links there instead.
+        for key in ("research-progress", "claim-status", "relationship-confidence", "findings-by-year"):
+            self.assertNotIn(f'id="{key}"', self.html, key)
+        self.assertIn('<a href="progress.html">Research progress</a>', self.html)
 
     def test_tables_are_accessible_and_bars_need_no_script(self):
         tables = re.findall(r'<h[23] id="([a-z-]+)">[^<]+</h[23]>(?:<p class="meta">[^<]*</p>)?<div class="table-wrap"><table class="statistics" aria-labelledby="([a-z-]+)">', self.html)
-        self.assertEqual(11, len(tables))
+        self.assertEqual(8, len(tables))
         self.assertTrue(all(heading == label for heading, label in tables))
         self.assertIn('<th scope="col">Born in</th><th scope="col">Died in</th><th scope="col">People</th>', self.html)
-        self.assertIn('<td class="count">3<div class="bar" style="--w:100%" aria-hidden="true"></div></td>', self.html)
+        self.assertIn('<td class="count"><div class="meter"><div class="bar-track" aria-hidden="true"><div class="bar" style="--w:100%"></div></div>'
+                      '<span>3</span></div></td>', self.html)
         self.assertIn('style="--w:33%"', self.html)
         main = self.html.split('<main id="main-content">', 1)[1].split("</main>", 1)[0]
         self.assertNotIn("<script", main)

@@ -1563,17 +1563,21 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             # The first event of the first kind recorded with a date (or place), as the dossier's opening sentence reads it.
             return next((e for kind in kinds for e in events_by_person[pid] if str(e["kind"]).casefold() == kind and e.get(key)), None)
 
-        def table(key: str, heading: str, columns: tuple[str, ...], rows: list[tuple[tuple[str, ...], int]], note: str = "", level: int = 2) -> str:
-            """``rows`` are (escaped cells, count) in reading order; bars are scaled to the largest count."""
-            if not rows:
+        def table(key: str, heading: str, columns: tuple[str, ...], rows: list[tuple[tuple[str, ...], int]], note: str = "", once: int = 0) -> str:
+            """A chart card: ``rows`` are (escaped cells, count) in reading order; bars sit on a track scaled to the largest count.
+            ``once`` counts the names left out because a single person bears them, so a long tail of ones does not fill the card."""
+            if not rows and not once:
                 return ""
-            top = max(n for _, n in rows) or 1  # a table of zero counts still draws
-            body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + f'<td class="count">{n:,}'
-                           f'<div class="bar" style="--w:{max(1, round(n * 100 / top))}%" aria-hidden="true"></div></td></tr>' for cells, n in rows[:STATISTICS_ROWS])
-            more = f'<p class="meta">{len(rows) - STATISTICS_ROWS:,} more not listed.</p>' if len(rows) > STATISTICS_ROWS else ""
-            return (f'<h{level} id="{key}">{_text(heading)}</h{level}>' + (f'<p class="meta">{note}</p>' if note else "")
-                    + f'<div class="table-wrap"><table class="statistics" aria-labelledby="{key}"><thead><tr>' + "".join(f'<th scope="col">{_text(c)}</th>' for c in columns)
-                    + f"</tr></thead><tbody>{body}</tbody></table></div>" + more)
+            top = max((n for _, n in rows), default=0) or 1  # a table of zero counts still draws
+            body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + '<td class="count"><div class="meter"><div class="bar-track" aria-hidden="true">'
+                           f'<div class="bar" style="--w:{max(1, round(n * 100 / top))}%"></div></div><span>{n:,}</span></div></td></tr>' for cells, n in rows[:STATISTICS_ROWS])
+            more = [f"{len(rows) - STATISTICS_ROWS:,} more not listed."] if len(rows) > STATISTICS_ROWS else []
+            once_words = f"{once:,} {'name' if once == 1 else 'names'} recorded once"
+            more += [once_words + "."] if once and rows else []
+            return (f'<section class="chart-card"><h3 id="{key}">{_text(heading)}</h3>' + (f'<p class="meta">{note}</p>' if note else "")
+                    + (f'<div class="table-wrap"><table class="statistics" aria-labelledby="{key}"><thead><tr>' + "".join(f'<th scope="col">{_text(c)}</th>' for c in columns)
+                       + f"</tr></thead><tbody>{body}</tbody></table></div>" if rows else f'<p class="empty-state">{once_words}; none is shared by two or more people.</p>')
+                    + (f'<p class="meta chart-more">{" ".join(more)}</p>' if more else "") + "</section>")
 
         ranked = lambda counts: sorted(counts.items(), key=lambda item: (-item[1], str(item[0]).casefold()))
         region_of = {p["id"]: region for region, members in regions.items() for p in members}
@@ -1609,15 +1613,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             key = str(row["kind"]).casefold()
             kinds[key] += 1
             kind_label.setdefault(key, str(row["kind"])[:1].upper() + str(row["kind"])[1:])
-        claim_status = Counter(str(c.get("status") or "asserted") for c in project["claims"] if c.get("predicate") != "sex")
-        links: Counter[tuple[str, str]] = Counter()
-        for row in project["relationships"]:
-            confidence = str(row.get("confidence") or "unknown")
-            graded = grade_label(row, config.grades)
-            links[(f'grade-{row["grade"]}' if graded else "confidence-tree-link" if confidence == "unknown" else f"confidence-{confidence}",
-                   graded or confidence_label(confidence, relationship=True))] += 1
-        finding_years = Counter(str(year_of(f.get("recorded_on")) or "Undated") for f in project["findings"])
-        guide = lambda anchor, words: f'<a href="evidence.html#{_text(anchor)}">{_text(words)}</a>'
+        # Assessed: any family link with a grade or a stated confidence; an unassessed tree link is not.
+        assessed = sum(1 for row in project["relationships"] if grade_label(row, config.grades) or str(row.get("confidence") or "unknown") != "unknown")
+        questions = sum(1 for q in project["questions"] if str(q.get("status") or "open").casefold() == "open")
         people_tables = "".join((
             table("birth-centuries", "Births by century", ("Century", "People"),
                   [((f"{c}–{c + 99}",), n) for c, n in sorted(centuries.items())],
@@ -1626,11 +1624,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             table("birth-regions", "Births by country or region", ("Country or region", "People"),
                   [((region_link(r),), born_in[r]) for r in sorted(born_in, key=lambda r: (r == UNPLACED_REGION, -born_in[r], r.casefold()))],
                   "The last part of each birthplace name as recorded, as on the places page."),
-            table("given-names", "Most common given names", ("Given name", "People"), [((_text(name),), n) for name, n in ranked(given)],
-                  "The first forename of each person's main recorded name."),
+            table("given-names", "Most common given names", ("Given name", "People"), [((_text(name),), n) for name, n in ranked(given) if n > 1],
+                  "The first forename of each person's main recorded name, where two or more people share it.", once=sum(1 for n in given.values() if n == 1)),
             table("surnames", "Most common surnames", ("Surname", "People"),
-                  [((f'<a href="catalogue.html?surname={_text(quote(name))}">{_text(name)}</a>',), n) for name, n in ranked(surnames)],
-                  "Each person's first recorded surname" + ("; spellings this project lists as variants of one surname are counted under it." if name_variants else ".")),
+                  [((f'<a href="catalogue.html?surname={_text(quote(name))}">{_text(name)}</a>',), n) for name, n in ranked(surnames) if n > 1],
+                  "Each person's first recorded surname, where two or more people share it" + ("; spellings this project lists as variants of one surname are counted under it." if name_variants else "."),
+                  once=sum(1 for n in surnames.values() if n == 1)),
             table("families", "Largest families", ("Parent", "Recorded children"),
                   [((ref(pid),), n) for pid, n in sorted(families.items(), key=lambda item: (-item[1], person_name(item[0]).casefold(), item[0]))],
                   "Parents with the most recorded children; links assessed as disproved are not counted."),
@@ -1642,19 +1641,23 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                   + (f" {stayed:,} {'person was' if stayed == 1 else 'people were'} born and died in the same one." if stayed else "")),
             table("event-kinds", "Events by kind", ("Kind", "Events"), [((_text(kind_label[k]),), n) for k, n in ranked(kinds)]),
         ))
-        research_tables = "".join((
-            table("claim-status", "Claims by status", ("Status", "Claims"),
-                  [((guide(status_anchor(s), status_label(s)),), n) for s, n in ranked(claim_status)], level=3),
-            table("relationship-confidence", "Family links by assessment", ("Assessment", "Links"),
-                  [((guide(anchor, words),), n) for (anchor, words), n in sorted(links.items(), key=lambda item: (-item[1], item[0][1].casefold()))], level=3),
-            table("findings-by-year", "Findings by year recorded", ("Year", "Findings"),
-                  [((_text(year),), n) for year, n in sorted(finding_years.items(), key=lambda item: (item[0] == "Undated", -int(item[0]) if item[0].isdigit() else 0))], level=3),
-        ))
-        return ('<h1>Statistics</h1><p>Counts of the public records on this site: '
+        share = f"{100 * assessed / len(project['relationships']):.0f}%" if project["relationships"] else "—"
+        kpi = lambda value, words, url: f'<div><dt><a href="{url}">{_text(words)}</a></dt><dd>{value}</dd></div>'
+        panel = ('<section class="stat-panel" aria-labelledby="at-a-glance"><h2 id="at-a-glance" class="sr-only">At a glance</h2><dl>'
+                 + kpi(f"{len(people):,}", "people" if len(people) != 1 else "person", "catalogue.html")
+                 + kpi(f"{len(project['events']):,}", "events" if len(project["events"]) != 1 else "event", "timeline.html")
+                 + kpi(f"{len(project['places']):,}", "places" if len(project["places"]) != 1 else "place", "places.html")
+                 + kpi(f"{len(project['sources']):,}", "sources" if len(project["sources"]) != 1 else "source", "sources.html")
+                 + kpi(share, f"of {len(project['relationships']):,} family {'link' if len(project['relationships']) == 1 else 'links'} assessed", "progress.html")
+                 + kpi(f"{questions:,}", "open questions" if questions != 1 else "open question", "research.html") + "</dl></section>")
+        return ('<p class="eyebrow">The collection at a glance</p><h1>Statistics</h1><p class="lead">Counts of the public records on this site: '
                 f'{len(people):,} {"person" if len(people) == 1 else "people"}, {len(project["events"]):,} events and {len(project["places"]):,} places. '
                 'People and records withheld for privacy are not counted, so these figures describe what is published, not everyone researched.</p>'
-                + (people_tables or '<p class="empty-state">No public people are available.</p>')
-                + ('<h2 id="research-progress">Research progress</h2>' + research_tables if research_tables else ""))
+                + panel
+                + ('<h2 id="patterns">Names, families, places and events</h2><p>Surnames, parents, places and regions link to the people or place they count.</p>'
+                   f'<div class="chart-grid">{people_tables}</div>' if people_tables else '<p class="empty-state">No public people are available.</p>')
+                + '<p class="see-also">How far the research has got, from assessed family links to connected groups and open questions, is on '
+                  '<a href="progress.html">Research progress</a>.</p>')
     pages["statistics.html"] = statistics()
     # Research progress: how far the research has got, not what the record
     # contains. Counted from the public projection only, like every other page.

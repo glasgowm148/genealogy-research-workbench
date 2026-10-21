@@ -675,7 +675,7 @@ class BrowserSiteTests(unittest.TestCase):
     def test_statistics_page_reads_without_javascript_and_passes_axe(self):
         from test_statistics import config as statistics_config, statistics_case
         build_site(statistics_case(), statistics_config(), self.root / 'statistics')
-        sites = {'statistics': 11, 'nested': None, 'large': None}
+        sites = {'statistics': 8, 'nested': None, 'large': None}
         axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8') if os.environ.get('GENEALOGY_AXE_PATH') else None
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
@@ -688,6 +688,10 @@ class BrowserSiteTests(unittest.TestCase):
                     # Every bar is drawn, at its share of the largest row, inside the page width.
                     bar = self.page.locator('table.statistics .bar').first
                     self.assertGreater(bar.bounding_box()['width'], 0)
+                    # The KPI panel leads; chart cards sit two to a row on a wide screen and one to a row on a phone.
+                    self.assertTrue(self.page.locator('.stat-panel').is_visible())
+                    cards = [self.page.locator('.chart-card').nth(n).bounding_box() for n in range(2)]
+                    self.assertEqual(width > 1100, abs(cards[0]['y'] - cards[1]['y']) < 1)
                     self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
                     if axe:
                         self.page.add_script_tag(content=axe)
@@ -700,7 +704,7 @@ class BrowserSiteTests(unittest.TestCase):
         try:
             page = nojs.new_page()
             page.goto(urljoin(self.base, '../statistics/statistics.html'))
-            self.assertEqual(11, page.locator('table.statistics').count())
+            self.assertEqual(8, page.locator('table.statistics').count())
             self.assertIn('Tobin Fable', page.locator('#families + p + .table-wrap').inner_text())
         finally:
             nojs.close()

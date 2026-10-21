@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The statistics page opens with a tinted panel of six linked figures (people, events, places, sources, the share of family links assessed and open questions), then shows its tables as cards two to a row on wide screens, each row with a bar on a track and the count beside it. Given names and surnames list only names two or more people share and count the rest ("12 names recorded once."), and the research-progress tables give way to a link to **Research progress**. See [Build and deployment](docs/deployment.md).
+
 ## 0.7.0 — 21 October 2026
 
 - Old person links keep working after a merge or an ID change: list the IDs a person replaced in the new `Person.former_ids`, and the site writes a small page at each old address that sends readers to the current dossier (marked `noindex`, with a canonical link when `site.base_url` is set), plus `data/redirects.json` and, with `site.base_url`, a `_redirects` file of 301 rules for hosts that read one. Moved pages stay out of `data/routes.json` and `sitemap.xml`, a rebuild removes those no longer needed, and a withheld person's former IDs produce nothing. Validation rejects a former ID that is a current record ID or is listed by two people, and a reference that uses a former ID names the ID to use instead. `import --update` keeps the former IDs recorded on an imported person, and `check-links` now checks `<meta http-equiv="refresh">` targets. See [Record a merge or a changed ID](docs/research.md#record-a-merge-or-a-changed-id).
