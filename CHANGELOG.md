@@ -3,6 +3,7 @@
 ## Unreleased
 
 - A recorded sibling link (`kind: "sibling"`, `half_sibling` and similar) now appears under **Siblings** on both dossiers with its own label, merged with any sibling found through shared parents, and the tree's family view draws it. A disproved link is listed only under **All recorded relationships**; the GEDCOM export still has no sibling record. See [Assess a relationship](docs/research.md#assess-a-relationship).
+- The studies page can be searched by title, summary or the people a study links. Past 300 studies it writes the 100 most recently updated, `studies/page-<n>.html` lists every study by title, and the search covers every study from `data/site-data.js`, which carries no study bodies. The site index links to these pages instead of listing every study. See [Large sites](docs/deployment.md#large-sites).
 
 ## 0.6.0 — 20 October 2026
 

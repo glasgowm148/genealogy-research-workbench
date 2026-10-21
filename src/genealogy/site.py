@@ -30,6 +30,7 @@ FINDINGS_PER_PAGE = 50
 CATALOGUE_PER_PAGE = 100  # people per catalogue page on a large site, in name order
 PLACES_PER_PAGE = 100  # places per region page on a large site
 SOURCES_PER_PAGE = 100  # sources per page on a large site, in title order
+STUDIES_PER_PAGE = 100  # studies on a large site's studies page (newest) and on each title page
 UNPLACED_REGION = "Places without a broader jurisdiction"
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
@@ -52,6 +53,8 @@ BROWSER_FIELDS = {
     "relationships": ("id", "subject_id", "object_id", "kind", "confidence", "grade", "estimate", "tree_status", "pedigree"),
     "claims": ("id", "subject_id", "predicate", "value", "status"),
     "sources": ("id", "title", "author", "publication", "source_type", "repository"),
+    # Never a study's body or reasoning: long prose, read on the study's own page.
+    "studies": ("id", "title", "summary", "status", "updated_on", "related_ids"),
 }
 BROAD_PRECISIONS = {"parish", "district", "county", "region", "country", "approximate"}
 ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
@@ -93,18 +96,20 @@ def _json(value: Any) -> str:
 
 
 def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_urls: dict[str, str] | None = None,
-                 grades: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
+                 grades: dict[str, dict[str, str]] | None = None, study_urls: dict[str, str] | None = None) -> dict[str, Any]:
     """The public records the interactive pages need, without empty values."""
     def slim(row: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
         out = {key: row[key] for key in fields if row.get(key) is not None and row.get(key) != [] and row.get(key) != ""}
         if "names" in out:
             out["names"] = [{key: n[key] for key in ("value", "surname") if n.get(key)} for n in out["names"]]
         return out
-    data: dict[str, Any] = {key: [slim(row, fields) for row in project[key]] for key, fields in BROWSER_FIELDS.items()}
+    data: dict[str, Any] = {key: [slim(row, fields) for row in project.get(key, [])] for key, fields in BROWSER_FIELDS.items()}
     data["project"] = project["project"]
     data["site"] = {"people_urls": people_urls}
     if source_urls:
         data["site"]["source_urls"] = source_urls
+    if study_urls:
+        data["site"]["study_urls"] = study_urls
     if grades:
         data["site"]["grades"] = {key: grade["label"] for key, grade in grades.items()}
     return data
@@ -112,7 +117,7 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
 
 def _owned(name: str) -> bool:
     return (name in ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
-            or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources)/page-[1-9][0-9]*\.html"
+            or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources|studies)/page-[1-9][0-9]*\.html"
                                  r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html", name)))
 
 
@@ -218,6 +223,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     compact_events = len(project["events"]) > INLINE_LIMIT
     compact_places = len(project["places"]) > INLINE_LIMIT
     compact_sources = len(project["sources"]) > INLINE_LIMIT
+    compact_studies = len(studies) > INLINE_LIMIT
     sources_ordered = sorted(sources, key=lambda sid: (str(sources[sid]["title"]).casefold(), sid))
     source_page_url = lambda n: "sources.html" if n == 1 else f"sources/page-{n}.html"
     source_pages = ({sid: source_page_url(index // SOURCES_PER_PAGE + 1) for index, sid in enumerate(sources_ordered)}
@@ -605,13 +611,38 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return " ".join(parts)
 
     # Studies: a written account with its rationale, conclusion and linked subjects.
-    study_cards = []
-    for sid, row in sorted(studies.items(), key=lambda item: (str(item[1].get("updated_on") or ""), item[1]["title"]), reverse=True):
+    def study_card(sid: str, prefix: str = "") -> str:
+        row = studies[sid]
         subjects = [rid for rid in row.get("related_ids", []) if rid in record_routes]
-        study_cards.append(f'<article class="card study-card" data-study-id="{_text(sid)}"><h2><a href="{study_urls[sid]}">{_text(row["title"])}</a></h2><p>{study_meta(row)}</p>'
-                           + (f'<p>{_text(row["summary"])}</p>' if row.get("summary") else "")
-                           + f'<p class="meta">{len([r for r in subjects if r in people])} people · {len(subjects)} linked records</p></article>')
-    pages["studies.html"] = '<h1>Studies</h1><p>Written research accounts: why each question was investigated, what the records show and the current conclusion. Each study links the people and records it concerns, and their pages link back.</p>' + ('<div class="card-grid">' + "".join(study_cards) + '</div>' if study_cards else '<p class="empty-state">No public studies have been written yet. A tree export cannot supply them; add a <code>Study</code> record to the research case.</p>')
+        return (f'<article class="card study-card" data-study-id="{_text(sid)}"><h2><a href="{prefix}{study_urls[sid]}">{_text(row["title"])}</a></h2><p>{study_meta(row, prefix)}</p>'
+                + (f'<p>{_text(row["summary"])}</p>' if row.get("summary") else "")
+                + f'<p class="meta">{len([r for r in subjects if r in people])} people · {len(subjects)} linked records</p></article>')
+
+    studies_newest = sorted(studies, key=lambda sid: (str(studies[sid].get("updated_on") or ""), studies[sid]["title"]), reverse=True)
+    studies_intro = '<h1>Studies</h1><p>Written research accounts: why each question was investigated, what the records show and the current conclusion. Each study links the people and records it concerns, and their pages link back.</p>'
+    if compact_studies:
+        # The studies page opens with the most recently updated; the script
+        # searches every study from the shared data. The title pages start at
+        # page 1, because the studies page itself is in date order, not title order.
+        by_title = sorted(studies, key=lambda sid: (str(studies[sid]["title"]).casefold(), sid))
+        study_chunks = [by_title[i:i + STUDIES_PER_PAGE] for i in range(0, len(by_title), STUDIES_PER_PAGE)]
+        study_page_url = lambda n: f"studies/page-{n}.html"
+
+        def study_page_nav(prefix: str, current: int) -> str:
+            return ('<nav class="catalogue-pages" aria-label="Study pages" data-study-pages><h2>Browse by title</h2><ol>'
+                    + "".join(f'<li><a href="{prefix}{study_page_url(n)}"' + (' aria-current="page"' if n == current else "")
+                              + f'>{_text(studies[chunk[0]]["title"])} – {_text(studies[chunk[-1]]["title"])}</a></li>' for n, chunk in enumerate(study_chunks, 1))
+                    + "</ol></nav>")
+        pages["studies.html"] = (studies_intro + f'<p>The {STUDIES_PER_PAGE} most recently updated of {len(studies):,} studies. Every study is listed by title on the pages below.</p>'
+                                 + f'<div class="card-grid" data-studies data-total="{len(studies)}">' + "".join(study_card(sid) for sid in studies_newest[:STUDIES_PER_PAGE]) + '</div>'
+                                 + study_page_nav("", 0))
+        for n, chunk in enumerate(study_chunks, 1):
+            pages[study_page_url(n)] = (f'<h1>Studies by title, page {n} of {len(study_chunks)}</h1><p>{len(studies):,} studies in title order. '
+                                        '<a href="../studies.html">Search the studies</a>.</p><div class="card-grid">' + "".join(study_card(sid, "../") for sid in chunk) + '</div>'
+                                        + study_page_nav("../", n))
+            extra_titles[study_page_url(n)] = ("studies", f"Studies by title, page {n}")
+    else:
+        pages["studies.html"] = studies_intro + ('<div class="card-grid" data-studies>' + "".join(study_card(sid) for sid in studies_newest) + '</div>' if studies else '<p class="empty-state">No public studies have been written yet. A tree export cannot supply them; add a <code>Study</code> record to the research case.</p>')
     for sid, row in studies.items():
         prefix = "../"
         linked = [rid for rid in row.get("related_ids", []) if rid in record_routes]
@@ -755,9 +786,10 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     if base_url:
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
     data_links = "<ul>" + "".join(f'<li><a href="{path}">{label}</a></li>' for path, label in downloads) + "</ul>"
-    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul>' + ('<h2>Studies</h2>' + empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()]) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
+    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
+                                                  if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
-                          config.grades)
+                          config.grades, study_urls if compact_studies else None)
     outputs: dict[str, str] = {
         "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
         "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n",
@@ -790,7 +822,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         # Dossiers need only the menu enhancement. Interactive pages share one
         # data script rather than embedding the whole collection in each page.
         # The paged pages of a large site are plain lists and need no data.
-        interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "overview"}
+        interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "studies", "overview"}
         data_script = f'<script defer src="{prefix}data/site-data.js"></script>' if interactive else ""
         payload = {"project": project["project"], "site": {"root": prefix}}
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
