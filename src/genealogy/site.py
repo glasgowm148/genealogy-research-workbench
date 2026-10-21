@@ -33,6 +33,8 @@ PLACES_PER_PAGE = 100  # places per region page on a large site
 SOURCES_PER_PAGE = 100  # sources per page on a large site, in title order
 STUDIES_PER_PAGE = 100  # studies on a large site's studies page (newest) and on each title page
 CITED_FOR_LIMIT = 20  # people, findings or family links listed under a source's "Cited for"
+CHRONOLOGY_LANES = 30  # people drawn in a study's chronology; the rest are counted, not drawn
+CHRONOLOGY_BYTES = 36_000  # lanes stop once the drawing reaches this, so a busy study page stays small
 UNPLACED_REGION = "Places without a broader jurisdiction"
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
@@ -889,6 +891,104 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             extra_titles[study_page_url(n)] = ("studies", f"Studies by title, page {n}")
     else:
         pages["studies.html"] = studies_intro + ('<div class="card-grid" data-studies>' + "".join(study_card(sid) for sid in studies_newest) + '</div>' if studies else '<p class="empty-state">No public studies have been written yet. A tree export cannot supply them; add a <code>Study</code> record to the research case.</p>')
+
+    def kind_class(kind: str) -> str:
+        kind = str(kind).casefold()
+        return ("k-begin" if kind in ("birth", "baptism", "christening") else "k-end" if kind in ("death", "burial", "cremation")
+                else "k-union" if kind in FAMILY_EVENTS else "k-other")
+
+    def event_line(e: dict[str, Any]) -> str:
+        """E.g. "about 1850 · birth · Invented Parish": the date as recorded, not the year it is drawn at."""
+        place = places.get(e.get("place_id"), {}).get("name")
+        return " · ".join(str(part) for part in (e.get("date"), e["kind"], place) if part)
+
+    def chronology(row: dict[str, Any], prefix: str) -> str:
+        """A static drawing of a study's people over time: a lane per person, a marker per dated event.
+
+        Only public records reach here; events without a year are counted, not placed.
+        """
+        linked = list(dict.fromkeys(row.get("related_ids", [])))
+        lanes: list[tuple[str | None, list[dict[str, Any]]]] = [(rid, events_by_person[rid]) for rid in linked if rid in people]
+        covered = {e["id"] for _, evs in lanes for e in evs}
+        # An event linked to the study whose people are not in it still belongs on the drawing.
+        other = sorted((events_by_id[rid] for rid in linked if rid in events_by_id and rid not in covered), key=lambda e: (date_sort_key(e.get("date")), e["id"]))
+        if other:
+            lanes.append((None, other))
+        undated = {e["id"] for _, evs in lanes for e in evs if not year_of(e.get("date"))}
+        lanes = [(pid, dated) for pid, evs in lanes if (dated := [(y, e) for e in evs if (y := year_of(e.get("date")))])]
+        if len({e["id"] for _, dated in lanes for _, e in dated}) < 2:
+            return ""
+        lanes.sort(key=lambda lane: (lane[0] is None, min(y for y, _ in lane[1]), person_name(lane[0]).casefold() if lane[0] else "", lane[0] or ""))
+        width, left, right, lane_h, top = 760, 190, 744, 26, 8
+
+        def scale(chosen: list[tuple[str | None, list[tuple[int, dict[str, Any]]]]]) -> tuple[int, int, int, int, Any]:
+            """The data's first and last years, the axis padded to whole decades, and the year-to-x mapping."""
+            first, last = min(y for _, d in chosen for y, _ in d), max(y for _, d in chosen for y, _ in d)
+            lo, hi = first // 10 * 10, last // 10 * 10 + 10
+            return first, last, lo, hi, lambda year: left + (right - left) * (year - lo) / (hi - lo)
+
+        def draw(chosen: list[tuple[str | None, list[tuple[int, dict[str, Any]]]]]) -> tuple[list[str], list[str]]:
+            x = scale(chosen)[4]
+            marks, names = [], []
+            for i, (pid, dated) in enumerate(chosen):
+                y = top + i * lane_h + lane_h // 2
+                years = [year for year, _ in dated]
+                born = next((year for year, e in dated if str(e["kind"]).casefold() == "birth"), None) if pid else None
+                died = next((year for year, e in dated if str(e["kind"]).casefold() == "death"), None) if pid else None
+                start, end = born or min(years), died or max(years)
+                lane = f'<path class="life" d="M{x(start):.1f} {y}H{x(end):.1f}"/>'
+                at: dict[int, list[dict[str, Any]]] = defaultdict(list)
+                for year, e in dated:
+                    at[year].append(e)
+                # Events in one year would sit on one spot: one marker names them all.
+                lane += "".join(f'<circle class="{kind_class(es[0]["kind"])}" cx="{x(year):.1f}" cy="{y}" r="4.5"><title>{_text("; ".join(event_line(e) for e in es))}</title></circle>'
+                                for year, es in at.items())
+                marks.append(lane)
+                label = person_name(pid) if pid else "Other linked events"
+                short = label if len(label) <= 27 else label[:26].rstrip() + "…"
+                name = f'<text x="{left - 12}" y="{y + 4}" text-anchor="end">{_text(short)}</text>'
+                names.append(f'<a href="{prefix}{_text(record_routes[pid])}">' + (f'<title>{_text(label)}</title>' if short != label else "") + name + "</a>"
+                             if pid in record_routes else name)
+            return marks, names
+
+        chosen = lanes[:CHRONOLOGY_LANES]
+        marks, names = draw(chosen)
+        size, keep = 0, 0
+        for mark, name in zip(marks, names):
+            size += len(mark) + len(name)
+            if keep and size > CHRONOLOGY_BYTES:
+                break
+            keep += 1
+        if keep < len(chosen):
+            chosen = chosen[:keep]
+            marks, names = draw(chosen)
+        first, last, lo, hi, x = scale(chosen)
+        step = next((s for s in (10, 20, 50, 100, 200, 500) if (hi - lo) / s <= 12), 1000)
+        bottom = top + len(chosen) * lane_h
+        ticks = list(range(lo, hi + 1, step))
+        axis = (f'<path class="grid" d="' + "".join(f'M{x(t):.1f} {top}V{bottom}' for t in ticks) + '"/>'
+                + "".join(f'<text x="{x(t):.1f}" y="{bottom + 18}" text-anchor="middle">{t}</text>' for t in ticks))
+        persons = sum(1 for pid, _ in chosen if pid)
+        span = f"{lo}s" if first // 10 == last // 10 else f"{lo}s–{last // 10 * 10}s"
+        summary = f'Chronology of {persons} {"person" if persons == 1 else "people"}, {span}' if persons else f"Chronology of linked events, {span}"
+        svg = (f'<svg class="chronology-chart" viewBox="0 0 {width} {bottom + 28}"><g role="img" aria-label="{_text(summary)}">{axis}{"".join(marks)}</g>'
+               f'<g class="lane-names">{"".join(names)}</g></svg>')
+        notes = []
+        if undated:
+            notes.append(f'{len(undated)} undated event{" is" if len(undated) == 1 else "s are"} not shown.')
+        hidden = sum(1 for pid, _ in lanes[len(chosen):] if pid)
+        if hidden:
+            notes.append(f'And {hidden} more {"person is" if hidden == 1 else "people are"} not drawn.')
+        key = "".join(f'<span class="chronology-key"><i class="{cls}"></i>{words}</span>' for cls, words in
+                      (("k-begin", "birth or baptism"), ("k-union", "marriage"), ("k-end", "death or burial"), ("k-other", "other events")))
+        text = "".join(f'<li>{ref(pid, prefix) if pid else "Other linked events"}<ul>' + "".join(f"<li>{_text(event_line(e))}</li>" for _, e in dated) + "</ul></li>"
+                       for pid, dated in chosen)
+        return ('<h2>Chronology</h2><figure class="chronology"><div class="chronology-plot">' + svg + '</div><figcaption>'
+                'Each line runs from a recorded birth to a recorded death, otherwise from the first to the last dated event. '
+                f'Approximate dates are drawn at their recorded year.<span class="chronology-legend">{key}</span></figcaption></figure>'
+                + (f'<p class="meta chronology-notes">{" ".join(notes)}</p>' if notes else "")
+                + f'<details class="chronology-text"><summary>{_text(summary)}, as text</summary><ol>{text}</ol></details>')
+
     for sid, row in studies.items():
         prefix = "../"
         linked = [rid for rid in row.get("related_ids", []) if rid in record_routes]
@@ -901,6 +1001,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         if row.get("body"):
             content += '<section class="study-body">' + prose(row["body"], prefix) + '</section>'
         content += '<h2>Current conclusion</h2>' + (prose(row["conclusion"], prefix) if row.get("conclusion") else '<p class="empty-state">No conclusion has been reached yet.</p>')
+        content += chronology(row, prefix)
         content += '<h2>People and records in this study</h2>' + empty([subject_item(rid, prefix) for rid in linked], "No public people or records are linked.")
         content += '<h2>Related findings and questions</h2>' + empty([f'<li>{ref(r["id"], prefix, r.get("conclusion") or r.get("question") or r.get("statement"))}{metadata(r, prefix)}</li>' for r in related_research], "No related findings or questions recorded.")
         pages[study_urls[sid]] = content

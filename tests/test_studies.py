@@ -134,6 +134,92 @@ class StudySiteTests(unittest.TestCase):
         self.assertIn("s.updated_on must be an ISO date", errors)
 
 
+    def test_no_chronology_under_two_dated_events(self):
+        # Ada's birth is the study's only dated event; Rowan has none.
+        page = self.paths[next(name for name in self.paths if name.startswith("studies/"))].read_text()
+        self.assertNotIn("Chronology", page)
+        self.assertNotIn("<figure", page)
+
+
+def chronology_case(extra: int = 0):
+    case = ResearchCase("fictional-chronology", "Fictional chronology")
+    case.add(Place("parish", "Invented Parish", sensitivity=A.PUBLIC))
+    case.add(Place("hidden-place", "SECRET-PLACE", sensitivity=A.PRIVATE))
+    for pid, name, events in (
+        ("ada", "Ada Fable", [("birth", "1801"), ("marriage", "12 MAR 1825"), ("census", None)]),
+        ("rowan", "Rowan Fable", [("birth", "about 1830"), ("census", "1851"), ("death", "BEF 1890"), ("burial", "unknown")]),
+        ("pip", "Pip Vale", [("residence", "")]),
+    ):
+        case.add(Person(pid, names=[Name(name, surname=name.split()[1])], living=L.DECEASED, sensitivity=A.PUBLIC))
+        for n, (kind, date) in enumerate(events):
+            case.add(Event(f"{pid}-{n}", kind, date=date, place_id="parish", participant_ids=[pid], sensitivity=A.PUBLIC))
+    # Withheld: a private person's own event shared with Ada, and a private event of Ada's.
+    # (A study linking a private record directly is withheld whole.)
+    case.add(Person("hidden", names=[Name("SECRET-PERSON")], living=L.DECEASED, sensitivity=A.PRIVATE))
+    case.add(Event("hidden-b", "baptism", date="1700", place_id="parish", description="SECRET-EVENT", participant_ids=["hidden", "ada"], sensitivity=A.PUBLIC))
+    case.add(Event("ada-private", "census", date="1861", place_id="hidden-place", description="SECRET-EVENT", participant_ids=["ada"], sensitivity=A.PRIVATE))
+    # A dated event linked to the study whose people are not in it.
+    case.add(Event("fire", "fire", date="1842", place_id="parish", sensitivity=A.PUBLIC))
+    related = ["rowan", "ada", "pip", "fire", "parish"]
+    for n in range(extra):
+        pid = f"p{n:04d}"
+        case.add(Person(pid, names=[Name(f"Person {n:04d} Fable", surname="Fable")], living=L.DECEASED, sensitivity=A.PUBLIC))
+        for kind, year in (("birth", 1810 + n % 60), ("census", 1841 + n % 60), ("census", 1851 + n % 60), ("death", 1880 + n % 60)):
+            case.add(Event(f"{pid}-{kind}-{year}", kind, date=str(year), place_id="parish", participant_ids=[pid], sensitivity=A.PUBLIC))
+        related.append(pid)
+    case.add(Study("study", "The Fable chronology", related_ids=related, sensitivity=A.PUBLIC))
+    return case
+
+
+class ChronologyTests(unittest.TestCase):
+    def build(self, extra=0):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        case = chronology_case(extra)
+        self.assertEqual([], validate_case(case))
+        paths = build_site(case, ProjectConfig(name="Fictional"), Path(temporary.name))
+        return paths, paths[next(name for name in paths if name.startswith("studies/s-"))].read_text()
+
+    def test_a_lane_per_person_with_markers_and_a_text_alternative(self):
+        paths, page = self.build()
+        svg = page[page.index("<svg"):page.index("</svg>")]
+        # Ada and Rowan by their first dated event, then the linked fire; Pip has no dated event.
+        self.assertEqual(3, svg.count('class="life"'))
+        self.assertEqual(6, svg.count("<circle"))
+        self.assertLess(svg.index(">Ada Fable<"), svg.index(">Rowan Fable<"))
+        self.assertLess(svg.index(">Rowan Fable<"), svg.index(">Other linked events<"))
+        self.assertNotIn("Pip Vale", svg)
+        self.assertIn('<g role="img" aria-label="Chronology of 2 people, 1800s–1890s">', svg)
+        self.assertIn('<a href="../people/p-', svg)
+        self.assertIn('<circle class="k-union"', svg)
+        self.assertIn("<title>12 MAR 1825 · marriage · Invented Parish</title>", svg)
+        # The axis is padded to whole decades; approximate and bounded dates sit at their year.
+        ticks = dict((int(year), x) for x, year in re.findall(r'<text x="([\d.]+)" y="\d+" text-anchor="middle">(\d{4})</text>', svg))
+        self.assertEqual((1800, 1900), (min(ticks), max(ticks)))
+        per_year = (float(ticks[1900]) - float(ticks[1800])) / 100
+        for date, year in (("about 1830", 1830), ("BEF 1890", 1890), ("1842", 1842)):
+            cx = float(re.search(rf'cx="([\d.]+)" cy="\d+" r="4.5"><title>{date} ·', svg)[1])
+            self.assertAlmostEqual(cx, float(ticks[1800]) + (year - 1800) * per_year, delta=0.2, msg=date)
+        self.assertIn('<figure class="chronology">', page)
+        self.assertIn("<figcaption>", page)
+        self.assertIn("3 undated events are not shown.", page)
+        text = page[page.index('<details class="chronology-text">'):page.index("</details>")]
+        self.assertIn("<summary>Chronology of 2 people, 1800s–1890s, as text</summary>", text)
+        self.assertIn("about 1830 · birth · Invented Parish", text)
+        self.assertIn(">Rowan Fable</a>", text)
+        everything = "\n".join(path.read_text() for path in paths.values() if path.suffix in (".html", ".json", ".js", ".csv", ".xml", ".ged"))
+        for secret in ("SECRET-PERSON", "SECRET-EVENT", "SECRET-PLACE"):
+            self.assertNotIn(secret, everything)
+
+    def test_a_large_study_draws_thirty_people_and_stays_small(self):
+        _, page = self.build(extra=400)
+        svg = page[page.index("<svg"):page.index("</svg>") + 6]
+        self.assertEqual(30, svg.count('class="life"'))
+        self.assertLess(len(svg.encode()), 40_000)
+        self.assertIn("And 372 more people are not drawn.", page)
+        self.assertEqual(30, page[page.index('<details class="chronology-text">'):].split("</details>")[0].count("<ul>"))
+
+
 
 class PlaceRegionTests(unittest.TestCase):
     def test_places_are_grouped_by_their_recorded_country(self):

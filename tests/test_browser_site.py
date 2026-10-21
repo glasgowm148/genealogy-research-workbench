@@ -173,6 +173,8 @@ class BrowserSiteTests(unittest.TestCase):
         pages += [next(r for r in routes if r.startswith(prefix)) for prefix in ('people/', 'studies/')]
         self.assertIn('corrections.html', pages)
         pages.append(self.evidence_dossier(routes))
+        # The demo study draws a chronology of its people.
+        pages.append(next(r for r in routes if r.startswith('studies/s-') and 'class="chronology"' in (self.root / 'nested' / r).read_text()))
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
             for route in pages:
