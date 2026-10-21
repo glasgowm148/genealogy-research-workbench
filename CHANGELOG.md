@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The statistics page opens with a tinted panel of six linked figures (people, events, places, sources, the share of family links assessed and open questions), then shows its tables as cards two to a row on wide screens, each row with a bar on a track and the count beside it. Given names and surnames list only names two or more people share and count the rest ("12 names recorded once."), and the research-progress tables give way to a link to **Research progress**. See [Build and deployment](docs/deployment.md).
+- The home page is written in full by the build, with no JavaScript needed: the project name and `[site] description` beside a small static family sun of the person with the most recorded descendants (three generations, with a text version, linking to that view on the tree page), a **How reliable is it?** note linking to the evidence guide, six question-led cards with their counts ("Who is in the tree?", "What is still open?" …), a four-step **How to read this site**, the three most recently updated studies and the latest findings. The site index opens with **Choose a way in**, six numbered entry tiles, and its downloads are a table of each file's format, size and contents, placed before the person index. See [Build and deployment](docs/deployment.md).
 
 ## 0.7.0 — 21 October 2026
 

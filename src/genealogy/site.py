@@ -22,6 +22,7 @@ from .markup import references as prose_references, render as render_prose
 from .labels import (assessment_label, child_role, confidence_label, grade_label, guide_entries, parent_role, quality_parts, relationship_label,
                      status_anchor, status_label)
 from .maps import geojson
+from .home import SUN_SLICES, file_size, rings as sun_rings, sun_svg, sun_tree  # the home page's tree preview
 from .labels import CLAIM_STATUS, guide_basis  # the evidence guide's basis and example lines
 
 # Lists longer than this are not written out in full: the interactive views
@@ -716,9 +717,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     pages: dict[str, str] = {}
     # Pages other than the fixed routes: (view, title).
     extra_titles: dict[str, tuple[str, str]] = {}
-    open_questions = [q for q in project["questions"] if str(q.get("status", "open")).casefold() == "open"]
-    counts = [(len(project["people"]), "people"), (len(project["events"]), "events"), (len(project["sources"]), "sources"), (len(open_questions), "open questions")]
-    pages["index.html"] = '<p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1><p>Explore people, family connections and historical records. Claims, citations and evidence assessments remain distinct throughout this collection. <a href="evidence.html">How to read the evidence labels</a>.</p><div class="stats stat-grid">' + "".join(f'<div class="stat-card"><strong>{n}</strong><span>{label}</span></div>' for n, label in counts) + '</div><h2>Start exploring</h2><p><a class="button" href="catalogue.html">Browse the people</a> <a href="tree.html">Explore family connections</a></p><h2>Research findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in sorted(project["findings"], key=lambda f: (str(f.get("recorded_on") or ""), f["id"]), reverse=True)[:10]]) + (f'<p><a href="findings.html">All {len(project["findings"]):,} findings</a></p>' if len(project["findings"]) > 10 else "")
+    # The home page is written once the family heads are known: home_page(), below.
     catalogue_search = '<h1>People catalogue</h1><label>Search people <input type="search" data-search placeholder="Name, ID or event"></label><p id="site-status" role="status"></p>'
     if compact_people:
         # The first page is written out; the script searches and pages everyone
@@ -1899,13 +1898,115 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 '<input id="site-search-input" type="search" name="q" autocomplete="off" placeholder="People, places, sources…">'
                 '<p class="site-search-count" aria-live="polite"></p><ul class="site-search-results" id="site-search-results" hidden></ul></form>')
 
+    count_of = lambda n, one, many: f'<strong>{n:,}</strong> {one if n == 1 else many}'
+
+    def home_preview() -> str:
+        """A family sun for the person with the most recorded descendants, drawn here so the
+        home page shows the tree without JavaScript; the caption is its text version."""
+        if not heads:
+            return ""
+        _, pid = heads[0]
+        born = lambda c: (date_sort_key(next((e.get("date") for e in events_by_person[c] if e["kind"] == "birth"), None)), person_name(c).casefold(), c)
+        rings = sun_rings(sun_tree(pid, children_by_parent, born))
+        drawn, slices = [], 0
+        for ring in rings:  # whole generations only, so a crowded ring is counted, not half drawn
+            if slices + len(ring) > SUN_SLICES:
+                break
+            drawn.append(ring)
+            slices += len(ring)
+        nouns = (("child", "children"), ("grandchild", "grandchildren"), ("great-grandchild", "great-grandchildren"))
+        found = [f'{len(ring):,} {nouns[g][len(ring) != 1]}' for g, ring in enumerate(rings)]
+        listed = found[0] if len(found) == 1 else ", ".join(found[:-1]) + " and " + found[-1]
+        span = lifespan(pid)
+        sun_url = f'tree.html?person={quote(pid)}&amp;view=sun'
+        return ('<figure class="home-preview"><div class="home-preview-head"><span>The family tree · '
+                f'{len(people):,} {"person" if len(people) == 1 else "people"}</span><a href="tree.html">Open the tree →</a></div>'
+                f'<a class="home-sun-link" href="{sun_url}" aria-label="Open the family sun for {_text(person_name(pid))} on the tree page">'
+                + sun_svg(drawn, sum(len(ring) for ring in rings)) + '</a>'
+                f'<figcaption>{ref(pid)}' + (f' ({_text(span)})' if span else "") + f' has the most recorded descendants: {listed}'
+                + (f' in {len(rings)} generations' if len(rings) > 1 else "") + '. Each ring is a generation, and a slice\'s width is its share of the descendants'
+                + (f'; the outer {len(rings) - len(drawn)} {"ring is" if len(rings) - len(drawn) == 1 else "rings are"} too crowded to draw here' if len(drawn) < len(rings) else "")
+                + '. Recorded links, including uncertain ones, are not proof.</figcaption></figure>')
+
+    def home_page() -> str:
+        """The home page, written in full here: a hero with a tree preview, questions to start
+        from with their counts, how to read the site, the newest studies and findings."""
+        branding = config.raw.get("site", {})
+        description = branding.get("description") if isinstance(branding, dict) else None
+        family_links = sum(1 for r in project["relationships"] if not rejected(r))
+        questions = (
+            ("Who is in the tree?", "catalogue.html", count_of(len(people), "person", "people"), "Search by name, dates, place or relative."),
+            ("How are they connected?", "tree.html", count_of(family_links, "family link", "family links"), "Follow parents, partners and children across the generations."),
+            ("Where did they live?", "places.html", count_of(len(places), "place", "places"), "The places recorded in their lives, on a map and by region."),
+            ("What do the records say?", "sources.html", count_of(len(sources), "source", "sources") + " · " + count_of(len(citations), "citation", "citations"),
+             "The records cited, and what each one is cited for."),
+            ("What has the research found?", "findings.html", count_of(len(project["findings"]), "finding", "findings"), "Dated conclusions, newest first, with their evidence."),
+            ("What is still open?", "research.html", count_of(open_questions, "open question", "open questions"), "The questions still being worked on, and the records to check next."),
+        )
+        cards = "".join(f'<li class="home-question"><h3><a href="{href}">{_text(q)}</a></h3><p class="home-count">{n}</p><p class="meta">{_text(line)}</p></li>'
+                        for q, href, n, line in questions)
+        last_step = ('Have a record, a photograph or a correction? <a href="corrections.html">Send it →</a>' if "corrections.html" in routes else
+                     'Wondering how two people are related? <a href="connections.html">Find a connection</a> or <a href="compare.html">compare them side by side</a>.')
+        steps = ('<a href="catalogue.html">Search for a name</a>, or start from a <a href="branches.html">family</a> or <a href="places.html">place</a> you know.',
+                 "On a person's page, read the summary first: dates, family and the label on each family link. Each fact lists the records behind it.",
+                 'A label such as “Documented” or “Possible” says how well the records support a link or claim. <a href="evidence.html">Reading the evidence</a> explains every label.',
+                 last_step)
+        featured = studies_newest[:3]
+        study_cards = "".join(
+            f'<article class="card home-study"><h3><a href="{study_urls[sid]}">{_text(studies[sid]["title"])}</a></h3><p>{study_meta(studies[sid])}</p>'
+            + (f'<p>{_text(studies[sid]["summary"])}</p>' if studies[sid].get("summary") else "") + '</article>' for sid in featured)
+        newest = sorted(project["findings"], key=lambda f: (str(f.get("recorded_on") or ""), f["id"]), reverse=True)[:10]
+        return ('<div class="home-hero"><div class="home-intro"><p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1>'
+                + f'<p class="lead">{_text(description or "A public collection of people, records and research.")}</p>'
+                + '<p class="home-reliability"><strong>How reliable is it?</strong> Every link carries its evidence label: how well the records cited for it support it. '
+                'A link taken from a family tree and not yet checked against a record says so. <a href="evidence.html">How to read the labels →</a></p></div>'
+                + home_preview() + '</div>'
+                + '<h2>Start with a question</h2><ul class="home-questions" role="list">' + cards + '</ul>'
+                + '<h2>How to read this site</h2><ol class="home-steps" role="list">' + "".join(f'<li>{s}</li>' for s in steps) + '</ol>'
+                + ('<h2>Featured studies</h2><p>The most recently updated written studies: why a question was investigated and what the records show. '
+                   + (f'<a href="studies.html">All {len(studies):,} studies →</a></p>' if len(studies) > len(featured) else '<a href="studies.html">The studies page →</a></p>')
+                   + '<div class="card-grid home-studies">' + study_cards + '</div>' if featured else "")
+                + '<h2>Latest findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in newest])
+                + (f'<p><a href="findings.html">All {len(project["findings"]):,} findings</a></p>' if len(project["findings"]) > 10 else ""))
+    pages["index.html"] = home_page()
+
+    def way_in() -> str:
+        """Numbered ways into the site, above the list of every page."""
+        tiles = (("catalogue.html", "People", "Find the right person through names, dates, relatives and places."),
+                 ("tree.html", "The family tree", "Move from the whole tree to one household, an hourglass or a family sun."),
+                 ("branches.html", "Families & branches", "Read the story at the scale of a surname or a connected group."),
+                 ("connections.html", "A connection between two people", "Follow the recorded links between two people, with the evidence on each."),
+                 ("timeline.html", "The timeline", "Recorded life events, oldest first."),
+                 ("places.html", "Places and the map", "The places recorded, grouped by region and drawn from their supplied coordinates."))
+        return ('<h2>Choose a way in</h2><ol class="way-in" role="list">'
+                + "".join(f'<li><a href="{href}"><span class="way-in-number" aria-hidden="true">{n:02d}</span><span class="way-in-arrow" aria-hidden="true">↗</span>'
+                          f'<span class="way-in-title">{_text(title)}</span><span class="way-in-line">{_text(line)}</span></a></li>'
+                          for n, (href, title, line) in enumerate(tiles, 1)) + '</ol>')
+
+    # What each download holds; the size is filled in once the files exist.
+    download_notes = {
+        "data/site.json": ("JSON", "Every public record on this site with all its public fields: people, events, places, family links, claims, evidence, sources, citations, studies and research notes."),
+        "data/site.csv": ("CSV", "The same records for a spreadsheet: one row per record, with its record type and a column per field."),
+        "data/places.geojson": ("GeoJSON", "The places with supplied coordinates, as points for mapping software."),
+        "data/public-tree.ged": ("GEDCOM 5.5.1", "The public people and family links, to import into family-tree software."),
+        "data/routes.json": ("JSON", "The address of every page on this site."),
+        "sitemap.xml": ("XML sitemap", "Every page's full address, for search engines."),
+        "findings.xml": ("Atom feed", "The 50 newest dated findings, for a feed reader."),
+    }
+
+    def download_table(rows: list[tuple[str, str]]) -> str:
+        return ('<div class="table-wrap"><table class="downloads"><caption>Downloads: format, size and what each file holds</caption><thead><tr><th scope="col">File</th>'
+                '<th scope="col">Format</th><th scope="col">Size</th><th scope="col">What it holds</th></tr></thead><tbody>'
+                + "".join(f'<tr><td data-label="File"><a href="{path}">{_text(label)}</a><br><span class="record-id">{_text(path)}</span></td><td data-label="Format">{_text(download_notes.get(path, ("", ""))[0])}</td>'
+                          f'<td data-label="Size"><!--size:{path}--></td><td data-label="What it holds">{_text(download_notes.get(path, ("", ""))[1])}</td></tr>' for path, label in rows)
+                + '</tbody></table></div>')
+
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
-    data_links = "<ul>" + "".join(f'<li><a href="{path}">{label}</a></li>' for path, label in downloads) + "</ul>"
-    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in routes.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
-                                                  if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
+    pages["sitemap.html"] = '<h1>Site index and downloads</h1>' + way_in() + '<h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in routes.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
+                                                  if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2>Machine-readable data</h2>' + download_table(downloads) + '<p>Downloads contain only the public records shown on this site.</p>' + '<h2>People</h2>' + browse_people
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
                           config.grades, study_urls if compact_studies else None, name_variants)
     # The map lists the places in a cluster with links to where each one is shown.
@@ -1936,6 +2037,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                updated=f["recorded_on"], summary=f["conclusion"] + (f' Limits: {f["limitations"]}' if f.get("limitations") else "")
                                + (" Changed: " + "; ".join(f'{changed_label(c["record_id"])}: {shift(c)}' for c in f["changes"]) + "." if f.get("changes") else ""))
                      for f in dated[:50]])
+    # The download sizes, now that the files exist.
+    pages["sitemap.html"] = re.sub(r"<!--size:([^>]+)-->", lambda m: file_size(len(outputs[m[1]].encode("utf-8"))) if m[1] in outputs else "", pages["sitemap.html"])
     branding = config.raw.get("site", {})
     description = branding.get("description", "A public collection of people, records and research.") if isinstance(branding, dict) else "A public collection of people, records and research."
     person_titles = {url: person_name(pid) for pid, url in people_urls.items()}
@@ -1949,7 +2052,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         # Dossiers need only the menu enhancement. Interactive pages share one
         # data script rather than embedding the whole collection in each page.
         # The paged pages of a large site are plain lists and need no data.
-        interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "studies", "overview"}
+        interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "studies"}
         data_script = f'<script defer src="{prefix}data/site-data.js"></script>' if interactive else ""
         payload = {"project": project["project"], "site": {"root": prefix}}
         corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""
