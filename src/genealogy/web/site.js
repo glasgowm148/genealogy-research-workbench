@@ -94,6 +94,43 @@ function researchFilters(records){
   return r=>(!s||(s==='not-recorded'?!r.sex:r.sex===s))&&within(r.birth,...b)&&within(r.death,...d)&&(!words.length||r.places.some(p=>words.every(w=>p.includes(w))))&&(!c.no_parent.checked||!r.parent)&&(!c.has_children.checked||r.children)&&(!c.no_spouse.checked||!r.partner);};
  return {panel,controls,active,test};
 }
+// Type-to-find over a person menu (combobox and listbox). The menu stays the real control: a choice sets it and fires change.
+// Past 300 people (site.py's INLINE_LIMIT) a full menu is a long scroll, so it folds away under a details.
+let pickerCount=0;
+const VALUE=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value');
+function picker(menu,label){
+ if(!menu||'picker' in menu.dataset||!people.length)return;menu.dataset.picker='';fillPeople(menu);
+ const n=++pickerCount,large=people.length>300,focused=document.activeElement===menu,holder=menu.closest('label')||menu;
+ const box=el('div',undefined,'person-picker'),wrap=el('div',undefined,'picker-field'),input=el('input'),list=el('ul',undefined,'picker-list'),status=el('p',undefined,'picker-status');
+ input.type='search';input.id=`picker-${n}`;list.id=`picker-${n}-list`;list.hidden=true;list.setAttribute('role','listbox');list.setAttribute('aria-label',`Matches for ${label.toLowerCase()}`);status.setAttribute('role','status');
+ for(const [k,v] of [['role','combobox'],['aria-autocomplete','list'],['aria-expanded','false'],['aria-controls',list.id],['autocomplete','off'],['spellcheck','false'],['placeholder','Type a name or ID']])input.setAttribute(k,v);
+ holder.before(box);wrap.append(field(label,input),list);box.append(wrap,status);
+ if(large){const more=el('details',undefined,'picker-menu');more.append(el('summary','or choose from the list'),holder);box.append(more);}else box.append(holder);
+ if(focused)(large?input:menu).focus();
+ // Names, the ID and each name's canonical surname, folded, so any listed spelling finds the person.
+ let index,matches=[],active=-1;
+ const entries=()=>index||(index=[...people].sort((x,y)=>name(x).localeCompare(name(y))||x.id.localeCompare(y.id)).map(p=>({p,first:fold(name(p)),text:fold([...(p.names||[]).map(x=>x.value),name(p),p.id,...(p.names||[]).map(x=>canonical(x.surname))].join(' '))})));
+ const sync=()=>{const p=personBy.get(VALUE.get.call(menu));input.value=p?name(p):'';};
+ // The tree sets the menu directly when a person is chosen in the drawing; keep the box in step.
+ Object.defineProperty(menu,'value',{configurable:true,get(){return VALUE.get.call(this);},set(v){VALUE.set.call(this,v);sync();}});
+ const close=()=>{list.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');active=-1;};
+ const move=i=>{active=i;[...list.children].forEach((li,j)=>li.setAttribute('aria-selected',String(j===i)));const li=list.children[i];if(li){input.setAttribute('aria-activedescendant',li.id);li.scrollIntoView?.({block:'nearest'});}};
+ const choose=p=>{menu.value=p.id;menu.dispatchEvent(new Event('change',{bubbles:true}));close();status.textContent=`${name(p)} chosen.`;};
+ function search(){const words=fold(input.value).trim().split(/\s+/).filter(Boolean);if(!words.length){matches=[];list.replaceChildren();close();status.textContent='';return;}
+  // Names starting with the first word come first, then names with a word starting with it, each alphabetical.
+  const rank=e=>e.first.startsWith(words[0])?0:e.first.split(/\s+/).some(t=>t.startsWith(words[0]))?1:2;
+  const found=entries().filter(e=>words.every(w=>e.text.includes(w))).map(e=>[rank(e),e]).sort((x,y)=>x[0]-y[0]).map(([,e])=>e);matches=found.slice(0,12);
+  const names=new Map;matches.forEach(e=>names.set(name(e.p),(names.get(name(e.p))||0)+1));
+  list.replaceChildren(...matches.map((e,i)=>{const li=el('li');li.id=`${list.id}-${i}`;li.setAttribute('role','option');const span=lifespan(e.p),meta=[span,names.get(name(e.p))>1||!span?e.p.id:''].filter(Boolean).join(' · ');li.append(el('span',name(e.p)));if(meta)li.append(el('span',meta,'meta'));
+   li.addEventListener('mousedown',ev=>ev.preventDefault());li.addEventListener('click',()=>choose(e.p));return li;}));
+  if(matches.length){list.hidden=false;input.setAttribute('aria-expanded','true');move(0);}else close();
+  status.textContent=!found.length?'No public person matches.':`${found.length.toLocaleString()} match${found.length===1?'':'es'}${found.length>matches.length?`, the first ${matches.length} shown; keep typing to narrow`:''}. Up and down arrows to move, Enter to choose.`;}
+ input.addEventListener('input',search);input.addEventListener('blur',close);
+ input.addEventListener('keydown',e=>{if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();if(list.hidden){search();return;}if(matches.length)move((active+(e.key==='ArrowDown'?1:-1)+matches.length)%matches.length);}
+  else if(e.key==='Enter'&&!list.hidden&&matches[active]){e.preventDefault();choose(matches[active].p);}
+  else if(e.key==='Escape'&&!list.hidden){e.preventDefault();close();}});
+ menu.addEventListener('change',sync);sync();
+}
 function catalogue(){
  const host=$('[data-catalogue]');if(!host)return;
  let rows=$$('tbody tr',host);if(!rows.length)rows=$$('[data-person-id]',host);
@@ -356,6 +393,8 @@ function siteSearch(){
  form.addEventListener('focusout',e=>{if(e.relatedTarget&&!form.contains(e.relatedTarget))close();});
  document.addEventListener('pointerdown',e=>{if(!form.contains(e.target))close();});
 }
-const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
+// After tree, comparison and connections, which fill and preselect these menus.
+function personPickers(){for(const [menu,label] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person'],['[data-compare-b]','Find the second person'],['[data-connection-a]','Find the first person'],['[data-connection-b]','Find the second person']])picker($(menu),label);}
+const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
 })();

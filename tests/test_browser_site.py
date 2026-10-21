@@ -207,11 +207,16 @@ class BrowserSiteTests(unittest.TestCase):
             self.page.goto(large + page, wait_until='networkidle')
             for menu in menus:
                 self.assertEqual(self.large_people + 1, self.page.locator(f'{menu} option').count(), page)
+        # The full menus sit under "or choose from the list" beside the type-to-find boxes.
         self.page.goto(large + 'compare.html')
+        for summary in self.page.locator('details.picker-menu > summary').all():
+            summary.click()
         self.page.locator('[data-compare-a]').select_option('p0001')
         self.page.locator('[data-compare-b]').select_option('p0002')
         self.assertIn('Person 0002 Fable', self.page.locator('#compare-result').inner_text())
         self.page.goto(large + 'connections.html')
+        for summary in self.page.locator('details.picker-menu > summary').all():
+            summary.click()
         self.page.locator('[data-connection-a]').select_option('p0001')
         self.page.locator('[data-connection-b]').select_option('p0003')
         self.assertIn('Person 0003 Fable', self.page.locator('#connection-result').inner_text())
@@ -867,3 +872,131 @@ class BrowserSiteTests(unittest.TestCase):
                         "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
+
+    def axe_violations(self):
+        self.page.add_script_tag(content=Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8'))
+        return self.page.evaluate(
+            "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+            "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+            ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+
+    def test_person_pickers_find_people_by_typing_on_small_and_large_sites(self):
+        page, axe = self.page, bool(os.environ.get('GENEALOGY_AXE_PATH'))
+        first = page.get_by_role('combobox', name='Find the first person')
+        second = page.get_by_role('combobox', name='Find the second person')
+        options = page.locator('[role=listbox]:visible').get_by_role('option')  # a menu's own options are options too
+        # A small site keeps its full menu in view beside the box; typing and a click choose a person.
+        page.goto(self.base + 'compare.html')
+        self.assertTrue(page.locator('[data-compare-a]').is_visible())
+        self.assertEqual(0, page.locator('details.picker-menu').count())
+        first.fill('ada ald')
+        self.assertEqual('true', first.get_attribute('aria-expanded'))
+        self.assertEqual(['Ada Alder'], [t.split('\n')[0] for t in options.all_inner_texts()])
+        self.assertIn('b. 1754', options.first.inner_text())  # name and lifespan
+        if axe:
+            self.assertEqual([], self.axe_violations(), 'open listbox')
+        options.first.click()
+        self.assertEqual('person:01', page.locator('[data-compare-a]').input_value())
+        self.assertEqual('false', first.get_attribute('aria-expanded'))
+        self.assertEqual('Ada Alder', first.input_value())
+        self.assertIn('Choose two people', page.locator('#compare-result').inner_text())
+        # Keyboard only: Tab past the first menu, type, arrows move the active option, Escape closes, Enter chooses.
+        first.focus()
+        page.keyboard.press('Tab')
+        page.keyboard.press('Tab')
+        self.assertTrue(page.evaluate("document.activeElement.matches('[role=combobox][aria-controls]')"))
+        page.keyboard.type('alder')
+        count = options.count()
+        self.assertGreater(count, 1)
+        active = lambda: page.evaluate("document.getElementById(document.activeElement.getAttribute('aria-activedescendant'))?.textContent")
+        self.assertTrue(active().startswith('Ada Alder'))
+        page.keyboard.press('ArrowDown')
+        self.assertTrue(active().startswith('Bram Alder'))
+        self.assertEqual(1, page.locator('[role=listbox]:visible [aria-selected=true]').count())
+        page.keyboard.press('ArrowUp')
+        page.keyboard.press('ArrowUp')  # wraps to the last match
+        self.assertEqual(f'{page.locator("[role=listbox]:visible").get_attribute("id")}-{count - 1}',
+                         second.get_attribute('aria-activedescendant'))
+        page.keyboard.press('Escape')
+        self.assertEqual('false', second.get_attribute('aria-expanded'))
+        self.assertIsNone(second.get_attribute('aria-activedescendant'))
+        self.assertEqual('', page.locator('[data-compare-b]').input_value())
+        page.keyboard.press('ArrowDown')  # reopens on the first match
+        page.keyboard.press('ArrowDown')
+        page.keyboard.press('Enter')
+        self.assertEqual('person:02', page.locator('[data-compare-b]').input_value())
+        self.assertIn('Bram Alder', page.locator('#compare-result').inner_text())
+        self.assertEqual(2, page.locator('#compare-result .comparison .card').count())
+        # Choosing from the menu updates the box; a grouped spelling finds the whole surname group.
+        page.locator('[data-compare-b]').select_option('person:43')
+        self.assertEqual('Iona Hayle', second.input_value())
+        second.fill('iona hale')
+        self.assertEqual(['Iona Hayle'], [t.split('\n')[0] for t in options.all_inner_texts()])
+        second.fill('hayle')
+        self.assertGreater(options.count(), 1)
+        second.fill('person:02')  # the ID
+        self.assertEqual(['Bram Alder'], [t.split('\n')[0] for t in options.all_inner_texts()])
+        second.fill('no-such-synthetic-person')
+        self.assertEqual('false', second.get_attribute('aria-expanded'))
+        self.assertIn('No public person matches', page.locator('.picker-status').nth(1).inner_text())
+        page.goto(self.base + 'connections.html')
+        first.fill('ada alder')
+        page.keyboard.press('Enter')
+        second.fill('bram')
+        options.first.click()
+        self.assertTrue(page.locator('#connection-result .connection-path').is_visible())
+        # The tree: a choice redraws it, and a person chosen in the drawing fills the box.
+        page.goto(self.base + 'tree.html?person=person%3A02')
+        tree_box = page.get_by_role('combobox', name='Find a person to explore from')
+        self.assertEqual('Bram Alder', tree_box.input_value())
+        tree_box.fill('ada alder')
+        page.keyboard.press('Enter')
+        self.assertEqual('person:01', page.locator('#tree-root').input_value())
+        self.assertEqual('Family connections around Ada Alder', page.locator('#tree-output svg').get_attribute('aria-label'))
+        relative = page.locator('#tree-output .tree-node:not(.focus)').first
+        chosen = relative.get_attribute('aria-label').removeprefix('Focus on ')
+        relative.click()
+        self.assertEqual(chosen, tree_box.input_value())
+        # A large site folds its menu under "or choose from the list"; matches stop at twelve.
+        large = self.base.replace('/nested/', '/large/')
+        for width in (1440, 390):
+            page.set_viewport_size({'width': width, 'height': 900})
+            page.goto(large + 'compare.html', wait_until='networkidle')
+            self.assertEqual(2, page.locator('details.picker-menu:not([open])').count())
+            self.assertFalse(page.locator('[data-compare-a]').is_visible())
+            first.fill('person 01')
+            self.assertEqual(12, options.count())
+            self.assertIn('the first 12 shown', page.locator('.picker-status').first.inner_text())
+            self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), width + 1)
+            if axe:
+                self.assertEqual([], self.axe_violations(), f'large compare, open listbox, {width}')
+            page.keyboard.press('Enter')
+            self.assertEqual('p0001', page.locator('[data-compare-a]').input_value())
+            second.fill('person 0002 fable')
+            options.first.click()
+            self.assertIn('Person 0002 Fable', page.locator('#compare-result').inner_text())
+            page.locator('details.picker-menu summary').first.click()
+            self.assertTrue(page.locator('[data-compare-a]').is_visible())
+            self.assertEqual('p0001', page.locator('[data-compare-a]').input_value())
+            if axe:
+                self.assertEqual([], self.axe_violations(), f'large compare, list open, {width}')
+        # With one person given, the box for the other takes focus, since its menu is folded away.
+        page.goto(large + 'connections.html?a=p0001', wait_until='networkidle')
+        self.assertEqual('Person 0001 Fable', first.input_value())
+        self.assertTrue(page.evaluate("document.activeElement.matches('[role=combobox]')"))
+        page.keyboard.type('p0003')
+        page.keyboard.press('Enter')
+        self.assertIn('Person 0003 Fable', page.locator('#connection-result').inner_text())
+        page.goto(large + 'tree.html', wait_until='networkidle')
+        tree_box.fill('person 0007')
+        page.keyboard.press('Enter')
+        self.assertEqual('p0007', page.locator('#tree-root').input_value())
+        self.assertIn('Person 0007 Fable', page.locator('.whole-tree-detail').inner_text())
+        if axe:
+            self.assertEqual([], self.axe_violations(), 'large tree')
+        # Any listed spelling of a surname finds the group's people.
+        page.goto(self.base.replace('/nested/', '/large-variants/') + 'compare.html', wait_until='networkidle')
+        first.fill('fabel 0003')
+        self.assertEqual(['Person 0003 Fable'], [t.split('\n')[0] for t in options.all_inner_texts()])
+        first.fill('odo fable')
+        self.assertEqual(['Odo Fabel'], [t.split('\n')[0] for t in options.all_inner_texts()])
