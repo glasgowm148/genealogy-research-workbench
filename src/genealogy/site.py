@@ -994,15 +994,27 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         span = lifespan(pid)
         recorded_sex = sex.get(pid)
         content = f'<p class="eyebrow">Person dossier</p><h1>{_text(person_name(pid))}</h1>' + (f'<p class="lifespan">{_text(span)}</p>' if span else "") + f'<p class="record-id">{_text(pid)}</p>'
+        # Jump links are judged from the lists the sections below are built from, so a
+        # section showing only its empty-state line is never linked.
+        family_rows = parents_of[pid] or partners_of[pid] or children_of[pid] or [r for r, _ in siblings_of[pid] if r.get("confidence") != "disproved"]
+        jumps = [("names", "Names", name_items), ("biography", "Biography", person.get("notes")), ("family-heading", "Family", family_rows),
+                 ("events", "Events", related_events), ("claims", "Claims and evidence", personal_claims), ("studies", "Studies", studies_by_subject[pid]),
+                 ("research", "Research", research_by_subject[pid]), ("relationships", "All relationships", related_rels), ("external", "External identifiers", external)]
+        if any(filled for _, _, filled in jumps):
+            content += '<nav class="page-sections" aria-label="On this page"><ul>' + "".join(f'<li><a href="#{key}">{label}</a></li>' for key, label, filled in jumps if filled) + "</ul></nav>"
+        explore = [(f"tree.html?person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
+        if canonical_surname(pid):
+            explore.append((f"catalogue.html?surname={quote(canonical_surname(pid))}", f"Everyone surnamed {canonical_surname(pid)}"))
+        content += '<p class="explore"><span class="meta">Explore:</span> ' + " · ".join(f'<a href="../{_text(url)}">{_text(label)}</a>' for url, label in explore) + "</p>"
         if recorded_sex:
             content += f'<p class="meta">Recorded sex: {_text(recorded_sex)} <span class="badge">Unassessed tree assertion</span></p>'
-        content += '<h2>Names</h2>' + empty(name_items)
+        content += '<h2 id="names">Names</h2>' + empty(name_items)
         if person.get("notes"):
-            content += '<h2>Biography and notes</h2><p class="preserve-lines">' + _text(person["notes"]) + '</p>'
+            content += '<h2 id="biography">Biography and notes</h2><p class="preserve-lines">' + _text(person["notes"]) + '</p>'
         content += family(pid)
-        content += '<h2>Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2>Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
-        content += '<h2>Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
-        content += '<h2>Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}{question_next(r, "../") if "question" in r else ""}</li>' for r in research_by_subject[pid]]) + '<h2>All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2>External identifiers</h2>' + empty(external)
+        content += '<h2 id="events">Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2 id="claims">Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
+        content += '<h2 id="studies">Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
+        content += '<h2 id="research">Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}{question_next(r, "../") if "question" in r else ""}</li>' for r in research_by_subject[pid]]) + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
         if "corrections.html" in routes:
             content += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
                                                            if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"

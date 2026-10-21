@@ -178,6 +178,9 @@ class BrowserSiteTests(unittest.TestCase):
             for route in pages:
                 with self.subTest(width=width, route=route):
                     self.page.goto(self.base + route, wait_until='networkidle')
+                    if route.startswith('people/'):  # the section menu and explore links are part of what axe checks
+                        self.assertEqual(1, self.page.locator('nav.page-sections').count(), route)
+                        self.assertEqual(1, self.page.locator('p.explore').count(), route)
                     self.page.add_script_tag(content=axe)
                     violations = self.page.evaluate(
                         "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
@@ -318,6 +321,61 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.locator('[data-connection-b]').select_option('person:02')
         self.assertIn('Ada Alder', self.page.locator('#connection-result').inner_text())
         self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
+
+    def test_dossier_menu_and_explore_links_prefill_the_tools(self):
+        dossier = next(p for p in (self.root / 'nested' / 'people').glob('*.html') if 'data-person-id="person:01"' in p.read_text())
+        self.page.goto(self.base + 'people/' + dossier.name)
+        self.page.locator('p.explore').get_by_role('link', name='Find a connection').click()
+        self.page.wait_for_url('**/connections.html?a=person%3A01')
+        self.assertEqual('person:01', self.page.locator('[data-connection-a]').input_value())
+        self.assertTrue(self.page.evaluate("document.activeElement.matches('[data-connection-b]')"))  # the empty menu is next
+        self.page.locator('[data-connection-b]').select_option('person:02')
+        self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
+        # Both people in the address: the result renders without a choice.
+        self.page.goto(self.base + 'connections.html?a=person%3A01&b=person%3A02')
+        self.assertTrue(self.page.locator('#connection-result .connection-path').is_visible())
+        self.assertIn('Ada Alder', self.page.locator('#connection-result').inner_text())
+        self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
+        self.page.goto(self.base + 'compare.html?a=person%3A01&b=person%3A02')
+        self.assertEqual(2, self.page.locator('#compare-result .comparison .card').count())
+        self.assertIn('Bram Alder', self.page.locator('#compare-result').inner_text())
+        # An id that is not a public person is ignored; the menu it named is the one left to choose.
+        self.page.goto(self.base + 'compare.html?a=no-such-person&b=person%3A02')
+        self.assertEqual('', self.page.locator('[data-compare-a]').input_value())
+        self.assertTrue(self.page.evaluate("document.activeElement.matches('[data-compare-a]')"))
+        self.assertEqual(0, self.page.locator('#compare-result .comparison').count())
+        # A large site fills its menus from the data before preselecting.
+        large = self.base.replace('/nested/', '/large/')
+        self.page.goto(large + 'compare.html?a=p0001&b=p0002', wait_until='networkidle')
+        self.assertIn('Person 0002 Fable', self.page.locator('#compare-result').inner_text())
+        self.page.goto(large + 'connections.html?a=p0001&b=p0003', wait_until='networkidle')
+        self.assertIn('Person 0003 Fable', self.page.locator('#connection-result').inner_text())
+        self.page.goto(self.base + 'people/' + dossier.name)
+        self.page.locator('p.explore').get_by_role('link', name='Family tree').click()
+        self.page.locator('#tree-output svg').wait_for()
+        self.assertEqual('person:01', self.page.locator('#tree-root').input_value())
+        # Wide screens keep the menu in view; a jump leaves its heading clear of it. Narrow screens leave it in the flow.
+        for width, position in ((1600, 'sticky'), (390, 'static')):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            self.page.goto(self.base + 'people/' + dossier.name)
+            nav = self.page.locator('nav.page-sections')
+            self.assertEqual(position, nav.evaluate('n => getComputedStyle(n).position'))
+            nav.get_by_role('link', name='Events').click()
+            self.page.wait_for_function("location.hash === '#events'")
+            heading, menu = self.page.locator('#events').bounding_box(), nav.bounding_box()
+            if position == 'sticky':
+                self.assertLess(abs(menu['y']), 1)  # held at the top of the window
+                self.assertGreaterEqual(heading['y'], menu['y'] + menu['height'] - 1)
+            else:
+                self.assertGreaterEqual(heading['y'], -1)
+            self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+            if os.environ.get('GENEALOGY_AXE_PATH'):
+                self.page.add_script_tag(content=Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8'))
+                violations = self.page.evaluate(
+                    "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                    "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                    ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                self.assertEqual([], violations, width)
 
     def test_surname_variants_group_the_filter_and_fold_the_search(self):
         visible = self.page.locator('[data-person-id]:visible')

@@ -95,7 +95,7 @@ class RecordedSiblingTests(unittest.TestCase):
         self.assertEqual([], self.siblings("Nell Fable"))
         self.assertIn("No public siblings recorded.", self.dossier("Nell Fable"))
         for name in ("Ada Fable", "Nell Fable"):
-            recorded = re.sub(r"<[^>]+>", " ", self.dossier(name).split("<h2>All recorded relationships</h2>", 1)[1])
+            recorded = re.sub(r"<[^>]+>", " ", self.dossier(name).split('<h2 id="relationships">All recorded relationships</h2>', 1)[1])
             self.assertRegex(recorded, r"Ada Fable\s+— sister\s+→\s+Nell Fable\s+Disproved")
 
     def test_guide_explains_recorded_siblings_once(self):

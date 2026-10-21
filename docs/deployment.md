@@ -51,7 +51,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | --- | --- |
 | `index.html` | Overview, counts and research entry points |
 | `catalogue.html` | Search, surname, year and evidence filters, sort and pagination; the surname filter and search fold the spellings listed under `[names.variants]` into one surname |
-| `people/p-<hash>.html` | Stable person dossier: family (parents, partners, children, siblings), events, claims, sources and research |
+| `people/p-<hash>.html` | Stable person dossier: family (parents, partners, children, siblings), events, claims, sources and research. An **On this page** menu links each section that has something in it (kept in view on screens 1450px and wider), and an **Explore** line opens the family tree focused on the person (`tree.html?person=<id>`), Connections and Compare with the person chosen (`?a=<id>`), and the catalogue filtered to their surname |
 | `tree.html` | Whole-tree canvas, family focus and branch cards |
 | `timeline.html` | Recorded life events with filters |
 | `places.html` | Place/event list and supplied-coordinate map |
@@ -60,8 +60,8 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `branches.html` | Surname groups and connected groups of recorded relatives, linked to the catalogue and tree; spellings listed under `[names.variants]` share one group, with the spellings recorded ([Group spellings of a surname](research.md#group-spellings-of-a-surname)) |
 | `studies.html`, `studies/s-<hash>.html` | Written research studies with rationale, conclusion and linked subjects, most recently updated first, with a search by title, summary or linked person; past 300 studies, `studies/page-<n>.html` lists them by title |
 | `findings.html`, `findings/page-<n>.html` | Dated log of findings, newest first (`findings.xml` Atom feed when `site.base_url` is set); past 30 findings, archive pages numbered from the earliest |
-| `compare.html` | Side-by-side person comparison |
-| `connections.html` | Shortest path through recorded relationships |
+| `compare.html` | Side-by-side person comparison; `?a=<id>&b=<id>` chooses the people |
+| `connections.html` | Shortest path through recorded relationships; `?a=<id>&b=<id>` chooses the people |
 | `evidence.html` | Reader's guide to every confidence, status and relationship label |
 | `sitemap.html` | Human-readable routes, person index and downloads |
 | `corrections.html` | How to send a correction and what to include (only when `site.contact_email` or `site.contact_url` is set) |
