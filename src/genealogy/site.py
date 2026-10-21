@@ -134,6 +134,17 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
         data["site"]["grades"] = {key: grade["label"] for key, grade in grades.items()}
     if name_variants:
         data["site"]["name_variants"] = name_variants
+    # The catalogue's recorded-sex filter: the first sex claim not rejected, as
+    # the dossier shows it, folded to "F" or "M" where it says so; one short
+    # value per person rather than the claims themselves.
+    sex: dict[str, str] = {}
+    for row in project.get("claims", []):
+        if row.get("predicate") == "sex" and row.get("status") != "rejected":
+            sex.setdefault(row["subject_id"], str(row.get("value") or "").strip())
+    for row in data["people"]:
+        value = sex.get(row["id"], "")
+        if value:
+            row["sex"] = {"f": "F", "female": "F", "m": "M", "male": "M"}.get(value.casefold(), value)
     return data
 
 

@@ -65,6 +65,35 @@ $$('.site-sidebar a[data-view]').forEach(a=>{if(a.dataset.view===view)a.setAttri
 function fillPeople(menu){if(menu.options.length>1)return;const sorted=[...people].sort((x,y)=>name(x).localeCompare(name(y))||x.id.localeCompare(y.id));const fragment=document.createDocumentFragment();sorted.forEach(p=>fragment.append(option(p.id,name(p))));menu.append(fragment);}
 // ?a= and ?b= (a dossier's explore links) preselect people once the menus are filled; with only one chosen, the other menu takes focus.
 function preselect(a,b){const params=new URLSearchParams(location.search);for(const [menu,key] of [[a,'a'],[b,'b']]){const id=params.get(key);if(id&&personBy.has(id))menu.value=id;}if(!a.value!==!b.value)(a.value?b:a).focus();}
+// The catalogue's research filters, on public data only: recorded sex, recorded family links, birth and death years, and event places.
+// A disproved link is set apart on the dossier and counts for nothing here (validation keeps a grade counted as disproved at that confidence).
+const PARENT_KINDS=['parent','father','mother','biological_parent','adoptive_parent','parent_child'],PARTNER_KINDS=['spouse','partner','husband','wife','marriage'],SEX_LABEL={F:'Female',M:'Male'};
+function researchFilters(records){
+ const parents=new Set,children=new Set,partners=new Set;
+ for(const r of relationships){if(r.confidence==='disproved')continue;const k=String(r.kind||'').toLowerCase();if(PARENT_KINDS.includes(k)){parents.add(r.subject_id);children.add(r.object_id);}else if(PARTNER_KINDS.includes(k)){partners.add(r.subject_id);partners.add(r.object_id);}}
+ const first=(ev,kind)=>{const e=ev.find(x=>x.kind===kind&&year(x.date)!==null);return e?year(e.date):null;};
+ records.forEach(r=>{const id=r.p?.id,ev=r.p?pe(r.p).sort(byDate):[];Object.assign(r,{sex:r.p?.sex||'',birth:first(ev,'birth'),death:first(ev,'death'),places:[...new Set(ev.map(e=>norm(placeBy.get(e.place_id)?.name)).filter(Boolean))],parent:parents.has(id),children:children.has(id),partner:partners.has(id)});});
+ const sexCounts=new Map;records.forEach(r=>sexCounts.set(r.sex,(sexCounts.get(r.sex)||0)+1));
+ const recorded=[...sexCounts.keys()].filter(Boolean).sort((a,b)=>(a in SEX_LABEL?0:1)-(b in SEX_LABEL?0:1)||a.localeCompare(b));
+ const sex=select([['','Any'],...recorded.map(v=>[v,`${SEX_LABEL[v]||v} (${sexCounts.get(v).toLocaleString()})`]),['not-recorded',`Not recorded (${(sexCounts.get('')||0).toLocaleString()})`]]);
+ const number=placeholder=>{const n=el('input');n.type='number';n.min='1';n.max='9999';n.placeholder=placeholder;return n;};
+ const controls={...(recorded.length?{sex}:{}),birth_from:number('e.g. 1750'),birth_to:number('e.g. 1850'),death_from:number('e.g. 1800'),death_to:number('e.g. 1900'),place:el('input')};
+ controls.place.type='search';controls.place.placeholder='Parish, town or county';
+ const body=el('div',undefined,'toolbar');if(controls.sex)body.append(field('Recorded sex',sex));
+ body.append(field('Birth year from',controls.birth_from),field('Birth year to',controls.birth_to),field('Death year from',controls.death_from),field('Death year to',controls.death_to));
+ const placeLabel=field('Event place',controls.place);placeLabel.className='grow';body.append(placeLabel);
+ const family=el('fieldset');family.append(el('legend','Family links'));
+ for(const [key,label] of [['no_parent','No parent recorded'],['has_children','Has recorded children'],['no_spouse','No recorded spouse or partner']]){const box=el('input'),l=el('label',undefined,'check');box.type='checkbox';box.value='1';l.append(box,label);family.append(l);controls[key]=box;}
+ body.append(family);
+ const panel=el('details',undefined,'catalogue-filters'),summary=el('summary','Research filters');panel.append(summary,body);
+ const on=n=>n.type==='checkbox'?n.checked:n.value.trim()!=='';
+ const active=()=>Object.values(controls).filter(on).length;
+ const num=n=>n.value?Number(n.value):null,within=(y,lo,hi)=>lo===null&&hi===null||y!==null&&(lo===null||y>=lo)&&(hi===null||y<=hi);
+ // Built once per render: the place words and year bounds, then a test for each record.
+ const test=()=>{const words=norm(controls.place.value).trim().split(/\s+/).filter(Boolean),b=[num(controls.birth_from),num(controls.birth_to)],d=[num(controls.death_from),num(controls.death_to)],c=controls;const n=active(),s=controls.sex?.value||'';summary.textContent=n?`Research filters · ${n} on`:'Research filters';
+  return r=>(!s||(s==='not-recorded'?!r.sex:r.sex===s))&&within(r.birth,...b)&&within(r.death,...d)&&(!words.length||r.places.some(p=>words.every(w=>p.includes(w))))&&(!c.no_parent.checked||!r.parent)&&(!c.has_children.checked||r.children)&&(!c.no_spouse.checked||!r.partner);};
+ return {panel,controls,active,test};
+}
 function catalogue(){
  const host=$('[data-catalogue]');if(!host)return;
  let rows=$$('tbody tr',host);if(!rows.length)rows=$$('[data-person-id]',host);
@@ -92,10 +121,21 @@ function catalogue(){
  const sort=select([['name','Name · A–Z'],['name-desc','Name · Z–A'],['birth','Birth · earliest'],['death','Death · earliest']]);
  bar.append(field('Event year from',from),field('Event year to',to));if(surnameCounts.size)bar.append(field('Surname',surname));bar.append(field('Evidence',evidence),field('Sort by',sort));
  host.before(bar);const count=el('p',undefined,'result-count');count.setAttribute('role','status');host.before(count);
+ const research=researchFilters(records);bar.after(research.panel);
  const pager=el('div',undefined,'pagination'),info=el('span'),buttons=el('div'),prev=el('button','← Previous'),next=el('button','Next →');buttons.append(prev,next);pager.append(info,buttons);host.after(pager);
- function render(){const q=fold(search.value).trim().split(/\s+/).filter(Boolean),lo=from.value?Number(from.value):null,hi=to.value?Number(to.value):null;const filtered=records.filter(r=>q.every(v=>r.norm.includes(v))&&(lo===null&&hi===null||r.years.some(y=>(lo===null||y>=lo)&&(hi===null||y<=hi)))&&(!surname.value||r.surname===surname.value)&&(!evidence.value||(evidence.value==='supported'?r.supported:evidence.value==='original'?r.original:!r.supported)));filtered.sort((a,b)=>{if(sort.value==='birth'||sort.value==='death'){const k=sort.value==='birth'?0:1;return(year(dates(a.p||{})[k])??Infinity)-(year(dates(b.p||{})[k])??Infinity)||name(a.p).localeCompare(name(b.p));}const n=name(a.p).localeCompare(name(b.p));return sort.value==='name-desc'?-n:n;});const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,pages-1);const current=filtered.slice(page*size,(page+1)*size);if(compact)tbody.replaceChildren(...current.map(r=>r.row));else{const shown=new Set(current);records.forEach(r=>r.row.hidden=!shown.has(r));const fragment=document.createDocumentFragment();filtered.forEach(r=>fragment.append(r.row));tbody.append(fragment);}count.textContent=`${filtered.length.toLocaleString()} of ${records.length.toLocaleString()} people · search includes recorded relatives and places`;info.textContent=`Page ${page+1} of ${pages}`;prev.disabled=page===0;next.disabled=page===pages-1;}
- const params=new URLSearchParams(location.search);if(params.get('q'))search.value=params.get('q');const wanted=canonical(params.get('surname'));if(surnameCounts.has(wanted))surname.value=wanted;
- [search,from,to,surname,evidence,sort].forEach(n=>n.addEventListener(n.tagName==='INPUT'?'input':'change',()=>{page=0;render();}));prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});render();
+ function render(){const q=fold(search.value).trim().split(/\s+/).filter(Boolean),lo=from.value?Number(from.value):null,hi=to.value?Number(to.value):null,matches=research.test();const filtered=records.filter(r=>q.every(v=>r.norm.includes(v))&&matches(r)&&(lo===null&&hi===null||r.years.some(y=>(lo===null||y>=lo)&&(hi===null||y<=hi)))&&(!surname.value||r.surname===surname.value)&&(!evidence.value||(evidence.value==='supported'?r.supported:evidence.value==='original'?r.original:!r.supported)));filtered.sort((a,b)=>{if(sort.value==='birth'||sort.value==='death'){const k=sort.value==='birth'?0:1;return(year(dates(a.p||{})[k])??Infinity)-(year(dates(b.p||{})[k])??Infinity)||name(a.p).localeCompare(name(b.p));}const n=name(a.p).localeCompare(name(b.p));return sort.value==='name-desc'?-n:n;});const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,pages-1);const current=filtered.slice(page*size,(page+1)*size);if(compact)tbody.replaceChildren(...current.map(r=>r.row));else{const shown=new Set(current);records.forEach(r=>r.row.hidden=!shown.has(r));const fragment=document.createDocumentFragment();filtered.forEach(r=>fragment.append(r.row));tbody.append(fragment);}count.textContent=`${filtered.length.toLocaleString()} of ${records.length.toLocaleString()} people · search includes recorded relatives and places`;info.textContent=`Page ${page+1} of ${pages}`;prev.disabled=page===0;next.disabled=page===pages-1;}
+ // Every filter lives in the page address (?q=&surname=&sex=&birth_from=…), so a filtered view can be shared; other parameters are kept.
+ const state=[['q',search],['surname',surname],...Object.entries(research.controls),['year_from',from],['year_to',to],['evidence',evidence],['sort',sort]];
+ const value=n=>n.type==='checkbox'?(n.checked?'1':''):n.value,defaults=new Map(state.map(([,n])=>[n,value(n)]));
+ const put=(n,v)=>{if(n.type==='checkbox')n.checked=v==='1';else if(n.tagName!=='SELECT'||[...n.options].some(o=>o.value===v))n.value=v;};
+ const params=new URLSearchParams(location.search);for(const [key,n] of state){const v=params.get(key);if(v!==null)put(n,key==='surname'?canonical(v):v);}
+ research.panel.open=research.active()>0;
+ const clear=el('button','Clear search and filters');clear.type='button';bar.append(clear);
+ const idle=()=>state.every(([key,n])=>key==='sort'||value(n).trim()===defaults.get(n));
+ const keep=()=>{clear.hidden=idle();try{const u=new URL(location.href);state.forEach(([key])=>u.searchParams.delete(key));for(const [key,n] of state){const v=value(n);if(v.trim()!==''&&v!==defaults.get(n))u.searchParams.append(key,v);}if(u.href!==location.href)history.replaceState(history.state,'',u.href);}catch(_){/* file:// pages may refuse a new address; the filters still work */}};
+ const changed=()=>{page=0;render();keep();};
+ state.forEach(([,n])=>n.addEventListener(n.tagName==='INPUT'?'input':'change',changed));clear.addEventListener('click',()=>{state.forEach(([key,n])=>{if(key!=='sort')put(n,defaults.get(n));});changed();search.focus();});
+ clear.hidden=idle();prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});render();
 }
 
 function tree(){
