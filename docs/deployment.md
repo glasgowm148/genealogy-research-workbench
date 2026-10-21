@@ -63,7 +63,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `findings.html`, `findings/page-<n>.html` | Dated log of findings, newest first (`findings.xml` Atom feed when `site.base_url` is set); past 30 findings, archive pages numbered from the earliest |
 | `compare.html` | Side-by-side person comparison; `?a=<id>&b=<id>` chooses the people |
 | `connections.html` | Shortest path through recorded relationships; `?a=<id>&b=<id>` chooses the people |
-| `evidence.html` | Reader's guide to every confidence, status and relationship label |
+| `evidence.html` | Reader's guide to every confidence, status and relationship label, with what each grade usually rests on and one public example from the site |
 | `sitemap.html` | Human-readable routes, person index and downloads |
 | `corrections.html` | How to send a correction and what to include (only when `site.contact_email` or `site.contact_url` is set) |
 | `sitemap.xml` | Search-engine sitemap (only when `site.base_url` is set) |

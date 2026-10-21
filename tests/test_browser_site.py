@@ -614,3 +614,30 @@ class BrowserSiteTests(unittest.TestCase):
                         "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
+
+    def test_guide_basis_and_examples_line_up_and_pass_axe(self):
+        from test_guide_examples import case as guide_case, config as guide_config
+        (self.root / 'guide-project').mkdir(exist_ok=True)
+        build_site(guide_case(), guide_config(self.root / 'guide-project'), self.root / 'guide')
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        for width in (1440, 390):
+            with self.subTest(width=width):
+                self.page.set_viewport_size({'width': width, 'height': 900})
+                self.page.goto(urljoin(self.base, '../guide/evidence.html'), wait_until='networkidle')
+                meaning = self.page.locator('#confidence-documented + dd').bounding_box()
+                for selector in ('.guide-basis', '.guide-example'):
+                    extra = self.page.locator(f'#confidence-documented ~ dd{selector}').first
+                    self.assertTrue(extra.is_visible(), selector)
+                    # Under the meaning, in its column, at both widths.
+                    self.assertAlmostEqual(meaning['x'], extra.bounding_box()['x'], delta=1)
+                    self.assertGreater(extra.bounding_box()['y'], meaning['y'])
+                self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                self.page.add_script_tag(content=axe)
+                violations = self.page.evaluate(
+                    "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                    "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                    ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                self.assertEqual([], violations)
+        self.page.locator('.guide-example a').first.click()
+        self.page.wait_for_url('**/people/*.html#family-heading')
+        self.assertEqual('Ada Fable', self.page.locator('h1').inner_text())

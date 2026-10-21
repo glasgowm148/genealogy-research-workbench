@@ -93,7 +93,8 @@ class ProjectConfig:
     research: dict[str, Any] = field(default_factory=dict)
     paths: dict[str, Any] = field(default_factory=dict)
     # A project's own confidence grades, in display order: key -> {label,
-    # meaning, confidence}. ``confidence`` is the standard grade it counts as.
+    # meaning, confidence}. ``confidence`` is the standard grade it counts as;
+    # an optional ``basis`` says what the grade usually rests on.
     grades: dict[str, dict[str, str]] = field(default_factory=dict)
     # ``[names] variants``: canonical surname -> other spellings found in records.
     names: dict[str, Any] = field(default_factory=dict)
@@ -155,12 +156,14 @@ class ProjectConfig:
                 raise ValueError(f"{setting}: a grade key uses lower-case letters, digits, '_' or '-'")
             if not isinstance(grade, dict):
                 raise ValueError(f"[{setting}] must be a table")
-            unknown = set(grade) - {"label", "meaning", "confidence"}
+            unknown = set(grade) - {"label", "meaning", "confidence", "basis"}
             if unknown:
                 raise ValueError(f"{setting} has unknown settings: {', '.join(sorted(unknown))}")
             for name in ("label", "meaning"):
                 if not isinstance(grade.get(name), str) or not grade[name].strip():
                     raise ValueError(f"{setting}.{name} must be a non-empty string")
+            if "basis" in grade and (not isinstance(grade["basis"], str) or not grade["basis"].strip()):
+                raise ValueError(f"{setting}.basis must be a non-empty string")
             if grade.get("confidence") not in {c.value for c in Confidence}:
                 raise ValueError(f"{setting}.confidence must be one of: {', '.join(c.value for c in Confidence)}")
         seen: dict[str, str] = {}

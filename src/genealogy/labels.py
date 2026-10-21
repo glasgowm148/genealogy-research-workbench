@@ -15,6 +15,15 @@ CONFIDENCE = {
     "disproved": ("Disproved", "Assessed evidence contradicts this. It is kept so the reasoning stays visible."),
     "unknown": ("Unassessed", "Recorded, but not yet assessed against original sources."),
 }
+# What each standard grade usually rests on, printed under its meaning in the
+# guide. Generic on purpose: a project's own grades say this in their own words.
+CONFIDENCE_BASIS = {
+    "documented": "a record that names both people and the relationship between them, or states the fact directly.",
+    "probable": "several records that agree, such as a matching name, age and place, though none states it outright.",
+    "possible": "a detail or two that fit, such as a name or an age, with other candidates not yet ruled out.",
+    "disproved": "a record that conflicts with it, such as a birth after the supposed parent's death.",
+    "unknown": "a tree, export or other compilation, not yet compared with the records it drew on.",
+}
 CLAIM_STATUS = {
     "asserted": ("Asserted", "Stated by a source or tree; not yet weighed against other evidence."),
     "supported": ("Supported", "Assessed evidence supports this claim."),
@@ -130,6 +139,17 @@ def status_anchor(value: Any) -> str:
     """The guide entry for a stored claim or research status."""
     key = str(value or "").casefold()
     return f"status-{key}" if key in CLAIM_STATUS or key in RESEARCH_MEANINGS else "research-status"
+
+
+def guide_basis(anchor: str, grades: Mapping[str, Mapping[str, str]] | None = None) -> str | None:
+    """What a guide entry's grade usually rests on: the toolkit's words for a
+    standard grade, a project grade's own ``basis`` (never borrowed from the
+    grade it counts as, which may be weighed differently)."""
+    if anchor.startswith("confidence-"):
+        return CONFIDENCE_BASIS.get(anchor[len("confidence-"):])
+    if anchor.startswith("grade-"):
+        return (grades or {}).get(anchor[len("grade-"):], {}).get("basis")
+    return None
 
 
 def guide_entries(grades: Mapping[str, Mapping[str, str]] | None = None) -> list[tuple[str, str, str, str]]:

@@ -125,6 +125,7 @@ If your project already grades evidence in its own words, such as "strongly supp
 label = "Strongly supported"
 meaning = "Several independent records agree, short of proof."
 confidence = "probable"
+basis = "two or more independent records that agree, with none in conflict."
 
 [grades.uncertain]
 label = "Uncertain"
@@ -135,6 +136,10 @@ confidence = "possible"
 Then give a relationship, claim, evidence assessment or hypothesis a `grade` as well as its `confidence`, for example `"confidence": "probable", "grade": "strongly_supported"`. The site prints your label ("Strongly supported (80%)"), and **Reading the evidence** lists each grade with its meaning and the standard grade it counts as. Filters, colours and the tree use the standard grade.
 
 `genealogy validate` and every build reject a grade that `genealogy.toml` does not define, or whose `confidence` differs from the one the grade counts as.
+
+The optional `basis` says what the grade usually rests on. **Reading the evidence** prints it under the grade's meaning as "Usually rests on: two or more independent records that agree, with none in conflict." A grade without one prints no such line: it does not borrow the wording the toolkit gives the standard grades ("Documented — usually rests on: a record that names both people and the relationship between them, or states the fact directly"), since your grade may weigh records differently. A `basis` must be a non-empty string.
+
+Each entry in the guide also shows one example from the site, picked automatically: the first family link (by the first person's name) carrying that grade or confidence, as "Example: Ada Fable and her father Bram Fable", linked to Ada's family section, and for each claim status the first claim with it, as "Example: Ada Fable — birth: 1850". Only links between two public people and public claims are picked; an entry with nothing on the site to show has no example line.
 
 ## Group spellings of a surname
 

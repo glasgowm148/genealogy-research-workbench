@@ -21,6 +21,7 @@ from .markup import references as prose_references, render as render_prose
 from .labels import (assessment_label, child_role, confidence_label, grade_label, guide_entries, parent_role, quality_parts, relationship_label,
                      status_anchor, status_label)
 from .maps import geojson
+from .labels import CLAIM_STATUS, guide_basis  # the evidence guide's basis and example lines
 
 # Lists longer than this are not written out in full: the interactive views
 # load them from the shared data script, and readers without JavaScript
@@ -1205,13 +1206,51 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                               + '<h2>Connected groups</h2>' + ('<div class="table-wrap"><table><thead><tr><th>Group</th><th>People</th><th>Main surnames</th><th>Births</th><th>Earliest born</th></tr></thead><tbody>' + "".join(component_rows) + '</tbody></table></div>' if component_rows else '<p class="empty-state">No recorded relationships connect public people yet.</p>')
                               + (f'<p class="meta">{len(connected) - 60} smaller groups are not listed. </p>' if len(connected) > 60 else "") + (f'<p class="meta">{singles} people have no public recorded relatives.</p>' if singles else ""))
 
+    def guide_examples() -> dict[str, str]:
+        """One example from the site per guide entry: the first family link, by
+        its first person's name, whose badge leads to that entry, and the first
+        claim with each status. The projection holds only public records; both
+        people are checked anyway, so a withheld person can never be named."""
+        found: dict[str, str] = {}
+        family_kinds = PARENT_KINDS | PARTNER_KINDS | SIBLING_KINDS
+        links = sorted((r for r in project["relationships"] if str(r["kind"]).casefold() in family_kinds
+                        and r["subject_id"] in people and r["object_id"] in people and r["subject_id"] != r["object_id"]),
+                       key=lambda r: (person_name(r["subject_id"]), person_name(r["object_id"]), r["id"]))
+        for r in links:
+            confidence, kind, (a, b) = str(r.get("confidence") or "unknown"), str(r["kind"]).casefold(), (r["subject_id"], r["object_id"])
+            # The same anchors metadata() links this link's badge to.
+            anchors = [f'grade-{r["grade"]}' if grade_label(r, config.grades) else "confidence-tree-link" if confidence == "unknown" else f"confidence-{confidence}"]
+            anchors += ["estimate"] * isinstance(r.get("estimate"), int) + ["tree-marked"] * bool(r.get("tree_status"))
+            if all(anchor in found for anchor in anchors):
+                continue
+            role = (parent_role(r, sex.get(b)).lower() if kind in PARENT_KINDS else "spouse or partner" if kind in PARTNER_KINDS
+                    else "half-sibling" if "half" in kind or "half" in str(r.get("pedigree") or "").casefold() else "sibling")
+            pronoun = {"m": "his", "male": "his", "f": "her", "female": "her"}.get(sex.get(a, "").casefold(), "their")
+            words = f"{person_name(a)} and {pronoun} {role} {person_name(b)}"
+            for anchor in anchors:
+                found.setdefault(anchor, f'<a href="{_text(people_urls[a])}#family-heading">{_text(words)}</a>')
+        for c in sorted((c for c in project["claims"] if c.get("predicate") != "sex" and c["subject_id"] in people and c["id"] in record_routes),
+                        key=lambda c: (person_name(c["subject_id"]), str(c["predicate"]), c["id"])):
+            key = str(c.get("status") or "").casefold()
+            if key in CLAIM_STATUS:
+                found.setdefault(f"status-{key}", f'<a href="{_text(record_routes[c["id"]])}">{_text(person_name(c["subject_id"]))} — {_text(c["predicate"])}: {_text(c.get("value", ""))}</a>')
+        return found
+
+    examples = guide_examples()
+
+    def guide_more(anchor: str) -> str:
+        """Under an entry's meaning: what its grade usually rests on, and one example from the site."""
+        basis = guide_basis(anchor, config.grades)
+        return ((f'<dd class="guide-basis">Usually rests on: {_text(basis)}</dd>' if basis else "")
+                + (f'<dd class="guide-example">Example: {examples[anchor]}</dd>' if anchor in examples else ""))
+
     guide = ['<h1>Reading the evidence</h1><p>Every relationship, claim and finding on this site carries a label describing how far it has been assessed. Labels never claim more than the record behind them. A family-tree export supplies assertions: it cannot by itself prove parentage, supply missing sources, or establish DNA findings.</p>']
     current_group = None
     for anchor, label, meaning, group in guide_entries(config.grades):
         if group != current_group:
             guide.append(("</dl>" if current_group else "") + f'<h2>{_text(group)}</h2><dl class="evidence-guide">')
             current_group = group
-        guide.append(f'<dt id="{_text(anchor)}">{_text(label)}</dt><dd>{_text(meaning)}</dd>')
+        guide.append(f'<dt id="{_text(anchor)}">{_text(label)}</dt><dd>{_text(meaning)}</dd>' + guide_more(anchor))
     guide.append('</dl><h2>Privacy</h2><p>Living people, people whose status is unknown, and restricted, licensed or private material are withheld from every page, search index, map and download. A missing person or record is therefore not evidence that they did not exist.</p>')
     pages["evidence.html"] = "".join(guide)
 

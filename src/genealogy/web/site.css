@@ -50,3 +50,6 @@
 .place-locator circle{stroke:var(--forest);stroke-width:1}
 .place-locator figcaption{font-size:.8rem;color:var(--muted);margin-top:.4rem}
 .place-chain{margin:.2rem 0 .6rem}
+/* Evidence guide: an entry's basis and example sit under its meaning, in the second column. */
+.evidence-guide dt{grid-column:1}.evidence-guide dd{grid-column:2}.evidence-guide dd.guide-basis,.evidence-guide dd.guide-example{margin-top:-.35rem;color:var(--muted);font-size:.95rem}
+@media(max-width:640px){.evidence-guide dt,.evidence-guide dd{grid-column:1}}
