@@ -305,5 +305,57 @@ function overview(){
 }
 function bookmarks(){
  if(view!=='person')return;const id=document.body.dataset.personId;if(!id)return;try{const key='genealogy-workbench-bookmarks',saved=new Set(JSON.parse(localStorage.getItem(key)||'[]'));const button=el('button');const render=()=>{button.textContent=saved.has(id)?'★ Saved on this device':'☆ Save on this device';button.setAttribute('aria-pressed',String(saved.has(id)));};render();button.addEventListener('click',()=>{saved.has(id)?saved.delete(id):saved.add(id);try{localStorage.setItem(key,JSON.stringify([...saved]));render();announce('Saved people updated on this device.');}catch(_){announce('Browser storage is unavailable.');}});($('.page-header')||$('main'))?.append(button);}catch(_){} }
+// Site search in the sidebar: people, places, studies, sources, findings and questions by title.
+// The index (a title and one short line per record) loads on first use as a script, which works from file:// as well.
+const SEARCH_KINDS={person:'People',place:'Places',study:'Studies',source:'Sources',finding:'Findings',question:'Research questions'};
+function siteSearch(){
+ const form=$('form.site-search');if(!form)return;const input=$('input[name=q]',form),results=$('.site-search-results',form),count=$('.site-search-count',form);if(!input||!results||!count)return;
+ const LIMIT=12;let index=null,loading=false;
+ const hint=el('span','Use the down arrow to reach the results and Escape to close them.','sr-only');hint.id='site-search-hint';form.append(hint);input.setAttribute('aria-describedby',hint.id);input.setAttribute('aria-controls',results.id);
+ const words=v=>v.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+ function load(){if(index||loading)return;loading=true;
+  const ready=()=>{const raw=window.GENEALOGY_SEARCH_INDEX;index=(Array.isArray(raw)?raw:[]).filter(e=>e&&e.t&&e.u).map(e=>{const n=norm(e.t);return{...e,n,w:words(n),h:norm([e.t,e.s].join(' '))};});show();};
+  if(window.GENEALOGY_SEARCH_INDEX){ready();return;}
+  const script=document.createElement('script');script.src=root+'data/search-index.js';script.async=true;script.addEventListener('load',ready);
+  script.addEventListener('error',()=>{loading=false;script.remove();count.textContent='The site search could not be loaded.';});document.head.append(script);if(input.value.trim())count.textContent='Loading the search…';}
+ // Title starting with the query, then every word starting a title word, then within the title, then within its line.
+ const rank=(e,q,terms)=>!terms.every(t=>e.h.includes(t))?-1:e.n.startsWith(q)?0:terms.every(t=>e.w.some(w=>w.startsWith(t)))?1:terms.every(t=>e.n.includes(t))?2:3;
+ const close=()=>{results.hidden=true;results.replaceChildren();count.textContent='';};
+ const links=()=>$$('a',results);
+ function line(e){
+  // A place's name ends with its jurisdictions: the first part is shown as the title, the rest beneath it.
+  if(e.k==='place'){const parts=String(e.t).split(',').map(x=>x.trim()).filter(Boolean);return[parts[0]||e.t,parts.slice(1).join(', ')];}
+  const dated=/^\d{4}(-\d\d){0,2}$/.test(e.s||'');return[e.t,e.k==='study'&&dated?`Updated ${e.s}`:e.k==='finding'&&dated?`Recorded ${e.s}`:e.s||''];}
+ function show(){
+  const typed=input.value.trim(),q=norm(typed).replace(/\s+/g,' '),terms=words(q);
+  if(!terms.length){close();return;}
+  if(!index){load();return;}
+  const found=[];for(const e of index){const r=rank(e,q,terms);if(r>=0)found.push([r,e]);}
+  found.sort((a,b)=>a[0]-b[0]||a[1].n.localeCompare(b[1].n));
+  // The best matches, grouped by kind in the order their best match appears.
+  const groups=new Map;for(const [,e] of found.slice(0,LIMIT)){if(!groups.has(e.k))groups.set(e.k,[]);groups.get(e.k).push(e);}
+  const nodes=[];for(const [kind,rows] of groups){const group=el('li',undefined,'site-search-group'),label=el('p',SEARCH_KINDS[kind]||kind,'site-search-kind'),list=el('ul');label.id=`site-search-kind-${kind}`;list.setAttribute('aria-labelledby',label.id);
+   for(const e of rows){const item=el('li'),a=el('a'),[title,sub]=line(e);a.href=root+e.u;a.append(el('span',title,'site-search-title'));if(sub)a.append(el('span',sub,'site-search-line'));item.append(a);list.append(item);}
+   group.append(label,list);nodes.push(group);}
+  const more=el('li',undefined,'site-search-more'),all=el('a',`Search the people catalogue for “${typed}”`);all.href=`${root}catalogue.html?q=${encodeURIComponent(typed)}`;more.append(all);nodes.push(more);
+  results.replaceChildren(...nodes);results.hidden=false;
+  count.textContent=!found.length?'No titles match. Press Enter to search the people catalogue.':found.length>LIMIT?`The best ${LIMIT} of ${found.length.toLocaleString()} matches`:`${found.length} match${found.length===1?'':'es'}`;}
+ input.addEventListener('focus',()=>{load();if(results.hidden&&input.value.trim())show();});
+ input.addEventListener('input',show);
+ input.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'&&!results.hidden){const first=links()[0];if(first){e.preventDefault();first.focus();}}
+  else if(e.key==='Escape'){if(!results.hidden){e.preventDefault();close();}else if(input.value){e.preventDefault();input.value='';}}
+  // Enter opens the best match; with none (or before the index loads) the form searches the catalogue.
+  else if(e.key==='Enter'&&!results.hidden){const first=$('.site-search-group a',results);if(first){e.preventDefault();location.href=first.href;}}});
+ results.addEventListener('keydown',e=>{const all=links(),at=all.indexOf(document.activeElement);if(at<0)return;
+  if(e.key==='ArrowDown'){e.preventDefault();all[Math.min(at+1,all.length-1)].focus();}
+  else if(e.key==='ArrowUp'){e.preventDefault();(at?all[at-1]:input).focus();}
+  else if(e.key==='Home'||e.key==='End'){e.preventDefault();all[e.key==='Home'?0:all.length-1].focus();}
+  else if(e.key==='Escape'){e.preventDefault();close();input.focus();}});
+ // Closes when focus or a click goes elsewhere; a click on a result is inside the form.
+ form.addEventListener('focusout',e=>{if(e.relatedTarget&&!form.contains(e.relatedTarget))close();});
+ document.addEventListener('pointerdown',e=>{if(!form.contains(e.target))close();});
+}
 const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
+try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
 })();

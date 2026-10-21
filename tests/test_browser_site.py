@@ -304,7 +304,8 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.get_by_role('searchbox', name='Search studies').fill('')
         self.assertTrue(self.page.locator('[data-study-pages]').is_visible())
         self.page.goto(large + 'studies/page-2.html', wait_until='networkidle')
-        self.assertEqual(0, self.page.get_by_role('searchbox').count())
+        # A plain page: no study search of its own, only the sidebar's site search.
+        self.assertEqual(['Search the site'], [box.get_attribute('aria-label') or box.evaluate('i => i.labels[0].textContent') for box in self.page.get_by_role('searchbox').all()])
         self.page.get_by_role('link', name='Study of person 0150').click()
         self.assertEqual('Study of person 0150', self.page.locator('h1').inner_text())
         self.page.goto(large + 'timeline/1700s.html', wait_until='networkidle')
@@ -745,3 +746,124 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.locator('table.duplicate-pairs a', has_text='Compare').first.click()
         self.page.locator('#compare-result .comparison').wait_for()
         self.assertEqual(['q000', 'q001'], [self.page.locator(s).input_value() for s in ('[data-compare-a]', '[data-compare-b]')])
+
+    def search_box(self):
+        return self.page.get_by_role('searchbox', name='Search the site')
+
+    def search_links(self):
+        return self.page.locator('.site-search-results a')
+
+    def test_site_search_finds_a_study_and_a_place_by_keyboard(self):
+        self.page.goto(self.base + 'index.html')
+        # Loaded on first use, not with the page.
+        self.assertFalse(self.page.evaluate('"GENEALOGY_SEARCH_INDEX" in window'))
+        box = self.search_box()
+        box.fill('Lanternford')
+        self.page.locator('.site-search-results:not([hidden])').wait_for()
+        self.assertTrue(self.page.evaluate('Array.isArray(window.GENEALOGY_SEARCH_INDEX)'))
+        groups = self.page.locator('.site-search-kind').all_text_contents()
+        for kind in ('Places', 'Studies', 'Sources'):
+            self.assertIn(kind, groups)
+        self.assertEqual('Places', groups[0])  # a title starting with the query comes first
+        self.assertRegex(self.page.locator('.site-search-count').inner_text(), r'^\d+ match')
+        self.assertEqual('polite', self.page.locator('.site-search-count').get_attribute('aria-live'))
+        self.page.locator('.site-search-group a', has_text='Two households, one family').click()
+        self.page.wait_for_url('**/studies/s-*.html')
+        # From a page one folder down, links still resolve from the site root.
+        box = self.search_box()
+        box.fill('willowmere')
+        first = self.search_links().first
+        first.wait_for()
+        self.assertEqual('Willowmere (fictional)', first.locator('.site-search-title').inner_text())
+        self.assertEqual('Places', self.page.locator('.site-search-kind').first.text_content())
+        box.press('ArrowDown')
+        self.assertTrue(first.evaluate('a => a === document.activeElement'))
+        self.page.keyboard.press('ArrowDown')
+        self.assertTrue(self.search_links().nth(1).evaluate('a => a === document.activeElement'))
+        self.page.keyboard.press('ArrowUp')
+        self.page.keyboard.press('ArrowUp')
+        self.assertTrue(box.evaluate('i => i === document.activeElement'))
+        box.press('Escape')
+        self.assertTrue(self.page.locator('.site-search-results').is_hidden())
+        self.assertEqual('willowmere', box.input_value())
+        box.fill('')
+        box.fill('willowmere')
+        self.search_links().first.wait_for()
+        box.press('ArrowDown')
+        self.page.keyboard.press('Enter')
+        self.page.wait_for_url('**/places/pl-*.html')  # a place with events has a page of its own
+        self.assertIn('Willowmere', self.page.locator('h1').inner_text())
+
+    def test_site_search_enter_opens_the_best_match_offline_and_on_a_phone(self):
+        site = self.root / 'nested'
+        self.page.set_viewport_size({'width': 390, 'height': 900})
+        self.page.goto(next((site / 'people').glob('p-*.html')).as_uri())
+        box = self.search_box()
+        self.assertTrue(box.is_visible())  # outside the folded menu
+        box.fill('Iona Hayle')
+        self.search_links().first.wait_for()
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 391)
+        self.assertEqual(['People'], self.page.locator('.site-search-kind').all_text_contents())
+        more = self.page.locator('.site-search-more a')
+        self.assertEqual('catalogue.html?q=Iona%20Hayle', more.get_attribute('href').split('/')[-1])
+        box.press('Enter')
+        self.page.wait_for_url('**/people/p-*.html')
+        self.assertEqual('Iona Hayle', self.page.locator('h1').inner_text())
+        # No match: Enter searches the catalogue instead.
+        box = self.search_box()
+        box.fill('no-such-synthetic-record')
+        self.page.locator('.site-search-count', has_text='No titles match').wait_for()
+        box.press('Enter')
+        self.page.wait_for_url(lambda url: url.endswith('/catalogue.html?q=no-such-synthetic-record'))
+        nojs = self.browser.new_context(java_script_enabled=False)
+        try:
+            page = nojs.new_page()
+            page.goto(self.base + 'studies.html')
+            page.get_by_label('Search the site').fill('Alder')
+            page.get_by_label('Search the site').press('Enter')
+            page.wait_for_url(lambda url: url.endswith('/catalogue.html?q=Alder'))
+            self.assertEqual(43, page.locator('[data-person-id]').count())  # the full catalogue, still readable
+        finally:
+            nojs.close()
+
+    def test_site_search_on_a_large_site(self):
+        large = self.base.replace('/nested/', '/large/')
+        self.page.goto(large + 'catalogue.html')
+        box = self.search_box()
+        box.fill('fable')
+        self.search_links().first.wait_for()
+        self.assertEqual(12 + 1, self.search_links().count())  # the best twelve, then the catalogue link
+        self.assertRegex(self.page.locator('.site-search-count').inner_text(), r'^The best 12 of \d{3,}')
+        box.fill('study of person 0042')
+        study = self.page.locator('.site-search-group a', has_text='Study of person 0042')
+        study.wait_for()
+        self.assertEqual('Studies', self.page.locator('.site-search-kind').first.text_content())
+        study.click()
+        self.page.wait_for_url('**/studies/s-*.html')
+        box = self.search_box()
+        box.fill('town 0007')
+        place = self.search_links().first
+        place.wait_for()
+        self.assertEqual(('Town 0007', 'Shire 0, Inventia'), (place.locator('.site-search-title').inner_text(), place.locator('.site-search-line').inner_text()))
+        box.press('ArrowDown')
+        self.page.keyboard.press('Enter')
+        self.page.wait_for_url('**/places/pl-*.html')
+        self.assertEqual('Town 0007, Shire 0, Inventia', self.page.locator('h1').inner_text())
+
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'set GENEALOGY_AXE_PATH to an axe-core axe.min.js')
+    def test_site_search_results_pass_axe(self):
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        for width in (1440, 390):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            for site, route, query in (('nested', 'index.html', 'Lanternford'), ('nested', 'sources.html', 'willow'), ('large', 'tree.html', 'fable')):
+                with self.subTest(width=width, route=route):
+                    self.page.goto(self.base.replace('/nested/', f'/{site}/') + route, wait_until='networkidle')
+                    self.search_box().fill(query)
+                    self.search_links().first.wait_for()
+                    self.page.keyboard.press('ArrowDown')
+                    self.page.add_script_tag(content=axe)
+                    violations = self.page.evaluate(
+                        "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                        "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                        ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                    self.assertEqual([], violations)

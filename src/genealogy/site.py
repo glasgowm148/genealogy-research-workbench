@@ -64,6 +64,7 @@ DATA_FILES.add("data/progress-history.json")  # kept between builds: the progres
 # The counts a progress snapshot keeps; a previous build's file is read back only for these.
 PROGRESS_COUNTS = ("people", "with_assessed_parent", "parent_links", "assessed_parent_links", "connected_groups", "family_heads",
                    "open_questions", "draft_findings")
+DATA_FILES |= {"data/search-index.json", "data/search-index.js"}  # the sidebar search: titles and one short line per record
 # The fields the browser script reads. ``data/site.json`` keeps every public
 # field; the shared script carries only these, so it stays small to download
 # and parse on a large site.
@@ -1851,6 +1852,50 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
 
     if "duplicates.html" in routes:
         duplicate_pages()
+    def search_index() -> list[dict[str, str]]:
+        """The sidebar search's index: each public record with a page or anchor of its own, as a title and one short line.
+
+        Never a body, note or summary, so the index stays small and says no more than a page heading.
+        """
+        def short(text: Any, limit: int) -> str:
+            text = " ".join(str(text or "").split())
+            if len(text) <= limit:
+                return text
+            cut = text[:limit - 1]
+            # At a word break when one is near the end, so no word is cut in two.
+            cut = cut[:cut.rindex(" ")] if " " in cut[limit // 2:] else cut
+            return cut.rstrip(" ,;:") + "…"
+
+        # A route lands only when its page carries the anchor; checked once per page, not per record.
+        anchors: dict[str, set[str]] = {}
+        def lands(route: str) -> bool:
+            path, _, anchor = route.partition("#")
+            if path not in anchors:
+                anchors[path] = set(re.findall(r'id="(r-[0-9a-f]{64})"', pages.get(path, "")))
+            return path in pages and (not anchor or anchor in anchors[path])
+
+        source_labels = {slug: type_label(slug) for slug in by_type if slug != "unknown"}  # "Unknown" says nothing
+        rows: list[tuple[str, Any, str, Any]] = [(pid, person_name(pid), "person", lifespan(pid)) for pid in people]
+        # A place's name as recorded already ends with its region ("Town, County, Country"),
+        # so it has no line of its own; the script shows the jurisdictions under the town.
+        rows += [(p["id"], p["name"], "place", "") for p in project["places"]]
+        rows += [(sid, s["title"], "study", s.get("updated_on") or status_label(s.get("status")) or "Draft") for sid, s in studies.items()]
+        rows += [(sid, s["title"], "source", source_labels.get(_slug(str(s.get("source_type") or "")), "")) for sid, s in sources.items()]
+        rows += [(f["id"], f["conclusion"], "finding", f.get("recorded_on") or "Undated") for f in project["findings"]]
+        rows += [(q["id"], q["question"], "question", status_label(q.get("status", "open"))) for q in project["questions"]]
+        index = []
+        for rid, title, kind, line in rows:
+            if title and rid in record_routes and lands(record_routes[rid]):
+                index.append({"t": short(title, 80), "k": kind, "u": record_routes[rid], **({"s": short(line, 40)} if line else {})})
+        return index
+
+    def search_form(prefix: str) -> str:
+        # Without JavaScript the box searches the people catalogue; the script turns it into a site-wide search.
+        return (f'<form class="site-search" role="search" action="{prefix}catalogue.html" method="get">'
+                '<label for="site-search-input">Search the site</label>'
+                '<input id="site-search-input" type="search" name="q" autocomplete="off" placeholder="People, places, sources…">'
+                '<p class="site-search-count" aria-live="polite"></p><ul class="site-search-results" id="site-search-results" hidden></ul></form>')
+
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
@@ -1869,6 +1914,10 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         # One cached script shared by every interactive page; works from file:// too.
         "data/site-data.js": "window.GENEALOGY_SITE_DATA=" + _json(shared) + ";\n",
     }
+    # The search index as data, and as a script the sidebar loads on first use (a fetch fails on file://).
+    searchable = search_index()
+    outputs["data/search-index.json"] = json.dumps(searchable, ensure_ascii=False, separators=(",", ":")) + "\n"
+    outputs["data/search-index.js"] = "window.GENEALOGY_SEARCH_INDEX=" + outputs["data/search-index.json"].rstrip() + ";\n"
     outputs["data/routes.json"] = json.dumps(sorted(pages), indent=2) + "\n"
     if progress_history:
         outputs["data/progress-history.json"] = progress_history
@@ -1902,7 +1951,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         payload = {"project": project["project"], "site": {"root": prefix}}
         corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
-        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
+        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p>{search_form(prefix)}<nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
     # A moved page is a stub, not a route: it stays out of routes.json and the
     # sitemap, and asks search engines to index the current page instead.
     for old, new in moved.items():
