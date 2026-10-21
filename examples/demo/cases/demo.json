@@ -14,7 +14,9 @@
       {
         "accessed_on": null,
         "id": "cite:register",
+        "information": "primary",
         "locator": "folio 14, entry 3",
+        "quality": "original",
         "quotation": null,
         "sensitivity": "public",
         "source_id": "src:register",

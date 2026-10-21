@@ -11,8 +11,8 @@ from typing import Any
 
 from .markup import references as prose_references
 from .models import (
-    CASE_SCHEMA_VERSION, MODEL_TYPES, Claim, ClaimStatus, Confidence, Evidence,
-    ExternalIdentifier, Finding, ImportProvenance, LivingStatus, Name, PLACE_PRECISIONS,
+    CASE_SCHEMA_VERSION, CITATION_INFORMATION, CITATION_QUALITIES, MODEL_TYPES, Citation, Claim, ClaimStatus,
+    Confidence, Evidence, ExternalIdentifier, Finding, ImportProvenance, LivingStatus, Name, PLACE_PRECISIONS,
     Person, Place, Record, ResearchQuestion, access_level, is_raw_dna, record_from_dict,
 )
 
@@ -393,6 +393,10 @@ def _validate_record_fields(record: Record) -> list[str]:
         errors.append(f"{record.id}.estimate must be a whole percentage from 1 to 99")
     if isinstance(record, Place) and record.precision is not None and record.precision not in PLACE_PRECISIONS:
         errors.append(f"{record.id}.precision must be one of: {', '.join(PLACE_PRECISIONS)}")
+    if isinstance(record, Citation):
+        for field_name, allowed in (("quality", CITATION_QUALITIES), ("information", CITATION_INFORMATION)):
+            if getattr(record, field_name) is not None and getattr(record, field_name) not in allowed:
+                errors.append(f"{record.id}.{field_name} must be one of: {', '.join(allowed)}, or null")
     if isinstance(record, Finding):
         changes = record.changes
         if not isinstance(changes, list) or not all(isinstance(item, dict) for item in changes):

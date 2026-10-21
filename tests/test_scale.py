@@ -37,7 +37,9 @@ def large_case(people: int = PEOPLE) -> ResearchCase:
             Event(f"{pid}-b", "birth", date=str(1700 + n % 150), place_id=place.id, participant_ids=[pid], sensitivity=A.PUBLIC),
             # Three record types; "register" has enough sources for several type pages.
             Source(f"{pid}-src", f"Invented register volume {n:04d}", SOURCE_TYPES[n % 5], repository=f"Archive {n % 4}", sensitivity=A.PUBLIC),
-            Citation(f"{pid}-cit", f"{pid}-src", locator=f"folio {n}", sensitivity=A.PUBLIC),
+            # One citation in five is an original record, and each census transcription a derivative.
+            Citation(f"{pid}-cit", f"{pid}-src", locator=f"folio {n}", sensitivity=A.PUBLIC,
+                     quality="original" if n % 5 == 2 else "derivative" if n % 5 == 0 else None, information="primary" if n % 5 == 2 else None),
             Claim(f"{pid}-c", pid, "occupation", "weaver", citation_ids=["register-1", f"{pid}-cit"], status=ClaimStatus.SUPPORTED,
                   sensitivity=A.PUBLIC),
             Evidence(f"{pid}-e", f"{pid}-c", f"{pid}-cit", "The register names the trade.", sensitivity=A.PUBLIC),
@@ -270,6 +272,10 @@ class LargeSiteTests(unittest.TestCase):
         # A study carries what the studies search reads, never its body or reasoning.
         self.assertEqual({"id", "title", "summary", "status", "updated_on", "related_ids"}, set(data["studies"][0]))
         self.assertEqual(PEOPLE, len(data["site"]["study_urls"]))
+        # Only citations stating a quality or information are carried, for the catalogue's evidence filter.
+        self.assertEqual(2 * PEOPLE // 5, len(data["citations"]))
+        self.assertIn({"id": "p0002-cit", "source_id": "p0002-src", "quality": "original", "information": "primary"}, data["citations"])
+        self.assertEqual(["register-1", "p0002-cit"], next(c for c in data["claims"] if c["id"] == "p0002-c")["citation_ids"])
         # The full public export is still published beside it.
         full = json.loads(self.text("data/site.json"))
         self.assertEqual(len(full["people"]), len(data["people"]))

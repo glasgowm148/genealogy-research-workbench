@@ -239,6 +239,10 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertIn(f'{people:,} of {people:,} people', self.page.locator('.result-count').inner_text())
         self.page.get_by_label('Sort by').select_option('birth')
         self.assertIn('b. 1700', rows.first.inner_text())
+        # One citation in five is an original record, so a fifth of the people are backed by one.
+        self.page.get_by_label('Evidence').select_option('original')
+        self.assertIn(f'{people // 5:,} of {people:,} people', self.page.locator('.result-count').inner_text())
+        self.assertIn('b. 1702', rows.first.inner_text())
 
         self.page.goto(large + 'timeline.html', wait_until='networkidle')
         self.assertTrue(self.page.locator('.decade-list').first.is_visible())
@@ -305,6 +309,16 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertLess(self.page.locator('[data-person-id]:visible').count(), 42)
         self.page.get_by_role('searchbox', name='Search people').fill('no-such-synthetic-name')
         self.assertEqual(0, self.page.locator('[data-person-id]:visible').count())
+        # Eight people have supported parent claims; the seven resting on the register's original entry are
+        # "backed by an original record", and the one resting on the letters is not.
+        self.page.get_by_role('searchbox', name='Search people').fill('')
+        self.page.get_by_label('Evidence').select_option('supported')
+        self.assertIn('8 of 43 people', self.page.locator('.result-count').inner_text())
+        self.page.get_by_label('Evidence').select_option('original')
+        self.assertIn('7 of 43 people', self.page.locator('.result-count').inner_text())
+        self.assertEqual(0, self.page.locator('[data-person-id="person:10"]:visible').count())
+        self.assertEqual(1, self.page.locator('[data-person-id="person:05"]:visible').count())
+        self.page.get_by_label('Evidence').select_option('')
         self.page.goto(self.base + 'tree.html')
         self.assertTrue(self.page.locator('[data-whole-tree]').is_visible())
         self.page.locator('[data-tree-view="family"]').click()

@@ -11,7 +11,7 @@ from genealogy.adapters._gedcom_text import decode_ansel, decode_gedcom
 from genealogy.case import CaseStore, ResearchCase, validate_case
 from genealogy.config import ProjectConfig
 from genealogy.importing import import_file
-from genealogy.models import Claim, Confidence, Event, Evidence, Finding, LivingStatus, Person, Relationship, Source
+from genealogy.models import Citation, Claim, Confidence, Event, Evidence, Finding, LivingStatus, Person, Relationship, Source
 from genealogy.cli import main
 
 HEADER = "0 HEAD\n1 GEDC\n2 VERS 5.5.1\n1 CHAR {charset}\n"
@@ -133,6 +133,8 @@ class StructureTests(unittest.TestCase):
         self.assertEqual((source.author, source.publication, source.repository), ("Imaginary Clerk", "Nowhere Press, 1901", "Fictional Archive (call number Shelf 9)"))
         self.assertIn("QUAY 3 — direct and primary evidence", case.records(Evidence)[0].assessment)
         self.assertEqual(case.records(Evidence)[0].confidence, Confidence.UNKNOWN)
+        # QUAY mixes the record's form with its information, so it sets neither standard term.
+        self.assertEqual([(None, None)], [(c.quality, c.information) for c in case.records(Citation)])
         unsupported = next(warning for warning in batch.warnings if warning.startswith("Unsupported GEDCOM"))
         self.assertIn("INDI.SSN×1", unsupported)
         self.assertIn("INDI._MILT×1", unsupported)

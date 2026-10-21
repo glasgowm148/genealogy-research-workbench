@@ -18,7 +18,8 @@ from .config import ProjectConfig, site_contact
 from .dates import date_sort_key, year_of
 from .feeds import FeedEntry, atom_feed
 from .markup import references as prose_references, render as render_prose
-from .labels import assessment_label, child_role, confidence_label, grade_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
+from .labels import (assessment_label, child_role, confidence_label, grade_label, guide_entries, parent_role, quality_parts, relationship_label,
+                     status_anchor, status_label)
 from .maps import geojson
 
 # Lists longer than this are not written out in full: the interactive views
@@ -55,7 +56,10 @@ BROWSER_FIELDS = {
     "events": ("id", "kind", "date", "place_id", "participant_ids", "description"),
     "places": ("id", "name", "latitude", "longitude", "precision"),
     "relationships": ("id", "subject_id", "object_id", "kind", "confidence", "grade", "estimate", "tree_status", "pedigree"),
-    "claims": ("id", "subject_id", "predicate", "value", "status"),
+    # A claim's citations, with each record's stated quality, let the catalogue
+    # find people whose supported claims rest on an original record.
+    "claims": ("id", "subject_id", "predicate", "value", "status", "citation_ids"),
+    "citations": ("id", "source_id", "quality", "information"),
     "sources": ("id", "title", "author", "publication", "source_type", "repository"),
     # Never a study's body or reasoning: long prose, read on the study's own page.
     "studies": ("id", "title", "summary", "status", "updated_on", "related_ids"),
@@ -110,6 +114,9 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
             out["names"] = [{key: n[key] for key in ("value", "surname") if n.get(key)} for n in out["names"]]
         return out
     data: dict[str, Any] = {key: [slim(row, fields) for row in project.get(key, [])] for key, fields in BROWSER_FIELDS.items()}
+    # A citation stating neither term tells the script nothing; an imported tree
+    # can hold tens of thousands of them.
+    data["citations"] = [row for row in data["citations"] if row.get("quality") or row.get("information")]
     data["project"] = project["project"]
     data["site"] = {"people_urls": people_urls}
     if source_urls:
@@ -395,9 +402,17 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         stored = "".join(f' data-{name.replace("_", "-")}="{_text(row[name])}"' for name in ("status", "confidence", "grade", "tree_status") if row.get(name))
         return f' <a class="badge evidence-badge" href="{prefix}evidence.html#{_text(anchor)}"{stored}>{_text(words)}</a>'
 
+    def record_quality(row: dict[str, Any], prefix: str = "") -> str:
+        """A citation's stated form and information, each linked to its guide entry; stored values stay in data attributes."""
+        # Plain links, styled as badges by the wrapping .record-quality: a source page lists a hundred citations.
+        return " · ".join(f'<a href="{prefix}evidence.html#{_text(anchor)}" data-{name}="{_text(row[name])}">{_text(words)}</a>'
+                          for name, anchor, words in quality_parts(row))
+
     def citation(row: dict[str, Any], prefix: str = "", *, canonical: bool = False) -> str:
         src = sources.get(row["source_id"], {})
         parts = [ref(row["source_id"], prefix, src.get("title", row["source_id"]))]
+        if quality_parts(row):
+            parts.append(f'<p class="record-quality">{record_quality(row, prefix)}</p>')
         for key in ("locator", "abstract", "quotation", "transcription", "accessed_on"):
             if row.get(key):
                 parts.append(f'<p><strong>{_text(key.replace("_", " ").capitalize())}:</strong> {_text(row[key])}</p>')
@@ -461,6 +476,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             record = ref(cid, prefix, sources.get(found.get("source_id"), {}).get("title", found.get("source_id", cid)))
             if found.get("locator"):
                 record += f'<br><span class="meta">{_text(found["locator"])}</span>'
+            if quality_parts(found):
+                record += f'<br><span class="record-quality">{record_quality(found, prefix)}</span>'
             says = (_text(found["abstract"]) if found.get("abstract") else
                     f'<q>{_text(found.get("quotation") or found["transcription"])}</q>' if found.get("quotation") or found.get("transcription") else "—")
             assessed = (f'<strong>{"Supports" if e["supports"] else "Challenges"}</strong>: {_text(e["assessment"])}{metadata(e, prefix)}'

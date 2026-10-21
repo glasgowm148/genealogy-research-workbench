@@ -155,6 +155,25 @@ A citation can carry an `abstract`: your reading of the record, in your own word
 
 The site shows it with the citation as "Abstract" on the source's page. Unlike a quotation or transcription, it is your own text, so a public citation publishes it.
 
+A citation can also say what kind of record it is, in the standard terms of *Evidence Explained* and the Genealogical Proof Standard. `quality` is the record's form:
+
+- `original`: the record in its first form, made at or near the time by someone in a position to know, or an image of it (a photograph, scan or microfilm of the page);
+- `derivative`: made from another record, such as a transcription, abstract, extract, translation or index;
+- `authored`: a writer's account built from other records, such as a published family history, a biography or a compiled tree.
+
+`information` is the informant's knowledge of what you cite the record for:
+
+- `primary`: supplied by someone with first-hand knowledge, such as a minister recording a baptism he performed;
+- `secondary`: supplied by someone repeating what others told them or recalling what they did not witness, such as a death record's age or birthplace;
+- `undetermined`: the record does not show who supplied it.
+
+```json
+{"id": "citation:baptism-1837", "source_id": "source:parish-register", "locator": "entry 75",
+ "quality": "original", "information": "primary", "sensitivity": "public"}
+```
+
+Both are optional, and a missing value means not stated. Information belongs to each detail rather than the whole record: a death entry gives primary information about the death and usually secondary information about the birth, so cite it twice when you rely on both. The site shows the terms as "Original record · primary information" with the citation on the source's page and in the **Record** column of each claim's table, each linked to its entry under **Record quality** in **Reading the evidence**. The catalogue's evidence filter then offers **Backed by an original record**: people with a supported claim citing at least one original record. These terms describe the record, never how far the claim is believed; a claim's status and confidence say that. `genealogy validate` rejects any other value. A GEDCOM `QUAY` grade is not converted into either, because it mixes the two; it stays in the imported evidence assessment.
+
 An evidence assessment can carry a `limitation`: what this record cannot show for the claim, such as an age it does not state or a later copy standing in for the original:
 
 ```json

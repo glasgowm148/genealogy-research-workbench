@@ -218,6 +218,12 @@ class Citation(Record):
     transcription: str | None = None
     accessed_on: str | None = None
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    # The record's form and its informant's knowledge, in the standard terms
+    # (CITATION_QUALITIES, CITATION_INFORMATION below). They describe the
+    # record, never how far the claim it supports is believed. None means not
+    # stated.
+    quality: str | None = None
+    information: str | None = None
 
 
 @dataclass(slots=True)
@@ -330,6 +336,11 @@ MODEL_TYPES: dict[str, type[Record]] = {
     for cls in (Place, Event, Person, Relationship, Source, Citation, Claim,
                 Evidence, Hypothesis, ResearchQuestion, Finding, Study, ImportProvenance)
 }
+# Evidence Explained terms: an original record, a derivative (copy, transcript,
+# abstract or index) or an authored work; primary information from someone with
+# first-hand knowledge, secondary information from hearsay, or undetermined.
+CITATION_QUALITIES = ("original", "derivative", "authored")
+CITATION_INFORMATION = ("primary", "secondary", "undetermined")
 PLACE_PRECISIONS = ("exact", "building", "street", "settlement", "parish", "district", "county", "region", "country", "approximate")
 
 

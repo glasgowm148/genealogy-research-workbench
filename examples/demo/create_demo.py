@@ -30,7 +30,9 @@ def build() -> ResearchCase:
         ("src:letters", "Alderwick Family Letters (invented manuscript collection)", "fictional letter collection", "box 2, letter 7"),
     ]
     for sid, title, typ, _ in source_defs: c.add(Source(sid, title, typ, repository="Fictional Lanternford Archive", access_note="Invented teaching source; no real archive or record.", sensitivity=access))
-    for sid, _, _, loc in source_defs: c.add(Citation("cite:"+sid.split(":")[1], sid, locator=loc, transcription="Illustrative invented source reference; no quotation from a real record.", sensitivity=access))
+    # The register entry is recorded as an original record with primary information.
+    quality = {"src:register": dict(quality="original", information="primary")}
+    for sid, _, _, loc in source_defs: c.add(Citation("cite:"+sid.split(":")[1], sid, locator=loc, transcription="Illustrative invented source reference; no quotation from a real record.", sensitivity=access, **quality.get(sid, {})))
     # Two founder couples, eight children with spouses, sixteen grandchildren, six later descendants = 42.
     nodes=[]
     for i in range(42):

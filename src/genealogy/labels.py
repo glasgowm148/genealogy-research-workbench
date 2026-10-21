@@ -21,6 +21,18 @@ CLAIM_STATUS = {
     "disputed": ("Disputed", "Evidence conflicts; the competing readings are recorded."),
     "rejected": ("Rejected", "Assessed evidence rules this claim out."),
 }
+# A citation's record, in the standard (Evidence Explained) terms: its form,
+# and whether whoever supplied its information knew it first-hand.
+SOURCE_QUALITY = {
+    "original": ("Original record", "The record in its first form, made at or near the time by someone in a position to know, or an image of it such as a photograph, scan or microfilm of the page."),
+    "derivative": ("Derivative record", "Made from another record: a transcription, abstract, extract, translation or index. Each copying can add errors, so the record it was made from is worth finding."),
+    "authored": ("Authored work", "A writer's account built from other records, such as a published family history, a biography or a compiled tree. Its conclusions are only as sound as the records behind them."),
+}
+INFORMATION = {
+    "primary": ("Primary information", "Supplied by someone with first-hand knowledge of what it records, such as a minister recording a baptism he performed."),
+    "secondary": ("Secondary information", "Supplied by someone repeating what others told them or recalling what they did not witness, such as a death record's age or birthplace."),
+    "undetermined": ("Undetermined information", "The record does not show who supplied the information, so whether it was first-hand cannot be said."),
+}
 PEDIGREE = {
     "birth": "birth", "adopted": "adoptive", "foster": "foster", "step": "step",
     "sealing": "sealing", "non-biological": "non-biological",
@@ -85,6 +97,20 @@ def child_role(row: Mapping[str, Any], sex: str | None) -> str:
     return f"Step-{base}" if qualifier == "step" else f"{qualifier.capitalize()} {base}"
 
 
+def quality_parts(row: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+    """(field, guide anchor, words) for each standard term a citation states."""
+    parts = [(name, f"{name}-{row[name]}", terms[row[name]][0]) for name, terms in (("quality", SOURCE_QUALITY), ("information", INFORMATION))
+             if row.get(name) in terms]
+    if len(parts) == 2:  # "Original record · primary information"
+        parts[1] = (parts[1][0], parts[1][1], parts[1][2][0].lower() + parts[1][2][1:])
+    return parts
+
+
+def quality_label(row: Mapping[str, Any]) -> str:
+    """E.g. "Original record · primary information"; empty when neither is stated."""
+    return " · ".join(words for _, _, words in quality_parts(row))
+
+
 def status_label(value: Any) -> str:
     key = str(value or "").casefold()
     return CLAIM_STATUS.get(key, (RESEARCH_STATUS.get(key, str(value or "")), ""))[0]
@@ -119,6 +145,9 @@ def guide_entries(grades: Mapping[str, Mapping[str, str]] | None = None) -> list
     rows += [(f"grade-{key}", str(grade["label"]), f'{grade["meaning"]} Counted as {CONFIDENCE[grade["confidence"]][0].lower()} wherever the site groups or colours by confidence.',
               "This project's grades") for key, grade in (grades or {}).items()]
     rows += [(f"status-{key}", label, meaning, "Claim status") for key, (label, meaning) in CLAIM_STATUS.items()]
+    rows += [(f"quality-{key}", label, meaning, "Record quality") for key, (label, meaning) in SOURCE_QUALITY.items()]
+    rows += [(f"information-{key}", label, meaning, "Record quality") for key, (label, meaning) in INFORMATION.items()]
+    rows.append(("record-quality", "Quality is not confidence", "These terms describe the record a citation points to, never how far a claim is believed. An original record with primary information can still be misread, mistaken or about someone else; the claim's own label says how far it has been assessed. A citation without them has not had them stated.", "Record quality"))
     rows += [(f"status-{key}", RESEARCH_STATUS[key], meaning, "Research status") for key, meaning in RESEARCH_MEANINGS.items()]
     rows.append(("research-status", "Other statuses", "A project's own wording for the state of a question, hypothesis, finding or study, printed as recorded.", "Research status"))
     rows.append(("not-yet-identified", "Not yet identified", "Printed on an open question when the researcher has not yet recorded what evidence would answer it, or which record to check next. It marks a gap in the plan, not a search that found nothing.", "Research status"))
