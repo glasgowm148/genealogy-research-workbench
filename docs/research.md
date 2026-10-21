@@ -62,6 +62,8 @@ The strict CLI adds records; it does not silently replace an existing record. To
 
 Imported links stay "Unassessed tree link" until you assess them. To record an assessment, edit the relationship's `confidence` (`documented`, `probable`, `possible` or `disproved`) and, if you work with probabilities, an `estimate` from 1 to 99 per cent. Record the reasoning in a claim, evidence assessment or finding linked to it. The site shows, for example, "Probable (70%)". A percentage is your assessed estimate: imports never set one, and import review clears any it finds.
 
+A sibling can be recorded directly, for example when a will or census names a brother but neither parent is yet in the project: add a relationship with `"kind": "sibling"` (or `half_sibling`). It is symmetric, like a spouse link, so the order of `subject_id` and `object_id` does not matter, and it is assessed like any other link, with a `confidence`, `estimate`, `grade` and linked claims. Both dossiers list it under **Siblings** as "Recorded sibling", or with the siblings found through shared parents when they also have parents in common; a disproved link stays only under **All recorded relationships**.
+
 ### Use your own grades
 
 If your project already grades evidence in its own words, such as "strongly supported" or "uncertain", define those grades in `genealogy.toml`, in the order you want them listed. Each one says which standard grade it counts as:

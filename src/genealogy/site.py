@@ -58,6 +58,7 @@ ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
 MANIFEST = ".genealogy-site-manifest.json"
 PARENT_KINDS = {"parent", "father", "mother", "biological_parent", "adoptive_parent", "parent_child"}
 PARTNER_KINDS = {"spouse", "partner", "husband", "wife", "marriage"}
+SIBLING_KINDS = {"sibling", "brother", "sister", "half_sibling", "half-sibling"}
 FAMILY_EVENTS = {"marriage", "marriage banns", "marriage contract", "marriage licence", "marriage settlement",
                  "engagement", "divorce", "divorce filed", "annulment"}
 
@@ -163,6 +164,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     parents_of: dict[str, list[dict[str, Any]]] = defaultdict(list)
     children_of: dict[str, list[dict[str, Any]]] = defaultdict(list)
     partners_of: dict[str, list[tuple[dict[str, Any], str]]] = defaultdict(list)
+    siblings_of: dict[str, list[tuple[dict[str, Any], str]]] = defaultdict(list)
     event_owners: dict[str, set[str]] = defaultdict(set)
     for person in people.values():
         for eid in person.get("event_ids", []):
@@ -183,6 +185,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         elif kind in PARTNER_KINDS:
             partners_of[row["subject_id"]].append((row, row["object_id"]))
             partners_of[row["object_id"]].append((row, row["subject_id"]))
+        elif kind in SIBLING_KINDS and row["subject_id"] != row["object_id"]:
+            siblings_of[row["subject_id"]].append((row, row["object_id"]))
+            siblings_of[row["object_id"]].append((row, row["subject_id"]))
     sex = {}
     for row in project["claims"]:
         claims_by_subject[row["subject_id"]].append(row)
@@ -392,11 +397,23 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             for r in children_of[parent]:
                 if r["subject_id"] != pid and r.get("confidence") != "disproved":
                     siblings[r["subject_id"]].add(parent)
+        # A recorded sibling link is symmetric like a partner link; like a parent
+        # link, a disproved one is kept only under "All recorded relationships".
+        recorded: dict[str, dict[str, Any]] = {}
+        for row, other in sorted(siblings_of[pid], key=lambda item: item[0]["id"]):
+            if row.get("confidence") != "disproved":
+                recorded.setdefault(other, row)
         sibling_items = []
-        for sibling in sorted(siblings, key=lambda s: (date_sort_key(next((e.get("date") for e in events_by_person[s] if e["kind"] == "birth"), None)), person_name(s))):
-            shared = siblings[sibling]
-            role = "Sibling (two recorded parents in common)" if len(shared) >= 2 else "Shares a recorded parent"
-            sibling_items.append(person_item(sibling, role, None, prefix))
+        for sibling in sorted(set(siblings) | set(recorded), key=lambda s: (date_sort_key(next((e.get("date") for e in events_by_person[s] if e["kind"] == "birth"), None)), person_name(s))):
+            shared, row = siblings.get(sibling, set()), recorded.get(sibling)
+            in_common = "two recorded parents in common" if len(shared) >= 2 else "shares a recorded parent"
+            if row is None:
+                role = f"Sibling ({in_common})" if len(shared) >= 2 else "Shares a recorded parent"
+            else:
+                half = "half" in str(row["kind"]).casefold() or "half" in str(row.get("pedigree") or "").casefold()
+                role = (f"{'Half-sibling' if half else 'Sibling'} (recorded link; {in_common})" if shared
+                        else "Recorded half-sibling" if half else "Recorded sibling")
+            sibling_items.append(person_item(sibling, role, row, prefix))
         sections.append("<h3>Siblings</h3>" + empty(sibling_items, "No public siblings recorded."))
         return '<section class="family-summary" aria-labelledby="family-heading"><h2 id="family-heading">Family</h2>' + "".join(sections) + "</section>"
 

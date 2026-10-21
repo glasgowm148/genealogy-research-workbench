@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A recorded sibling link (`kind: "sibling"`, `half_sibling` and similar) now appears under **Siblings** on both dossiers with its own label, merged with any sibling found through shared parents, and the tree's family view draws it. A disproved link is listed only under **All recorded relationships**; the GEDCOM export still has no sibling record. See [Assess a relationship](docs/research.md#assess-a-relationship).
+
 ## 0.6.0 — 20 October 2026
 
 - A citation can carry an `abstract`, your reading of the record in your own words; the site shows it with the citation. See [Summarise a record](docs/research.md#summarise-a-record).

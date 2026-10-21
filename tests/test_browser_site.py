@@ -272,6 +272,16 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertIn('Ada Alder', self.page.locator('#connection-result').inner_text())
         self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
 
+    def test_family_view_draws_recorded_siblings(self):
+        from test_siblings import sibling_case
+        build_site(sibling_case(), ProjectConfig(name='Fictional siblings'), self.root / 'siblings')
+        self.page.goto(urljoin(self.base, '../siblings/tree.html?person=p0001'))
+        self.page.locator('#tree-output svg').wait_for()
+        # Bram, Iris, Pip and Lark; the disproved link to Nell is not drawn.
+        self.assertEqual(4, self.page.locator('#tree-output path.tree-edge.sibling').count())
+        self.assertEqual(1, self.page.locator('.tree-node[aria-label="Focus on Bram Fable"]').count())
+        self.assertEqual(0, self.page.locator('.tree-node[aria-label="Focus on Nell Fable"]').count())
+
     def test_map_controls_and_source_timeline_filters(self):
         self.page.goto(self.base + 'places.html')
         svg = self.page.locator('#map-output svg')
