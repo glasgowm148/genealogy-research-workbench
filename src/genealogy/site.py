@@ -14,7 +14,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 from . import exports
 from .case import ResearchCase
-from .config import ProjectConfig
+from .config import ProjectConfig, site_contact
 from .dates import date_sort_key, year_of
 from .feeds import FeedEntry, atom_feed
 from .markup import references as prose_references, render as render_prose
@@ -41,6 +41,9 @@ ROUTES = {
     "connections.html": ("connections", "Connections"), "evidence.html": ("evidence", "Reading the evidence"),
     "sitemap.html": ("sitemap", "Site index"),
 }
+# Pages built only when the project configures them; still owned when switched
+# off, so a rebuild removes them.
+OPTIONAL_ROUTES = {"corrections.html": ("corrections", "Corrections")}
 DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
               "data/public-tree.ged", "sitemap.xml", "findings.xml"}
 # The fields the browser script reads. ``data/site.json`` keeps every public
@@ -117,7 +120,7 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
 
 
 def _owned(name: str) -> bool:
-    return (name in ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
+    return (name in ROUTES or name in OPTIONAL_ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
             or bool(re.fullmatch(r"(?:people/p|studies/s)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources|studies)/page-[1-9][0-9]*\.html"
                                  r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html", name)))
 
@@ -152,6 +155,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     """
     project = exports.project_for_public_export(case, config)
     base_url = _base_url(config)
+    contact = site_contact(config.raw.get("site", {}))
+    routes = {**ROUTES, **({"corrections.html": OPTIONAL_ROUTES["corrections.html"]} if contact.keys() & {"email", "url"} else {})}
     directory = Path(directory)
     people = {p["id"]: p for p in project["people"]}
     places = {p["id"]: p for p in project["places"]}
@@ -765,6 +770,34 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         guide.append(f'<dt id="{_text(anchor)}">{_text(label)}</dt><dd>{_text(meaning)}</dd>')
     guide.append('</dl><h2>Privacy</h2><p>Living people, people whose status is unknown, and restricted, licensed or private material are withheld from every page, search index, map and download. A missing person or record is therefore not evidence that they did not exist.</p>')
     pages["evidence.html"] = "".join(guide)
+
+    def correction_mailto(pid: str) -> str:
+        """A message that starts with the person's name and ID, and their page address when known."""
+        body = ([f"Page: {base_url}{quote(people_urls[pid])}", ""] if base_url else []) + [
+            "What is wrong, and what it should say:", "", "", "The record that shows it:", ""]
+        subject = quote(f"Correction: {person_name(pid)} ({pid})", safe="")
+        text = quote("\r\n".join(body), safe="")  # mailto: line breaks are CRLF (RFC 6068)
+        return f'mailto:{quote(contact["email"], safe="@+")}?subject={subject}&body={text}'
+
+    if "corrections.html" in routes:
+        send = []
+        if "email" in contact:
+            send.append(f'<li>Email <a class="contact-address" href="mailto:{_text(quote(contact["email"], safe="@+"))}">{_text(contact["email"])}</a>. '
+                        'Each person\'s page has a <strong>Suggest a correction</strong> link that starts the message with their name and record ID.</li>')
+        if "url" in contact:
+            send.append(f'<li><a class="contact-address" href="{_text(contact["url"])}" rel="noreferrer">Send a correction online</a></li>')
+        pages["corrections.html"] = (
+            '<h1>Corrections</h1><p>Found a mistake, or hold a record that would help? Corrections and new evidence are welcome. '
+            'Every detail on this site rests on the records it cites, so a correction is most useful when it points to a record too.</p>'
+            '<h2>What a useful correction contains</h2><ul>'
+            '<li>The person\'s name and the address of their page on this site, or their record ID.</li>'
+            '<li>The detail that is wrong, and what you think it should say.</li>'
+            '<li>The record that shows it: where it is held, its reference and date, or a copy. If you know it from family papers or memory, say so.</li></ul>'
+            '<p class="note"><strong>Please do not send details of people who may still be living.</strong></p>'
+            '<h2>How to send it</h2><ul>' + "".join(send) + '</ul>'
+            + (f'<p class="preserve-lines">{_text(contact["note"])}</p>' if "note" in contact else "")
+            + '<h2>Imported trees</h2><p>Some details here may come from an imported family tree. If a person\'s page lists an external identifier, '
+            'such as a profile on an online tree, a correction to an imported detail should also go to that tree, so the two stay in step.</p>')
     for pid, person in people.items():
         related_events = events_by_person[pid]
         subject_ids = {pid, *(e["id"] for e in related_events)}
@@ -789,13 +822,16 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         content += '<h2>Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2>Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
         content += '<h2>Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
         content += '<h2>Research</h2>' + empty([f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}{question_next(r, "../") if "question" in r else ""}</li>' for r in research_by_subject[pid]]) + '<h2>All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2>External identifiers</h2>' + empty(external)
+        if "corrections.html" in routes:
+            content += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
+                                                           if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"
         pages[people_urls[pid]] = content
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
     data_links = "<ul>" + "".join(f'<li><a href="{path}">{label}</a></li>' for path, label in downloads) + "</ul>"
-    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in ROUTES.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
+    pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in routes.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
                                                   if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
                           config.grades, study_urls if compact_studies else None)
@@ -825,17 +861,18 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     study_titles = {url: studies[sid]["title"] for sid, url in study_urls.items()}
     for path, content in pages.items():
         prefix = "../" if "/" in path else ""
-        view, title = ROUTES[path] if path in ROUTES else ("study", study_titles[path]) if path in study_titles else extra_titles[path] if path in extra_titles else ("person", person_titles[path])
+        view, title = routes[path] if path in routes else ("study", study_titles[path]) if path in study_titles else extra_titles[path] if path in extra_titles else ("person", person_titles[path])
         person_attribute = f' data-person-id="{_text(person_ids_by_path[path])}"' if path in person_ids_by_path else ""
-        nav = "".join(f'<a data-view="{v}" href="{prefix}{p}"' + (' aria-current="page"' if path == p else '') + f'>{t}</a>' for p, (v, t) in ROUTES.items())
+        nav = "".join(f'<a data-view="{v}" href="{prefix}{p}"' + (' aria-current="page"' if path == p else '') + f'>{t}</a>' for p, (v, t) in routes.items())
         # Dossiers need only the menu enhancement. Interactive pages share one
         # data script rather than embedding the whole collection in each page.
         # The paged pages of a large site are plain lists and need no data.
         interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "studies", "overview"}
         data_script = f'<script defer src="{prefix}data/site-data.js"></script>' if interactive else ""
         payload = {"project": project["project"], "site": {"root": prefix}}
+        corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
-        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a></p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
+        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
     asset_root = Path(__file__).with_name("web")
     for filename in ASSETS:
         asset = asset_root / filename

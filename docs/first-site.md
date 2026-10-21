@@ -116,4 +116,6 @@ Upload only the contents of `my-family/dist/` to any static host: GitHub Pages, 
 base_url = "https://example.org/family/"
 ```
 
+To invite corrections, add `contact_email = "corrections@example.org"` (or an https `contact_url`) under `[site]`. The site then gains a Corrections page and a **Suggest a correction** link on every person's page. See [Build and deployment](deployment.md#configure-your-project).
+
 Replace the whole folder on every deployment, so that withdrawn pages disappear. Never upload the project folder itself: `cases/` and `private/` hold your private research and the original export. See [Build and deployment](deployment.md) for details.

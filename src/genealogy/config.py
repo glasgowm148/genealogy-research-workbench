@@ -7,6 +7,8 @@ from pathlib import Path
 import tomllib
 import re
 from typing import Any, ClassVar, Mapping
+import unicodedata
+from urllib.parse import urlsplit
 
 from .models import Confidence
 
@@ -36,6 +38,43 @@ def safe_relative_path(value: Any, *, setting: str) -> str:
     if path.is_absolute() or any(part == ".." for part in path.parts):
         raise ValueError(f"{setting} must stay within the project directory")
     return value
+
+
+def _control(value: str) -> bool:
+    return any(unicodedata.category(c) in ("Cc", "Cf") for c in value)
+
+
+def site_contact(site: Any) -> dict[str, str]:
+    """The validated corrections contact from ``[site]``: ``email``, ``url`` and ``note``, when set.
+
+    Only these explicit settings are used; a contact is never derived from the case.
+    """
+    if not isinstance(site, dict):
+        raise ValueError("[site] must be a table")
+    contact = {}
+    if "contact_email" in site:
+        value = site["contact_email"]
+        # One plain address: list separators and URL delimiters would change
+        # what a mailto: link means.
+        if (not isinstance(value, str) or value.count("@") != 1 or _control(value)
+                or re.search(r"[\s,;<>\"()\[\]\\?#&%/:]", value) or not all(value.split("@"))):
+            raise ValueError("site.contact_email must be one email address, such as corrections@example.org")
+        contact["email"] = value
+    if "contact_url" in site:
+        value = site["contact_url"]
+        try:
+            parsed = urlsplit(value) if isinstance(value, str) and not _control(value) and not re.search(r"\s", value) else None
+        except ValueError:
+            parsed = None
+        if not parsed or parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("site.contact_url must be an absolute https URL without credentials")
+        contact["url"] = value
+    if "corrections_note" in site:
+        if not isinstance(site["corrections_note"], str):
+            raise ValueError("site.corrections_note must be a string")
+        if site["corrections_note"].strip():
+            contact["note"] = site["corrections_note"]
+    return contact
 
 
 @dataclass(slots=True)
@@ -89,6 +128,7 @@ class ProjectConfig:
 
     def validate(self) -> None:
         safe_relative_path(self.case_directory, setting="project.case_directory")
+        site_contact(self.raw.get("site", {}))
         for key in ("allow_living", "allow_licensed", "allow_restricted"):
             if key in self.privacy:
                 exact_bool(self.privacy[key], setting=f"privacy.{key}")

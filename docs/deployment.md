@@ -14,7 +14,20 @@ The title/description are public. Keep private personal information out of them.
 ```toml
 [site]
 base_url = "https://example.org/family/"
-``` `[project].case_directory` and `default_case` select the case; use the CLI `--case` option for a different one. Existing catalogue/maps/timelines format/output settings control compatible standalone exports as well as the cohesive website built by the CLI.
+```
+
+To invite corrections, give a contact. With one set, the build adds a **Corrections** page (`corrections.html`, linked from the menu and every footer) explaining what a useful correction contains, and each person's page gains a **Suggest a correction** link:
+
+```toml
+[site]
+contact_email = "corrections@example.org"            # one address
+contact_url = "https://example.org/family/contact"  # https only
+corrections_note = "Replies can take a few weeks."   # optional, shown as written
+```
+
+Either contact is enough. With `contact_email`, the person's link opens an email whose subject is `Correction: <name> (<record ID>)`; with `base_url` also set, the message starts with the page address. With only `contact_url`, the link leads to the Corrections page. The contact is taken only from these settings, never from the case, and it is public: use an address you are happy to publish. `corrections_note` is used only when a contact is set. Remove the settings and rebuild to take the page and links down.
+
+`[project].case_directory` and `default_case` select the case; use the CLI `--case` option for a different one. Existing catalogue/maps/timelines format/output settings control compatible standalone exports as well as the cohesive website built by the CLI.
 
 ## Build and inspect
 
@@ -43,6 +56,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | `connections.html` | Shortest path through recorded relationships |
 | `evidence.html` | Reader's guide to every confidence, status and relationship label |
 | `sitemap.html` | Human-readable routes, person index and downloads |
+| `corrections.html` | How to send a correction and what to include (only when `site.contact_email` or `site.contact_url` is set) |
 | `sitemap.xml` | Search-engine sitemap (only when `site.base_url` is set) |
 | `data/site-data.js` | The fields of the public records that the interactive pages read, shared by every interactive page; `data/site.json` has every public field |
 | `data/` | Public JSON, CSV, GeoJSON, GEDCOM 5.5.1 (`public-tree.ged`) and route index |

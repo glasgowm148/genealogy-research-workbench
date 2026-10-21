@@ -33,6 +33,9 @@ class BrowserSiteTests(unittest.TestCase):
         cls.temp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.temp.name)
         config = ProjectConfig.load(ROOT / 'examples/demo/genealogy.toml')
+        # The demo sets no contact; a fictional one adds the corrections page and dossier links.
+        config.raw.setdefault('site', {})['contact_email'] = 'corrections@example.invalid'
+        config.validate()
         case = CaseStore(ROOT / 'examples/demo/cases').load(config.default_case)
         build_site(case, config, cls.root / 'nested')
         from test_scale import PEOPLE, large_case  # tests/ is on the path under unittest discovery
@@ -88,7 +91,7 @@ class BrowserSiteTests(unittest.TestCase):
         dossier = json.loads((self.root / 'nested' / 'data' / 'routes.json').read_text())
         routes = ['index.html', 'catalogue.html', 'tree.html', 'timeline.html', 'places.html',
                   'sources.html', 'research.html', 'compare.html', 'connections.html', 'evidence.html',
-                  'studies.html', 'findings.html', 'branches.html', 'sitemap.html',
+                  'studies.html', 'findings.html', 'branches.html', 'sitemap.html', 'corrections.html',
                   next(route for route in dossier if route.startswith('people/')),
                   next(route for route in dossier if route.startswith('studies/'))]
         for width in (1440, 390):
@@ -150,6 +153,7 @@ class BrowserSiteTests(unittest.TestCase):
         routes = json.loads((self.root / 'nested' / 'data' / 'routes.json').read_text())
         pages = [r for r in routes if not r.startswith(('people/', 'studies/'))]
         pages += [next(r for r in routes if r.startswith(prefix)) for prefix in ('people/', 'studies/')]
+        self.assertIn('corrections.html', pages)
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
             for route in pages:
