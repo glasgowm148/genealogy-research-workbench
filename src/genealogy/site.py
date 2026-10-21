@@ -16,6 +16,7 @@ from . import exports
 from .case import ResearchCase
 from .config import ProjectConfig, site_contact
 from .dates import date_sort_key, year_of
+from . import duplicates as duplicate_leads
 from .feeds import FeedEntry, atom_feed
 from .markup import references as prose_references, render as render_prose
 from .labels import (assessment_label, child_role, confidence_label, grade_label, guide_entries, parent_role, quality_parts, relationship_label,
@@ -56,6 +57,7 @@ ROUTES = {
 # Pages built only when the project configures them; still owned when switched
 # off, so a rebuild removes them.
 OPTIONAL_ROUTES = {"corrections.html": ("corrections", "Corrections")}
+OPTIONAL_ROUTES["duplicates.html"] = ("duplicates", "Possible duplicates")  # [research] duplicates = true
 DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
               "data/public-tree.ged", "sitemap.xml", "findings.xml", "data/redirects.json", "_redirects"}
 DATA_FILES.add("data/progress-history.json")  # kept between builds: the progress page appends to it
@@ -158,6 +160,7 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
 def _owned(name: str) -> bool:
     return (name in ROUTES or name in OPTIONAL_ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
             or bool(re.fullmatch(r"(?:people/p|studies/s|places/pl)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources|studies)/page-[1-9][0-9]*\.html"
+                                 r"|duplicates/page-[1-9][0-9]*\.html"
                                  r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html|sources/type-[a-z0-9-]+\.html", name)))
 
 
@@ -193,6 +196,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     base_url = _base_url(config)
     contact = site_contact(config.raw.get("site", {}))
     routes = {**ROUTES, **({"corrections.html": OPTIONAL_ROUTES["corrections.html"]} if contact.keys() & {"email", "url"} else {})}
+    if config.boolean("research", "duplicates", False):
+        routes["duplicates.html"] = OPTIONAL_ROUTES["duplicates.html"]
     directory = Path(directory)
     people = {p["id"]: p for p in project["people"]}
     # Only the surname groups some public person is recorded under are
@@ -1787,6 +1792,65 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         + ('<h2 id="history">Over time</h2><p>A snapshot of these counts is kept for each date of the newest finding, up to the latest 60; '
             'they are also in <a href="data/progress-history.json">data/progress-history.json</a>.</p>' + progress_chart(history) if history else ""))
     progress_history = json.dumps({"snapshots": history}, indent=2, sort_keys=True) + "\n" if history else None
+    def duplicate_pages() -> None:
+        """Possible duplicates: pairs listed as leads to check, never as a merge suggestion."""
+        born: dict[str, int | None] = {}
+        places_of: dict[str, set[str]] = {}
+        for pid in people:
+            birth = next((e for e in events_by_person[pid] if e["kind"] == "birth" and year_of(e.get("date"))), None)
+            born[pid] = year_of(birth["date"]) if birth else None
+            places_of[pid] = {e["place_id"] for e in events_by_person[pid] if e.get("place_id") in places}
+        related = {frozenset((r["subject_id"], r["object_id"])) for r in project["relationships"]}
+        first_name = lambda pid: next((n for n in people[pid].get("names", []) if n.get("value")), {})
+        found = duplicate_leads.possible_pairs(((pid, duplicate_leads.fold(canonical_surname(pid)), duplicate_leads.given_token(first_name(pid)),
+                                                 born[pid], places_of[pid]) for pid in people), related)
+        order = lambda pid: (person_name(pid).casefold(), born[pid] is None, born[pid] or 0, pid)
+        pairs = sorted((tuple(sorted(pair, key=order)) for pair in found),
+                       key=lambda ab: (duplicate_leads.fold(canonical_surname(ab[0])), order(ab[0]), order(ab[1])))
+        shown = pairs[:duplicate_leads.LIMIT]
+        chunks = [shown[i:i + duplicate_leads.PER_PAGE] for i in range(0, len(shown), duplicate_leads.PER_PAGE)] or [[]]
+        page_url = lambda n: "duplicates.html" if n == 1 else f"duplicates/page-{n}.html"
+        caution = ('<p>Each pair shares a surname and a first given name, and the two were born within two years of each other or, '
+                   'where a birth year is missing, were recorded at the same place. Two records may describe one person, or two people who shared a name. '
+                   'Nothing here is a conclusion.</p><p class="note">These are leads for a researcher to check against the records, not suggestions to merge anyone. '
+                   'People already linked to each other by a recorded relationship are not paired.</p>')
+
+        def cell(pid: str, prefix: str) -> str:
+            return f'<td>{ref(pid, prefix)}<br><span class="meta">{_text(" · ".join(part for part in (lifespan(pid), pid) if part))}</span></td>'
+
+        def row(a: str, b: str, prefix: str) -> str:
+            shared = "; ".join(sorted((str(places[pl]["name"]) for pl in places_of[a] & places_of[b]), key=str.casefold)) or "None in common"
+            label = f"Compare {person_name(a)} ({a}) with {person_name(b)} ({b})"
+            return (f'<tr>{cell(a, prefix)}{cell(b, prefix)}<td>{_text(shared)}</td>'
+                    f'<td><a href="{prefix}compare.html?a={_text(quote(a, safe=""))}&amp;b={_text(quote(b, safe=""))}" aria-label="{_text(label)}">Compare</a></td></tr>')
+
+        def table(chunk: list[tuple[str, str]], prefix: str) -> str:
+            if not chunk:
+                return '<p class="empty-state">No possible duplicates were found among the public people.</p>'
+            return ('<div class="table-wrap"><table class="duplicate-pairs"><thead><tr><th scope="col">Person</th><th scope="col">Possible match</th>'
+                    '<th scope="col">Places in common</th><th scope="col">Check</th></tr></thead><tbody>'
+                    + "".join(row(a, b, prefix) for a, b in chunk) + "</tbody></table></div>")
+
+        def page_nav(prefix: str, current: int) -> str:
+            if len(chunks) < 2:
+                return ""
+            step = duplicate_leads.PER_PAGE
+            return ('<nav aria-label="Pages of possible duplicates"><h2>Pages</h2><ol>' + "".join(
+                f'<li><a href="{prefix}{page_url(n)}"' + (' aria-current="page"' if n == current else "")
+                + f'>Pairs {(n - 1) * step + 1:,}–{(n - 1) * step + len(chunk):,}</a></li>' for n, chunk in enumerate(chunks, 1)) + "</ol></nav>")
+
+        count = (f'<p class="result-count">{len(pairs):,} pair{"" if len(pairs) == 1 else "s"}, in surname and name order.</p>' if pairs else "")
+        if len(pairs) > duplicate_leads.LIMIT:
+            count += f'<p class="note">{len(pairs):,} pairs were found; the first {duplicate_leads.LIMIT:,}, in surname and name order, are listed.</p>'
+        for n, chunk in enumerate(chunks, 1):
+            prefix = "" if n == 1 else "../"
+            heading = "<h1>Possible duplicates</h1>" if n == 1 else f"<h1>Possible duplicates, page {n} of {len(chunks)}</h1>"
+            pages[page_url(n)] = heading + caution + count + table(chunk, prefix) + page_nav(prefix, n)
+            if n > 1:
+                extra_titles[page_url(n)] = ("duplicates", f"Possible duplicates, page {n}")
+
+    if "duplicates.html" in routes:
+        duplicate_pages()
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:

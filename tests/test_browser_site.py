@@ -722,3 +722,26 @@ class BrowserSiteTests(unittest.TestCase):
                         "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
+
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'set GENEALOGY_AXE_PATH to an axe-core axe.min.js')
+    def test_possible_duplicates_pages_pass_axe_and_open_the_comparison(self):
+        from test_duplicates import config as duplicates_config, crowd
+        build_site(crowd(), duplicates_config(duplicates=True), self.root / 'duplicates')
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        for width in (1440, 390):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            for route in ('duplicates.html', 'duplicates/page-2.html'):
+                with self.subTest(width=width, route=route):
+                    self.page.goto(urljoin(self.base, f'../duplicates/{route}'), wait_until='networkidle')
+                    self.assertEqual(100, self.page.locator('table.duplicate-pairs tbody tr').count())
+                    self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                    self.page.add_script_tag(content=axe)
+                    violations = self.page.evaluate(
+                        "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                        "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                        ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                    self.assertEqual([], violations)
+        self.page.goto(urljoin(self.base, '../duplicates/duplicates.html'))
+        self.page.locator('table.duplicate-pairs a', has_text='Compare').first.click()
+        self.page.locator('#compare-result .comparison').wait_for()
+        self.assertEqual(['q000', 'q001'], [self.page.locator(s).input_value() for s in ('[data-compare-a]', '[data-compare-b]')])

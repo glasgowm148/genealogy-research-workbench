@@ -145,6 +145,8 @@ class ProjectConfig:
             values = getattr(self, section)
             if "enabled" in values:
                 exact_bool(values["enabled"], setting=f"{section}.enabled")
+        if "duplicates" in self.research:
+            exact_bool(self.research["duplicates"], setting="research.duplicates")
         if "directory" in self.exports:
             safe_relative_path(self.exports["directory"], setting="exports.directory")
         for format_name in ("json", "ndjson", "csv", "geojson"):
