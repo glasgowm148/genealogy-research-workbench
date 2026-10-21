@@ -152,9 +152,12 @@ class LargeSiteTests(unittest.TestCase):
         self.assertEqual(-(-(PEOPLE + 1) // SOURCES_PER_PAGE) - 1, len(pages))
         listed = re.findall(r'data-source-id="([^"]+)"', sources + "".join(p.read_text() for p in pages))
         self.assertEqual(PEOPLE + 1, len(set(listed)))
-        # A dossier's citation links to the page its source is on.
+        # A dossier's citation links to itself, on the page its source is on.
         dossier = next(p for p in (self.out / "people").glob("*.html") if 'data-person-id="p0390"' in p.read_text()).read_text()
-        self.assertRegex(dossier, r'href="\.\./sources/page-\d+\.html#' + _anchor("p0390-src") + '"')
+        page = re.search(r'href="\.\./(sources/page-\d+\.html)#' + _anchor("p0390-cit") + '"', dossier)
+        self.assertIsNotNone(page)
+        self.assertIn(f'id="{_anchor("p0390-src")}"', self.text(page[1]))
+        self.assertIn(f'id="{_anchor("p0390-cit")}"', self.text(page[1]))
         script = self.text("data/site-data.js")
         self.assertIn('"title": "Invented register volume 0390"', script)
         self.assertIn("sources/page-", script)

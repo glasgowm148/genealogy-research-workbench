@@ -113,7 +113,16 @@ A citation can carry an `abstract`: your reading of the record, in your own word
  "abstract": "Baptism of Ann, born 17 January 1837, daughter of Robert and Mary, of Harbour Row.", "sensitivity": "public"}
 ```
 
-The site shows it with the citation as "Abstract", on the source's page and wherever the citation supports a claim. Unlike a quotation or transcription, it is your own text, so a public citation publishes it.
+The site shows it with the citation as "Abstract" on the source's page. Unlike a quotation or transcription, it is your own text, so a public citation publishes it.
+
+An evidence assessment can carry a `limitation`: what this record cannot show for the claim, such as an age it does not state or a later copy standing in for the original:
+
+```json
+{"id": "evidence:marriage-household", "claim_id": "claim:ann-married", "citation_id": "citation:census-1891",
+ "assessment": "Names Ann as the head's wife.", "limitation": "The return states no marriage date.", "sensitivity": "public"}
+```
+
+Each claim on a person's page shows its records as one table: **Record** (the source and locator, linked to the citation), **What it says** (the abstract, or else the quotation or transcription), **Assessment** ("Supports" or "Challenges", your assessment and its grade) and **Limitation**. A record has one row per assessment of it; a record the claim cites that no assessment covers yet shows "Not yet assessed". Evidence is private by default, so give an assessment `"sensitivity": "public"` to publish it and its limitation.
 
 ## Write a study
 

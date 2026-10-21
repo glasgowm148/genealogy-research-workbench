@@ -42,7 +42,7 @@ class AbstractTests(unittest.TestCase):
             shown = "<p><strong>Abstract:</strong> Baptism of Ann &lt;Fable&gt;, born 17 January 1837, daughter of Robert and Mary.</p>"
             self.assertIn("<p><strong>Locator:</strong> entry 75</p>" + shown, (out / "sources.html").read_text())
             dossier = next((out / "people").glob("*.html")).read_text()
-            self.assertIn(shown, dossier)
+            self.assertIn('<td data-label="What it says">Baptism of Ann &lt;Fable&gt;, born 17 January 1837, daughter of Robert and Mary.</td>', dossier)
             self.assertEqual(ABSTRACT, json.loads((out / "data/site.json").read_text())["citations"][0]["abstract"])
 
     def test_a_private_citation_keeps_its_abstract_private(self):

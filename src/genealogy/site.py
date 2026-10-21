@@ -380,8 +380,27 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         parts = [f'<article class="record-card card" id="{_anchor(row["id"])}"><h3>{_text(row["predicate"])}: {_text(row["value"])}</h3>{metadata(row, prefix)}', f'<p>Subject: {ref(row["subject_id"], prefix)}</p>']
         if row.get("rationale"):
             parts.append(f'<p>{_text(row["rationale"])}</p>')
-        parts.append("<h4>Citations</h4>" + empty(["<li>" + citation(citations[cid], prefix) + "</li>" for cid in row.get("citation_ids", []) if cid in citations]))
-        parts.append("<h4>Evidence assessments</h4>" + empty([f'<li id="{_anchor(e["id"])}"><strong>{"Supports" if e["supports"] else "Challenges"}</strong>: {_text(e["assessment"])}{metadata(e, prefix)} — {ref(e["citation_id"], prefix, "Citation")}</li>' for e in supporting]))
+        # One row per assessment, in the claim's citation order; a cited record
+        # nobody has assessed yet still gets a row, so the gap is visible.
+        cited = [cid for cid in row.get("citation_ids", []) if cid in citations]
+        pairs = [(cid, e) for cid in cited for e in ([e for e in supporting if e["citation_id"] == cid] or [None])]
+        pairs += [(e["citation_id"], e) for e in supporting if e["citation_id"] not in cited]
+        rows = []
+        for cid, e in pairs:
+            found = citations.get(cid, {})
+            record = ref(cid, prefix, sources.get(found.get("source_id"), {}).get("title", found.get("source_id", cid)))
+            if found.get("locator"):
+                record += f'<br><span class="meta">{_text(found["locator"])}</span>'
+            says = (_text(found["abstract"]) if found.get("abstract") else
+                    f'<q>{_text(found.get("quotation") or found["transcription"])}</q>' if found.get("quotation") or found.get("transcription") else "—")
+            assessed = (f'<strong>{"Supports" if e["supports"] else "Challenges"}</strong>: {_text(e["assessment"])}{metadata(e, prefix)}'
+                        if e else '<span class="meta">Not yet assessed</span>')
+            limit = _text(e["limitation"]) if e and e.get("limitation") else "—"
+            rows.append((f'<tr id="{_anchor(e["id"])}">' if e else "<tr>") + f'<td data-label="Record">{record}</td><td data-label="What it says">{says}</td>'
+                        f'<td data-label="Assessment">{assessed}</td><td data-label="Limitation">{limit}</td></tr>')
+        parts.append('<div class="table-wrap"><table class="evidence-table"><caption>Records and assessments</caption><thead><tr><th scope="col">Record</th>'
+                     '<th scope="col">What it says</th><th scope="col">Assessment</th><th scope="col">Limitation</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>"
+                     if rows else '<p class="empty-state">No public records cited.</p>')
         return "".join(parts) + "</article>"
 
     def person_item(pid: str, role: str, row: dict[str, Any] | None, prefix: str, extra: str = "") -> str:

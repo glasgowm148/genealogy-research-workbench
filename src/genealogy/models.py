@@ -235,6 +235,9 @@ class Evidence(Record):
     confidence: Confidence = Confidence.UNKNOWN
     sensitivity: Sensitivity = Sensitivity.PRIVATE
     grade: str | None = None  # see Relationship.grade
+    # What this record cannot show for the claim (no age stated, a later copy);
+    # the reader sees it beside the assessment.
+    limitation: str | None = None
 
 
 @dataclass(slots=True)

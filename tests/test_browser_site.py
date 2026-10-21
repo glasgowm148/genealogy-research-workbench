@@ -87,13 +87,17 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual([], self.errors, 'Browser runtime errors')
         self.assertEqual([], self.external, 'Public site must work without outside requests')
 
+    def evidence_dossier(self, routes):
+        """A dossier whose claims show their records and assessments as a table."""
+        return next(r for r in routes if r.startswith('people/') and 'class="evidence-table"' in (self.root / 'nested' / r).read_text())
+
     def test_routes_images_mobile_and_no_javascript(self):
         dossier = json.loads((self.root / 'nested' / 'data' / 'routes.json').read_text())
         routes = ['index.html', 'catalogue.html', 'tree.html', 'timeline.html', 'places.html',
                   'sources.html', 'research.html', 'compare.html', 'connections.html', 'evidence.html',
                   'studies.html', 'findings.html', 'branches.html', 'sitemap.html', 'corrections.html',
                   next(route for route in dossier if route.startswith('people/')),
-                  next(route for route in dossier if route.startswith('studies/'))]
+                  next(route for route in dossier if route.startswith('studies/')), self.evidence_dossier(dossier)]
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
             for route in routes:
@@ -154,6 +158,7 @@ class BrowserSiteTests(unittest.TestCase):
         pages = [r for r in routes if not r.startswith(('people/', 'studies/'))]
         pages += [next(r for r in routes if r.startswith(prefix)) for prefix in ('people/', 'studies/')]
         self.assertIn('corrections.html', pages)
+        pages.append(self.evidence_dossier(routes))
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
             for route in pages:
