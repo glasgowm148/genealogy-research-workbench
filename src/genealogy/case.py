@@ -165,7 +165,7 @@ def validate_case(case: ResearchCase) -> list[str]:
         "ResearchQuestion": {"related_ids": None},
         "Finding": {"related_ids": None, "evidence_ids": "Evidence", "citation_ids": "Citation",
                     "changes[].record_id": ("Relationship", "Claim")},
-        "Study": {"related_ids": None},
+        "Study": {"related_ids": None, "groups[].member_ids": "Person", "links[].evidence_ids": ("Evidence", "Citation")},
         "ImportProvenance": {"entity_ids": None},
     }
     # A former id stays retired: it cannot be a current id or belong to two
@@ -249,12 +249,21 @@ def reference_values(record: Record, reference_field: str) -> list[Any]:
     value = getattr(record, name, None)
     values = value if isinstance(value, list) else [value]
     if key:
-        return [item[key] for item in values if isinstance(item, dict) and isinstance(item.get(key), str)]
+        held = [item.get(key) for item in values if isinstance(item, dict)]
+        # A key may hold one id (changes[].record_id) or a list (groups[].member_ids).
+        return [rid for item in held for rid in (item if isinstance(item, list) else [item]) if isinstance(rid, str)]
     return values
+
+
+# Ids held inside a record's list of objects, read with reference_values
+# wherever references are followed (privacy, bundles, search).
+NESTED_REFERENCES = ("changes[].record_id", "groups[].member_ids", "links[].evidence_ids")
 
 
 GRADE_KEY = r"[a-z0-9][a-z0-9_-]*"
 CHANGE_KEYS = {"record_id", "before", "after", "note"}
+GROUP_KEYS = {"id", "title", "member_ids", "note"}
+LINK_KEYS = {"from", "to", "status", "note", "evidence_ids"}
 
 
 def grade_errors(case: ResearchCase, grades: dict[str, dict[str, Any]]) -> list[str]:
@@ -285,6 +294,11 @@ def grade_errors(case: ResearchCase, grades: dict[str, dict[str, Any]]) -> list[
             when = finding.recorded_on if isinstance(finding.recorded_on, str) else ""
             if isinstance(rid, str) and rid in assessed and (rid not in latest or when >= latest[rid][0]):
                 latest[rid] = (when, finding, index, change)
+    for study in case.records("Study"):
+        for index, link in enumerate(getattr(study, "links", None) or []):
+            status = link.get("status") if isinstance(link, dict) else None
+            if isinstance(status, str) and status not in grades and status not in tuple(Confidence):
+                errors.append(f"{study.id}.links[{index}].status is neither a confidence value nor a grade defined under [grades]: {status}")
     for rid, (_, finding, index, change) in latest.items():
         current = assessed[rid].grade or str(assessed[rid].confidence)
         if change.get("after") != current:
@@ -412,9 +426,59 @@ def _validate_record_fields(record: Record) -> list[str]:
                 for key in ("before", "note"):
                     if not _string(change.get(key), optional=True):
                         errors.append(f"{record.id}.changes[{index}].{key} must be a string or null")
+    if type(record).__name__ == "Study":
+        errors.extend(_study_group_errors(record))
     if isinstance(record, ImportProvenance):
         if not isinstance(record.observations, list) or not all(isinstance(item, dict) for item in record.observations):
             errors.append(f"{record.id}.observations must be a list of objects")
+    return errors
+
+
+def _study_group_errors(record: Record) -> list[str]:
+    """A study's groups, the links between them and its records still to inspect."""
+    errors: list[str] = []
+    groups, links, next_records = record.groups, record.links, record.next_records
+    declared: set[str] = set()
+    if not isinstance(groups, list) or not all(isinstance(item, dict) for item in groups):
+        errors.append(f"{record.id}.groups must be a list of objects")
+        groups = []
+    for index, group in enumerate(groups):
+        where = f"{record.id}.groups[{index}]"
+        if set(group) - GROUP_KEYS:
+            errors.append(f"{where} has unknown keys: {', '.join(sorted(set(group) - GROUP_KEYS))}")
+        gid = group.get("id")
+        if not (_string(gid) and gid):
+            errors.append(f"{where}.id must be a non-empty string")
+        elif gid in declared:
+            errors.append(f"{where}.id repeats group {gid}")
+        else:
+            declared.add(gid)
+        if not (_string(group.get("title")) and group["title"].strip()):
+            errors.append(f"{where}.title must be a non-empty string")
+        if not _string_list(group.get("member_ids")):
+            errors.append(f"{where}.member_ids must be a list of non-empty ids")
+        if not _string(group.get("note"), optional=True):
+            errors.append(f"{where}.note must be a string or null")
+    if not isinstance(links, list) or not all(isinstance(item, dict) for item in links):
+        errors.append(f"{record.id}.links must be a list of objects")
+        links = []
+    for index, link in enumerate(links):
+        where = f"{record.id}.links[{index}]"
+        if set(link) - LINK_KEYS:
+            errors.append(f"{where} has unknown keys: {', '.join(sorted(set(link) - LINK_KEYS))}")
+        for end in ("from", "to"):
+            if link.get(end) not in declared:
+                errors.append(f"{where}.{end} must name a group declared in {record.id}.groups: {link.get(end)!r}")
+        if link.get("from") == link.get("to") and link.get("from") in declared:
+            errors.append(f"{where} links group {link['from']} to itself")
+        if not (_string(link.get("status")) and link["status"]):
+            errors.append(f"{where}.status must be a confidence value or grade key")
+        if not _string(link.get("note"), optional=True):
+            errors.append(f"{where}.note must be a string or null")
+        if not _string_list(link.get("evidence_ids", [])):
+            errors.append(f"{where}.evidence_ids must be a list of non-empty ids")
+    if not (isinstance(next_records, list) and all(isinstance(item, str) and item.strip() for item in next_records)):
+        errors.append(f"{record.id}.next_records must be a list of non-empty strings")
     return errors
 
 

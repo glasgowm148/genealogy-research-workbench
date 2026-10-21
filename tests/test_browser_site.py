@@ -41,6 +41,14 @@ class BrowserSiteTests(unittest.TestCase):
         config.validate()
         case = CaseStore(ROOT / 'examples/demo/cases').load(config.default_case)
         case.add_many(cls.variant_person('person:43', 'Iona Hayle', 'Hayle'))
+        # The demo study compares three fictional groups and draws how they connect.
+        demo = next(s for s in case.records('Study') if s.id == 'study:households')
+        demo.groups = [{'id': 'lantern', 'title': 'Lanternford register children', 'member_ids': ['person:01', 'person:05'], 'note': 'One register entry.'},
+                       {'id': 'willow', 'title': 'Willowmere household', 'member_ids': ['person:13', 'person:14']},
+                       {'id': 'ember', 'title': 'Ember lodgers', 'member_ids': ['person:09', 'person:10']}]
+        demo.links = [{'from': 'lantern', 'to': 'willow', 'status': 'probable', 'evidence_ids': ['evidence:parent:5']},
+                      {'from': 'willow', 'to': 'ember', 'status': 'possible', 'note': 'A shared surname only.'}]
+        demo.next_records = ['The Willowmere returns for 1811.']
         build_site(case, config, cls.root / 'nested')
         from test_scale import PEOPLE, large_case  # tests/ is on the path under unittest discovery
         cls.large_people = PEOPLE
@@ -175,6 +183,8 @@ class BrowserSiteTests(unittest.TestCase):
         pages.append(self.evidence_dossier(routes))
         # The demo study draws a chronology of its people.
         pages.append(next(r for r in routes if r.startswith('studies/s-') and 'class="chronology"' in (self.root / 'nested' / r).read_text()))
+        # And its households, connection diagram and records still to inspect.
+        pages.append(next(r for r in routes if r.startswith('studies/s-') and 'class="groups-chart"' in (self.root / 'nested' / r).read_text()))
         for width in (1440, 390):
             self.page.set_viewport_size({'width': width, 'height': 900})
             for route in pages:

@@ -229,6 +229,27 @@ Pipe tables work too: a header row, a separator row such as `|---|---|`, then on
 
 A study page draws a **chronology** of the people in `related_ids`: one line per person, ordered by their first dated event, running from a recorded birth to a recorded death (otherwise from the first to the last dated event), with a marker for each public event, coloured by kind (birth or baptism, marriage, death or burial, other). Events listed in `related_ids` whose people are not in the study share a line of their own. An approximate or bounded date such as `about 1850` or `BEF 1800` is drawn at its recorded year and its marker shows the date as written; events without a year are counted under the drawing instead. A study with fewer than two dated events has no chronology, and past 30 people only the 30 earliest are drawn, with the rest counted. The drawing is plain SVG, so it needs no JavaScript, and a **…, as text** section beneath it lists the same events for screen readers and text browsers. To improve it, record dates on the people's events; nothing is inferred.
 
+### Compare households and groups
+
+A study that weighs several households or groups against each other can record them in `groups`, how they connect in `links`, and the records still to inspect in `next_records`:
+
+```json
+{
+  "groups": [
+    {"id": "mill", "title": "The Mill Lane household", "member_ids": ["gedcom:person:I1", "gedcom:person:I2"], "note": "One 1841 schedule."},
+    {"id": "quay", "title": "The Quay Street lodgers", "member_ids": ["gedcom:person:I3"]}
+  ],
+  "links": [
+    {"from": "mill", "to": "quay", "status": "possible", "note": "The same witness signs both entries.", "evidence_ids": ["evidence:witness"]}
+  ],
+  "next_records": ["Inspect the original 1841 schedule for Quay Street."]
+}
+```
+
+Each group has an `id` used only within the study, a `title`, `member_ids` (people) and an optional `note`. Each link joins two declared groups (`from`, `to`) with a `status` that is a confidence value or one of your grades, an optional `note`, and optional `evidence_ids` naming Evidence or Citation records. Validation rejects unknown keys, a repeated group id, a member who is not a person, a link to an undeclared group or to itself, and a status that is neither a confidence value nor a defined grade.
+
+The study page lists each group with its members (linked, with their recorded years) and note, under the fixed caution "Membership of a group records who the researcher is studying together; it does not by itself assert kinship." Record kinship itself as relationships. When there are links, a static diagram draws the groups as boxes and each link as a line labelled with its status in your wording: solid when documented or probable, dashed otherwise. Up to 20 groups are drawn (every group is still listed), and a **…, as text** section lists every link with its note and records. **Records still to inspect** lists `next_records` as written. A grouped person's dossier links to the study. As with `related_ids`, a study is withheld when a group member or a link's evidence is not public.
+
 ## Place precision
 
 Coordinates supplied for a whole parish, county or country should not be read as an exact address. Set `precision` on a place to one of `exact`, `building`, `street`, `settlement`, `parish`, `district`, `county`, `region`, `country` or `approximate`. Places at parish level or broader are drawn as a dashed ring on the map, and every place says how precisely it is located. Imports leave `precision` unset; nothing is guessed.

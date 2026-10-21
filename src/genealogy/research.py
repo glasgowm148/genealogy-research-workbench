@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable, TypeVar
 
-from .case import CaseStore, ResearchCase, reference_values, validate_case
+from .case import NESTED_REFERENCES, CaseStore, ResearchCase, reference_values, validate_case
 from .models import MODEL_TYPES, Claim, Evidence, Finding, Hypothesis, Record, ResearchQuestion
 
 
@@ -289,7 +289,7 @@ class ResearchService:
                 references.append(value)
             elif isinstance(value, list):
                 references.extend(item for item in value if isinstance(item, str))
-        references.extend(reference_values(record, "changes[].record_id"))
+        references.extend(rid for nested in NESTED_REFERENCES for rid in reference_values(record, nested))
         return tuple(references)
 
     @staticmethod

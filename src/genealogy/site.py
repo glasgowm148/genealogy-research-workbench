@@ -33,6 +33,7 @@ PLACES_PER_PAGE = 100  # places per region page on a large site
 SOURCES_PER_PAGE = 100  # sources per page on a large site, in title order
 STUDIES_PER_PAGE = 100  # studies on a large site's studies page (newest) and on each title page
 CITED_FOR_LIMIT = 20  # people, findings or family links listed under a source's "Cited for"
+STUDY_GROUPS_DRAWN = 20  # groups drawn in a study's connection diagram; all are listed
 CHRONOLOGY_LANES = 30  # people drawn in a study's chronology; the rest are counted, not drawn
 CHRONOLOGY_BYTES = 36_000  # lanes stop once the drawing reaches this, so a busy study page stays small
 UNPLACED_REGION = "Places without a broader jurisdiction"
@@ -250,6 +251,10 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     for row in studies.values():
         for rid in dict.fromkeys([*row.get("related_ids", []), *(r for text in (row.get("summary"), row.get("rationale"), row.get("body"), row.get("conclusion")) for r in prose_references(text))]):
             studies_by_subject[rid].append(row)
+        # A person the study groups is one it concerns, even when not in related_ids.
+        for rid in dict.fromkeys(pid for g in row.get("groups", []) for pid in g.get("member_ids", [])):
+            if not studies_by_subject[rid] or studies_by_subject[rid][-1] is not row:
+                studies_by_subject[rid].append(row)
     for collection in ("questions", "findings", "hypotheses"):
         for row in project[collection]:
             for rid in set(row.get("related_ids", [])):
@@ -989,6 +994,79 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + (f'<p class="meta chronology-notes">{" ".join(notes)}</p>' if notes else "")
                 + f'<details class="chronology-text"><summary>{_text(summary)}, as text</summary><ol>{text}</ol></details>')
 
+    evidence_by_id = {e["id"]: e for e in project["evidence"]}
+
+    def study_groups(row: dict[str, Any], prefix: str) -> str:
+        """The households or groups a study compares, a drawing of how they connect, and the records still to inspect.
+
+        A published study's members and link evidence are all public: the
+        projection withholds a study that names anything else.
+        """
+        groups = [g for g in row.get("groups", []) if isinstance(g, dict)]
+        anchor = {g["id"]: "group-" + _key(g["id"])[:16] for g in groups}
+        title = {g["id"]: str(g["title"]) for g in groups}
+        out = ""
+        if groups:
+            cards = []
+            for g in groups:
+                members = [pid for pid in dict.fromkeys(g.get("member_ids", [])) if pid in people]
+                items = [f'<li>{ref(pid, prefix)}' + (f' <span class="meta">{_text(lifespan(pid))}</span>' if lifespan(pid) else "") + "</li>" for pid in members]
+                cards.append(f'<section class="study-group card" id="{anchor[g["id"]]}"><h3>{_text(g["title"])}</h3>'
+                             + (f'<p>{_text(g["note"])}</p>' if g.get("note") else "") + empty(items, "No public members recorded.") + "</section>")
+            out += ('<h2>Households and groups</h2><p class="meta groups-caution">Membership of a group records who the researcher is studying together; '
+                    'it does not by itself assert kinship.</p><div class="study-groups">' + "".join(cards) + "</div>")
+        links = [l for l in row.get("links", []) if isinstance(l, dict) and l.get("from") in anchor and l.get("to") in anchor]
+        if links:
+            drawn = groups[:STUDY_GROUPS_DRAWN]
+            index = {g["id"]: i for i, g in enumerate(drawn)}
+            box_w, box_h, pitch, top, width = 300, 44, 60, 8, 760
+            boxes, curves, labels, repeats = [], [], [], Counter()
+            for i, g in enumerate(drawn):
+                y = top + i * pitch
+                count = sum(1 for pid in dict.fromkeys(g.get("member_ids", [])) if pid in people)
+                short = title[g["id"]] if len(title[g["id"]]) <= 38 else title[g["id"]][:37].rstrip() + "…"
+                boxes.append(f'<a href="#{anchor[g["id"]]}"><title>{_text(title[g["id"]])}</title><rect x="8" y="{y}" width="{box_w}" height="{box_h}" rx="6"/>'
+                             f'<text x="20" y="{y + 19}">{_text(short)}</text><text class="count" x="20" y="{y + 36}">{count} {"person" if count == 1 else "people"}</text></a>')
+            for l in links:
+                if l["from"] not in index or l["to"] not in index:
+                    continue
+                a, b = sorted((index[l["from"]], index[l["to"]]))
+                repeats[(a, b)] += 1
+                # Arcs to the right of the boxes, wider for longer spans and
+                # for a second link between the same two groups.
+                bulge = min(70 + 60 * (b - a - 1) + 50 * (repeats[(a, b)] - 1), 330)
+                ya, yb, x0 = top + a * pitch + box_h / 2, top + b * pitch + box_h / 2, 8 + box_w
+                counted = config.grades[l["status"]]["confidence"] if l["status"] in config.grades else l["status"]
+                style = "settled" if counted in ("documented", "probable") else "open disproved" if counted == "disproved" else "open"
+                curves.append(f'<path class="link {style}" d="M{x0} {ya}C{x0 + bulge} {ya} {x0 + bulge} {yb} {x0} {yb}"/>')
+                words = assessment_label(l["status"], config.grades)
+                words = words if len(words) <= 26 else words[:25].rstrip() + "…"
+                labels.append(f'<text x="{x0 + bulge * 0.75 + 6:.0f}" y="{(ya + yb) / 2 + 4:.0f}">{_text(words)}</text>')
+            height = top + len(drawn) * pitch
+            summary = f'Diagram of {len(drawn)} groups and {len(curves)} {"link" if len(curves) == 1 else "links"} between them'
+            svg = (f'<svg class="groups-chart" viewBox="0 0 {width} {height}"><g role="img" aria-label="{_text(summary)}">{"".join(curves)}'
+                   f'<g class="link-labels">{"".join(labels)}</g></g><g class="group-boxes">{"".join(boxes)}</g></svg>')
+            notes = (f'<p class="meta">{len(groups) - len(drawn)} more groups are listed above but not drawn; their links are in the text below.</p>'
+                     if len(groups) > len(drawn) else "")
+            text = []
+            for l in links:
+                counted = config.grades[l["status"]]["confidence"] if l["status"] in config.grades else l["status"]
+                records = [record_link(eid, prefix) if eid in citations else record_link(e["citation_id"], prefix)
+                           for eid in dict.fromkeys(l.get("evidence_ids", []))
+                           if eid in citations or ((e := evidence_by_id.get(eid)) and e["citation_id"] in citations)]
+                text.append(f'<li><a href="#{anchor[l["from"]]}">{_text(title[l["from"]])}</a> → <a href="#{anchor[l["to"]]}">{_text(title[l["to"]])}</a>'
+                            + metadata({"confidence": counted, "grade": l["status"] if l["status"] in config.grades else None}, prefix)
+                            + (f'<p>{_text(l["note"])}</p>' if l.get("note") else "")
+                            + (f'<p class="meta">Records: {", ".join(records)}</p>' if records else "") + "</li>")
+            out += ('<h3>How the groups connect</h3><figure class="groups-diagram"><div class="groups-plot">' + svg + '</div><figcaption>'
+                    'Each line joins two groups and is labelled with how far the link between them is established. '
+                    'Solid lines are links assessed as documented or probable; dashed lines are possible, unassessed or disproved links.</figcaption></figure>' + notes
+                    + f'<details class="groups-text"><summary>{_text(summary)}, as text</summary><ul>{"".join(text)}</ul></details>')
+        pending = [item for item in row.get("next_records", []) if isinstance(item, str) and item.strip()]
+        if pending:
+            out += '<h2>Records still to inspect</h2><ul class="next-records">' + "".join(f"<li>{_text(item)}</li>" for item in pending) + "</ul>"
+        return out
+
     for sid, row in studies.items():
         prefix = "../"
         linked = [rid for rid in row.get("related_ids", []) if rid in record_routes]
@@ -1002,6 +1080,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             content += '<section class="study-body">' + prose(row["body"], prefix) + '</section>'
         content += '<h2>Current conclusion</h2>' + (prose(row["conclusion"], prefix) if row.get("conclusion") else '<p class="empty-state">No conclusion has been reached yet.</p>')
         content += chronology(row, prefix)
+        content += study_groups(row, prefix)
         content += '<h2>People and records in this study</h2>' + empty([subject_item(rid, prefix) for rid in linked], "No public people or records are linked.")
         content += '<h2>Related findings and questions</h2>' + empty([f'<li>{ref(r["id"], prefix, r.get("conclusion") or r.get("question") or r.get("statement"))}{metadata(r, prefix)}</li>' for r in related_research], "No related findings or questions recorded.")
         pages[study_urls[sid]] = content

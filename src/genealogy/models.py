@@ -319,6 +319,16 @@ class Study(Record):
     status: str = "draft"
     updated_on: str | None = None
     sensitivity: Sensitivity = Sensitivity.PRIVATE
+    # The households or groups the study compares, each {"id", "title",
+    # "member_ids", "note"}; membership says who is studied together, never
+    # that they are kin. A study naming a withheld member is withheld.
+    groups: list[dict[str, Any]] = field(default_factory=list)
+    # How the groups connect, each {"from", "to", "status", "note",
+    # "evidence_ids"}: from and to are group ids, status a confidence value
+    # or project grade key, evidence_ids Evidence or Citation records.
+    links: list[dict[str, Any]] = field(default_factory=list)
+    # Records still to inspect, as plain text.
+    next_records: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

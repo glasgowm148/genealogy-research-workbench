@@ -25,3 +25,21 @@
 @media(min-width:1450px){.page-sections{position:sticky;top:0;z-index:2;background:var(--paper);padding:.35rem 0;border-bottom:1px solid var(--line)}body[data-view=person] main h2[id]{scroll-margin-top:3.5rem}}
 .family-summary .link-reason,.family-summary .link-records{margin:.15rem 0 0;font-size:.82rem}.family-summary .link-reason strong{font-weight:600}.family-summary .rejected-links>li{border-left:3px solid var(--line);padding-left:.8rem}.lead.intro{margin:.4rem 0 1.2rem}.latest-finding{max-width:48rem;margin:1rem 0 1.6rem;padding:1rem 1.3rem;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:var(--radius)}.latest-finding h2{margin:0 0 .3rem;font-family:inherit;font-size:.7rem;font-weight:700;line-height:1.4;text-transform:uppercase;letter-spacing:.14em;color:var(--gold-text)}.latest-finding p{margin:.2rem 0}.latest-finding p:first-of-type{font-size:1.05rem}
 .chronology{margin:1rem 0 .4rem;padding:1rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}.chronology-plot{overflow-x:auto}.chronology-chart{display:block;width:100%;min-width:600px;height:auto;font:12px system-ui,sans-serif}.chronology-chart text{fill:var(--muted)}.chronology-chart .lane-names text{fill:var(--forest)}.chronology-chart a:hover text,.chronology-chart a:focus text{text-decoration:underline}.chronology-chart .grid{stroke:var(--line);fill:none}.chronology-chart .life{stroke:#cfd5c3;stroke-width:6;stroke-linecap:round}.chronology circle,.chronology-key i{fill:var(--gold);stroke:var(--surface);stroke-width:1.5}.chronology figcaption{font-size:.8rem;color:var(--muted);margin-top:.6rem}.chronology-legend{display:block;margin-top:.3rem}.chronology-key{display:inline-flex;align-items:center;gap:.3rem;margin-right:.9rem;white-space:nowrap}.chronology-key i{display:inline-block;width:.7rem;height:.7rem;border-radius:50%;background:var(--gold);border:1px solid var(--surface)}.chronology .k-begin{fill:var(--forest);background:var(--forest)}.chronology .k-end{fill:var(--muted);background:var(--muted)}.chronology .k-union{fill:var(--gold);background:var(--gold)}.chronology .k-other{fill:var(--surface);stroke:var(--forest);background:var(--surface);border-color:var(--forest)}.chronology-notes{font-size:.8rem}.chronology-text ol{margin:.6rem 0 0;padding-left:1.2rem}.chronology-text ul{margin:.2rem 0 .6rem;padding-left:1rem;font-size:.86rem}
+.groups-caution{max-width:46rem}
+.study-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin:1rem 0 1.4rem}
+.study-group h3{font-size:1.15rem}
+.study-group .record-list{margin:0}
+.groups-diagram{margin:1rem 0 .4rem;padding:1rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.groups-plot{overflow-x:auto}
+.groups-chart{display:block;width:100%;min-width:600px;height:auto;font:13px system-ui,sans-serif}
+.groups-chart rect{fill:var(--soft);stroke:var(--forest);stroke-width:1.2}
+.groups-chart .group-boxes text{fill:var(--forest)}
+.groups-chart .group-boxes .count{fill:var(--muted);font-size:11px}
+.groups-chart a:hover text,.groups-chart a:focus text{text-decoration:underline}
+.groups-chart .link{fill:none;stroke:var(--forest);stroke-width:2}
+.groups-chart .link.open{stroke:var(--gold-text);stroke-dasharray:6 5}
+.groups-chart .link.disproved{stroke:var(--muted)}
+.groups-chart .link-labels text{fill:var(--ink);font-size:12px;paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+.groups-diagram figcaption{font-size:.8rem;color:var(--muted);margin-top:.6rem}
+.groups-text ul{margin:.6rem 0 0;padding-left:1.2rem}
+.next-records{padding-left:1.2rem}

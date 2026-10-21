@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from .case import ResearchCase, reference_values, validate_case
+from .case import NESTED_REFERENCES, ResearchCase, reference_values, validate_case
 from .markup import references
 from .models import AccessLevel, LivingStatus, Person, Record, Sensitivity, Source, Study, access_level, is_raw_dna
 
@@ -79,8 +79,9 @@ class PrivacyPolicy:
                 "related_ids", "evidence_ids",
             ):
                 values.update(value for value in getattr(record, field, []) if value)
-            # A finding that regraded a withheld link or claim is withheld with it.
-            values.update(reference_values(record, "changes[].record_id"))
+            # A finding that regraded a withheld link or claim is withheld with
+            # it, as is a study grouping a withheld person or citing withheld evidence.
+            values.update(rid for nested in NESTED_REFERENCES for rid in reference_values(record, nested))
             if isinstance(record, Study):
                 # A study naming a withheld record in its prose is withheld too.
                 for text in (record.summary, record.rationale, record.body, record.conclusion):
