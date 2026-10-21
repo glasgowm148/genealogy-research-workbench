@@ -40,6 +40,7 @@ CHRONOLOGY_LANES = 30  # people drawn in a study's chronology; the rest are coun
 CHRONOLOGY_BYTES = 36_000  # lanes stop once the drawing reaches this, so a busy study page stays small
 PLACE_LIST_LIMIT = 200  # people, sub-places, surnames or studies listed on a place's page; the rest are counted
 PLACE_PEOPLE_BYTES = 40_000  # a place's people list also stops here, and each of its other lists at a third of it
+STATISTICS_ROWS = 25  # rows per statistics table; the rest are counted, so the page stays small on a large site
 UNPLACED_REGION = "Places without a broader jurisdiction"
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
@@ -49,6 +50,7 @@ ROUTES = {
     "findings.html": ("findings", "Latest findings"), "compare.html": ("compare", "Compare"),
     "connections.html": ("connections", "Connections"), "evidence.html": ("evidence", "Reading the evidence"),
     "sitemap.html": ("sitemap", "Site index"),
+    "statistics.html": ("statistics", "Statistics"),
 }
 # Pages built only when the project configures them; still owned when switched
 # off, so a rebuild removes them.
@@ -1476,6 +1478,106 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                          if studies_by_subject.get(pid) else '<p class="empty-state">No public studies mention this place.</p>')
         pages[url] = content
         extra_titles[url] = ("map", str(p["name"]))
+    def statistics() -> str:
+        """Counts of the public projection only: a withheld person or record is never counted, so a table
+        describes what is published. A table with nothing to count is left out."""
+        def recorded(pid: str, kinds: tuple[str, ...], key: str) -> dict[str, Any] | None:
+            # The first event of the first kind recorded with a date (or place), as the dossier's opening sentence reads it.
+            return next((e for kind in kinds for e in events_by_person[pid] if str(e["kind"]).casefold() == kind and e.get(key)), None)
+
+        def table(key: str, heading: str, columns: tuple[str, ...], rows: list[tuple[tuple[str, ...], int]], note: str = "", level: int = 2) -> str:
+            """``rows`` are (escaped cells, count) in reading order; bars are scaled to the largest count."""
+            if not rows:
+                return ""
+            top = max(n for _, n in rows) or 1  # a table of zero counts still draws
+            body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in cells) + f'<td class="count">{n:,}'
+                           f'<div class="bar" style="--w:{max(1, round(n * 100 / top))}%" aria-hidden="true"></div></td></tr>' for cells, n in rows[:STATISTICS_ROWS])
+            more = f'<p class="meta">{len(rows) - STATISTICS_ROWS:,} more not listed.</p>' if len(rows) > STATISTICS_ROWS else ""
+            return (f'<h{level} id="{key}">{_text(heading)}</h{level}>' + (f'<p class="meta">{note}</p>' if note else "")
+                    + f'<div class="table-wrap"><table class="statistics" aria-labelledby="{key}"><thead><tr>' + "".join(f'<th scope="col">{_text(c)}</th>' for c in columns)
+                    + f"</tr></thead><tbody>{body}</tbody></table></div>" + more)
+
+        ranked = lambda counts: sorted(counts.items(), key=lambda item: (-item[1], str(item[0]).casefold()))
+        region_of = {p["id"]: region for region, members in regions.items() for p in members}
+        region_link = lambda region: f'<a href="{region_pages[region][0] if compact_places else "places.html#" + _anchor("region:" + region)}">{_text(region)}</a>'
+        births = {pid: recorded(pid, ("birth", "baptism", "christening"), "date") for pid in people}
+        centuries = Counter(year // 100 * 100 for e in births.values() if e and (year := year_of(e["date"])))
+        undated = len(people) - sum(centuries.values())
+        birth_region = {pid: region_of.get((recorded(pid, ("birth", "baptism", "christening"), "place_id") or {}).get("place_id")) for pid in people}
+        death_region = {pid: region_of.get((recorded(pid, ("death", "burial"), "place_id") or {}).get("place_id")) for pid in people}
+        born_in = Counter(region for region in birth_region.values() if region)
+        if set(born_in) <= {UNPLACED_REGION}:  # no birthplace names a broader jurisdiction: nothing to group
+            born_in.clear()
+
+        def forename(pid: str) -> str:
+            """The first forename of the name the site shows: its recorded given name, else the name without its surname."""
+            n = next((n for n in people[pid].get("names", []) if n.get("value")), {})
+            text = n.get("given") or re.sub(r"/[^/]*/", " ", str(n.get("value") or ""))
+            if not n.get("given") and n.get("surname") and text.rstrip().endswith(n["surname"]):
+                text = text.rstrip()[:-len(n["surname"])]
+            word = next(iter(text.split()), "")
+            return word if any(c.isalpha() for c in word) else ""
+        given = Counter(name for pid in people if (name := forename(pid)))
+        surnames = Counter(name for pid in people if (name := canonical_surname(pid)))
+        families = Counter({pid: n for pid in people if (n := len({r["subject_id"] for r in children_of[pid] if not rejected(r)}))})
+        place_events = Counter({plid: len(rows) for plid, rows in events_by_place.items() if plid in places})
+        moves = Counter((birth_region[pid], death_region[pid]) for pid in people
+                        if UNPLACED_REGION not in (birth_region[pid], death_region[pid]) and birth_region[pid] and death_region[pid])
+        stayed = sum(n for (born, died), n in moves.items() if born == died)
+        moves = Counter({pair: n for pair, n in moves.items() if pair[0] != pair[1]})
+        kinds: Counter[str] = Counter()
+        kind_label: dict[str, str] = {}
+        for row in project["events"]:
+            key = str(row["kind"]).casefold()
+            kinds[key] += 1
+            kind_label.setdefault(key, str(row["kind"])[:1].upper() + str(row["kind"])[1:])
+        claim_status = Counter(str(c.get("status") or "asserted") for c in project["claims"] if c.get("predicate") != "sex")
+        links: Counter[tuple[str, str]] = Counter()
+        for row in project["relationships"]:
+            confidence = str(row.get("confidence") or "unknown")
+            graded = grade_label(row, config.grades)
+            links[(f'grade-{row["grade"]}' if graded else "confidence-tree-link" if confidence == "unknown" else f"confidence-{confidence}",
+                   graded or confidence_label(confidence, relationship=True))] += 1
+        finding_years = Counter(str(year_of(f.get("recorded_on")) or "Undated") for f in project["findings"])
+        guide = lambda anchor, words: f'<a href="evidence.html#{_text(anchor)}">{_text(words)}</a>'
+        people_tables = "".join((
+            table("birth-centuries", "Births by century", ("Century", "People"),
+                  [((f"{c}–{c + 99}",), n) for c, n in sorted(centuries.items())],
+                  "From each person's recorded birth year, or baptism year when no birth is dated."
+                  + (f" {undated:,} {'person has' if undated == 1 else 'people have'} no recorded year." if centuries and undated else "")),
+            table("birth-regions", "Births by country or region", ("Country or region", "People"),
+                  [((region_link(r),), born_in[r]) for r in sorted(born_in, key=lambda r: (r == UNPLACED_REGION, -born_in[r], r.casefold()))],
+                  "The last part of each birthplace name as recorded, as on the places page."),
+            table("given-names", "Most common given names", ("Given name", "People"), [((_text(name),), n) for name, n in ranked(given)],
+                  "The first forename of each person's main recorded name."),
+            table("surnames", "Most common surnames", ("Surname", "People"),
+                  [((f'<a href="catalogue.html?surname={_text(quote(name))}">{_text(name)}</a>',), n) for name, n in ranked(surnames)],
+                  "Each person's first recorded surname" + ("; spellings this project lists as variants of one surname are counted under it." if name_variants else ".")),
+            table("families", "Largest families", ("Parent", "Recorded children"),
+                  [((ref(pid),), n) for pid, n in sorted(families.items(), key=lambda item: (-item[1], person_name(item[0]).casefold(), item[0]))],
+                  "Parents with the most recorded children; links assessed as disproved are not counted."),
+            table("places", "Most recorded places", ("Place", "Events"),
+                  [((ref(plid, "", places[plid]["name"]),), n) for plid, n in sorted(place_events.items(), key=lambda item: (-item[1], str(places[item[0]]["name"]).casefold(), item[0]))]),
+            table("migrations", "From birth to death", ("Born in", "Died in", "People"),
+                  [((region_link(born), region_link(died)), n) for (born, died), n in ranked(moves)],
+                  "People whose recorded birth (or baptism) and death (or burial) places are in different countries or regions."
+                  + (f" {stayed:,} {'person was' if stayed == 1 else 'people were'} born and died in the same one." if stayed else "")),
+            table("event-kinds", "Events by kind", ("Kind", "Events"), [((_text(kind_label[k]),), n) for k, n in ranked(kinds)]),
+        ))
+        research_tables = "".join((
+            table("claim-status", "Claims by status", ("Status", "Claims"),
+                  [((guide(status_anchor(s), status_label(s)),), n) for s, n in ranked(claim_status)], level=3),
+            table("relationship-confidence", "Family links by assessment", ("Assessment", "Links"),
+                  [((guide(anchor, words),), n) for (anchor, words), n in sorted(links.items(), key=lambda item: (-item[1], item[0][1].casefold()))], level=3),
+            table("findings-by-year", "Findings by year recorded", ("Year", "Findings"),
+                  [((_text(year),), n) for year, n in sorted(finding_years.items(), key=lambda item: (item[0] == "Undated", -int(item[0]) if item[0].isdigit() else 0))], level=3),
+        ))
+        return ('<h1>Statistics</h1><p>Counts of the public records on this site: '
+                f'{len(people):,} {"person" if len(people) == 1 else "people"}, {len(project["events"]):,} events and {len(project["places"]):,} places. '
+                'People and records withheld for privacy are not counted, so these figures describe what is published, not everyone researched.</p>'
+                + (people_tables or '<p class="empty-state">No public people are available.</p>')
+                + ('<h2 id="research-progress">Research progress</h2>' + research_tables if research_tables else ""))
+    pages["statistics.html"] = statistics()
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:

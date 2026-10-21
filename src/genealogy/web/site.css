@@ -54,3 +54,5 @@
 .evidence-guide dt{grid-column:1}.evidence-guide dd{grid-column:2}.evidence-guide dd.guide-basis,.evidence-guide dd.guide-example{margin-top:-.35rem;color:var(--muted);font-size:.95rem}
 @media(max-width:640px){.evidence-guide dt,.evidence-guide dd{grid-column:1}}
 .catalogue-filters{margin:-.4rem 0 1rem;background:var(--surface)}.catalogue-filters>.toolbar{margin:.8rem 0 0}.catalogue-filters fieldset{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;border:0;margin:0;padding:0}.catalogue-filters legend{font-size:.76rem;color:var(--muted);padding:0;margin-bottom:.3rem}.toolbar label.check{display:flex;flex:0 0 auto;min-width:0;align-items:center;gap:.4rem;font-size:.87rem;color:var(--ink)}.toolbar label.check input{margin:0;width:1.05rem;height:1.05rem;accent-color:var(--forest)}
+/* Statistics: the count is the information; the bar beside it only shows its size against the largest row. */
+.statistics td{padding:.45rem .85rem}.statistics td.count{width:55%;font-variant-numeric:tabular-nums}.statistics .bar{width:var(--w);height:.4rem;margin-top:.25rem;background:var(--forest);border-radius:2px}

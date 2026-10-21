@@ -641,3 +641,36 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.locator('.guide-example a').first.click()
         self.page.wait_for_url('**/people/*.html#family-heading')
         self.assertEqual('Ada Fable', self.page.locator('h1').inner_text())
+
+    def test_statistics_page_reads_without_javascript_and_passes_axe(self):
+        from test_statistics import config as statistics_config, statistics_case
+        build_site(statistics_case(), statistics_config(), self.root / 'statistics')
+        sites = {'statistics': 11, 'nested': None, 'large': None}
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8') if os.environ.get('GENEALOGY_AXE_PATH') else None
+        for width in (1440, 390):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            for site, tables in sites.items():
+                with self.subTest(width=width, site=site):
+                    self.page.goto(urljoin(self.base, f'../{site}/statistics.html'), wait_until='networkidle')
+                    self.assertEqual('Statistics', self.page.locator('h1').inner_text())
+                    if tables:
+                        self.assertEqual(tables, self.page.locator('table.statistics').count())
+                    # Every bar is drawn, at its share of the largest row, inside the page width.
+                    bar = self.page.locator('table.statistics .bar').first
+                    self.assertGreater(bar.bounding_box()['width'], 0)
+                    self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
+                    if axe:
+                        self.page.add_script_tag(content=axe)
+                        violations = self.page.evaluate(
+                            "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                            "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                            ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                        self.assertEqual([], violations)
+        nojs = self.browser.new_context(java_script_enabled=False)
+        try:
+            page = nojs.new_page()
+            page.goto(urljoin(self.base, '../statistics/statistics.html'))
+            self.assertEqual(11, page.locator('table.statistics').count())
+            self.assertIn('Tobin Fable', page.locator('#families + p + .table-wrap').inner_text())
+        finally:
+            nojs.close()
