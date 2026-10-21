@@ -18,7 +18,7 @@ Install a built wheel in a separate environment to test the actual distribution:
 
 ```sh
 python3 -m venv /tmp/workbench-wheel
-/tmp/workbench-wheel/bin/python -m pip install dist/genealogy_research_workbench-0.6.0-py3-none-any.whl
+/tmp/workbench-wheel/bin/python -m pip install dist/genealogy_research_workbench-0.7.0-py3-none-any.whl
 cd /tmp
 /tmp/workbench-wheel/bin/genealogy init wheel-demo --name "Wheel demonstration"
 /tmp/workbench-wheel/bin/genealogy --project wheel-demo build

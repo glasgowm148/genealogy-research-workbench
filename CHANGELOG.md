@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 21 October 2026
 
 - Old person links keep working after a merge or an ID change: list the IDs a person replaced in the new `Person.former_ids`, and the site writes a small page at each old address that sends readers to the current dossier (marked `noindex`, with a canonical link when `site.base_url` is set), plus `data/redirects.json` and, with `site.base_url`, a `_redirects` file of 301 rules for hosts that read one. Moved pages stay out of `data/routes.json` and `sitemap.xml`, a rebuild removes those no longer needed, and a withheld person's former IDs produce nothing. Validation rejects a former ID that is a current record ID or is listed by two people, and a reference that uses a former ID names the ID to use instead. `import --update` keeps the former IDs recorded on an imported person, and `check-links` now checks `<meta http-equiv="refresh">` targets. See [Record a merge or a changed ID](docs/research.md#record-a-merge-or-a-changed-id).
 - A recorded sibling link (`kind: "sibling"`, `half_sibling` and similar) now appears under **Siblings** on both dossiers with its own label, merged with any sibling found through shared parents, and the tree's family view draws it. A disproved link is listed only under **All recorded relationships**; the GEDCOM export still has no sibling record. See [Assess a relationship](docs/research.md#assess-a-relationship).
