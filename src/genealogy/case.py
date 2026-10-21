@@ -153,7 +153,7 @@ def validate_case(case: ResearchCase) -> list[str]:
         for record in records
         if isinstance(record, Record) and isinstance(record.id, str) and record.id
     }
-    references: dict[str, dict[str, str | None]] = {
+    references: dict[str, dict[str, str | tuple[str, ...] | None]] = {
         "Event": {"place_id": "Place", "participant_ids": "Person"},
         "Person": {"event_ids": "Event"},
         "Place": {"parent_id": "Place"},
@@ -163,7 +163,8 @@ def validate_case(case: ResearchCase) -> list[str]:
         "Evidence": {"claim_id": "Claim", "citation_id": "Citation"},
         "Hypothesis": {"related_ids": None, "evidence_ids": "Evidence"},
         "ResearchQuestion": {"related_ids": None},
-        "Finding": {"related_ids": None, "evidence_ids": "Evidence", "citation_ids": "Citation"},
+        "Finding": {"related_ids": None, "evidence_ids": "Evidence", "citation_ids": "Citation",
+                    "changes[].record_id": ("Relationship", "Claim")},
         "Study": {"related_ids": None},
         "ImportProvenance": {"entity_ids": None},
     }
@@ -174,13 +175,12 @@ def validate_case(case: ResearchCase) -> list[str]:
             if not isinstance(record, Record):
                 continue
             for reference_field, expected_kind in references.get(kind, {}).items():
-                value = getattr(record, reference_field, None)
-                values = value if isinstance(value, list) else [value]
-                for reference in values:
+                expected = (expected_kind,) if isinstance(expected_kind, str) else expected_kind
+                for reference in reference_values(record, reference_field):
                     if reference and reference not in seen:
                         errors.append(f"{record.id}.{reference_field} references missing record: {reference}")
-                    elif reference and expected_kind and id_kinds.get(reference) != expected_kind:
-                        errors.append(f"{record.id}.{reference_field} must reference a {expected_kind}: {reference}")
+                    elif reference and expected and id_kinds.get(reference) not in expected:
+                        errors.append(f"{record.id}.{reference_field} must reference a {' or '.join(expected)}: {reference}")
             if kind == "Study":
                 for text_field in ("summary", "rationale", "body", "conclusion"):
                     text = getattr(record, text_field, None)
@@ -227,7 +227,18 @@ def validate_case(case: ResearchCase) -> list[str]:
     return errors
 
 
+def reference_values(record: Record, reference_field: str) -> list[Any]:
+    """The ids a reference field holds; ``changes[].record_id`` reads that key of each listed object."""
+    name, _, key = reference_field.partition("[].")
+    value = getattr(record, name, None)
+    values = value if isinstance(value, list) else [value]
+    if key:
+        return [item[key] for item in values if isinstance(item, dict) and isinstance(item.get(key), str)]
+    return values
+
+
 GRADE_KEY = r"[a-z0-9][a-z0-9_-]*"
+CHANGE_KEYS = {"record_id", "before", "after", "note"}
 
 
 def grade_errors(case: ResearchCase, grades: dict[str, dict[str, Any]]) -> list[str]:
@@ -241,6 +252,28 @@ def grade_errors(case: ResearchCase, grades: dict[str, dict[str, Any]]) -> list[
             errors.append(f"{record.id}.grade is not defined under [grades] in genealogy.toml: {grade}")
         elif str(record.confidence) != grades[grade]["confidence"]:
             errors.append(f"{record.id}.confidence must be {grades[grade]['confidence']} for grade {grade}")
+    # A finding's change names a value this project knows, and the latest
+    # change to a record (by recorded_on; undated first, ties to the one
+    # recorded last) must leave it where it now stands.
+    assessed = {record.id: record for kind in ("Relationship", "Claim") for record in case.records(kind)}
+    latest: dict[str, tuple[str, Finding, int, dict[str, Any]]] = {}
+    for finding in case.records(Finding):
+        for index, change in enumerate(getattr(finding, "changes", None) or []):
+            if not isinstance(change, dict):
+                continue
+            for side in ("before", "after"):
+                value = change.get(side)
+                if isinstance(value, str) and value not in grades and value not in tuple(Confidence):
+                    errors.append(f"{finding.id}.changes[{index}].{side} is neither a confidence value nor a grade defined under [grades]: {value}")
+            rid = change.get("record_id")
+            when = finding.recorded_on if isinstance(finding.recorded_on, str) else ""
+            if isinstance(rid, str) and rid in assessed and (rid not in latest or when >= latest[rid][0]):
+                latest[rid] = (when, finding, index, change)
+    for rid, (_, finding, index, change) in latest.items():
+        current = assessed[rid].grade or str(assessed[rid].confidence)
+        if change.get("after") != current:
+            errors.append(f"{finding.id}.changes[{index}].after is {change.get('after')}, but {rid} is now {current}; "
+                          "the latest change to a record must end at its current grade or confidence")
     return errors
 
 
@@ -344,6 +377,21 @@ def _validate_record_fields(record: Record) -> list[str]:
         errors.append(f"{record.id}.estimate must be a whole percentage from 1 to 99")
     if isinstance(record, Place) and record.precision is not None and record.precision not in PLACE_PRECISIONS:
         errors.append(f"{record.id}.precision must be one of: {', '.join(PLACE_PRECISIONS)}")
+    if isinstance(record, Finding):
+        changes = record.changes
+        if not isinstance(changes, list) or not all(isinstance(item, dict) for item in changes):
+            errors.append(f"{record.id}.changes must be a list of objects")
+        else:
+            for index, change in enumerate(changes):
+                if set(change) - CHANGE_KEYS:
+                    errors.append(f"{record.id}.changes[{index}] has unknown keys: {', '.join(sorted(set(change) - CHANGE_KEYS))}")
+                if not (_string(change.get("record_id")) and change["record_id"]):
+                    errors.append(f"{record.id}.changes[{index}].record_id must be a non-empty id")
+                if not (_string(change.get("after")) and change["after"]):
+                    errors.append(f"{record.id}.changes[{index}].after must be a confidence value or grade key")
+                for key in ("before", "note"):
+                    if not _string(change.get(key), optional=True):
+                        errors.append(f"{record.id}.changes[{index}].{key} must be a string or null")
     if isinstance(record, ImportProvenance):
         if not isinstance(record.observations, list) or not all(isinstance(item, dict) for item in record.observations):
             errors.append(f"{record.id}.observations must be a list of objects")

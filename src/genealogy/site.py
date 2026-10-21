@@ -18,7 +18,7 @@ from .config import ProjectConfig, site_contact
 from .dates import date_sort_key, year_of
 from .feeds import FeedEntry, atom_feed
 from .markup import references as prose_references, render as render_prose
-from .labels import child_role, confidence_label, grade_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
+from .labels import assessment_label, child_role, confidence_label, grade_label, guide_entries, parent_role, relationship_label, status_anchor, status_label
 from .maps import geojson
 
 # Lists longer than this are not written out in full: the interactive views
@@ -241,6 +241,14 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         for row in project[collection]:
             for rid in set(row.get("related_ids", [])):
                 research_by_subject[rid].append(row)
+    # The findings that reassessed each relationship or claim, oldest first
+    # (undated first, then in case order), as the latest-change check reads them.
+    relationships_by_id = {r["id"]: r for r in project["relationships"]}
+    claims_by_id = {c["id"]: c for c in project["claims"]}
+    changes_of: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
+    for row in sorted(project["findings"], key=lambda f: str(f.get("recorded_on") or "")):
+        for change in row.get("changes", []):
+            changes_of[change["record_id"]].append((row, change))
     # A long findings log keeps each finding on a stable archive page, numbered
     # from the earliest; on a large site that page, not the notebook, is its address.
     dated = sorted((f for f in project["findings"] if f.get("recorded_on")), key=lambda f: (f["recorded_on"], f["id"]), reverse=True)
@@ -341,6 +349,28 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         route = record_routes.get(rid)
         return f'<a href="{prefix}{_text(route)}">{_text(title)}</a>' if route else _text(title)
 
+    def shift(change: dict[str, Any]) -> str:
+        """E.g. "Possible → Documented", in the project's own grade wording where it has one."""
+        after = assessment_label(change["after"], config.grades)
+        return f'{assessment_label(change["before"], config.grades)} → {after}' if change.get("before") else f"Recorded as {after}"
+
+    def change_notes(rid: str, prefix: str = "") -> str:
+        """Beside a link or claim: each finding that changed its assessment, linked to that finding."""
+        notes = []
+        for finding, change in changes_of.get(rid, []):
+            after = assessment_label(change["after"], config.grades)
+            words = f'Changed from {assessment_label(change["before"], config.grades)} to {after}' if change.get("before") else f"Recorded as {after}"
+            words += f', {finding["recorded_on"]}' if finding.get("recorded_on") else ""
+            notes.append(f'<p class="meta assessment-change"><a href="{prefix}{_text(record_routes[finding["id"]])}">{_text(words)}</a></p>')
+        return "".join(notes)
+
+    def changed_label(rid: str) -> str:
+        if rid in relationships_by_id:
+            r = relationships_by_id[rid]
+            return f'{person_name(r["subject_id"])} — {r["kind"]} → {person_name(r["object_id"])}'
+        c = claims_by_id.get(rid, {})
+        return f'{c.get("predicate", "")}: {c.get("value", "")}' if c else rid
+
     def empty(items: list[str], message: str = "No public records recorded.") -> str:
         return '<ul class="record-list">' + "".join(items) + "</ul>" if items else f'<p class="empty-state">{_text(message)}</p>'
 
@@ -384,6 +414,11 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 cited.append(f"<li>{ref(cid, prefix, label)}</li>")
         if cited:
             parts.append('<p class="meta">Records:</p><ul class="finding-records">' + "".join(cited) + "</ul>")
+        changed = [f'<li>{ref(c["record_id"], prefix, changed_label(c["record_id"]))} <span class="badge change" data-after="{_text(c["after"])}"'
+                   + (f' data-before="{_text(c["before"])}"' if c.get("before") else "") + f'>{_text(shift(c))}</span>'
+                   + (f' <span class="meta">{_text(c["note"])}</span>' if c.get("note") else "") + "</li>" for c in row.get("changes", [])]
+        if changed:
+            parts.append('<p class="meta">Changed:</p><ul class="finding-changes">' + "".join(changed) + "</ul>")
         return "".join(parts)
 
     def question_next(row: dict[str, Any], prefix: str = "") -> str:
@@ -403,11 +438,11 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
 
     def relationship(row: dict[str, Any], prefix: str = "") -> str:
         role = f' <span class="meta">({_text(row["pedigree"])})</span>' if row.get("pedigree") else ""
-        return f'<li id="{_anchor(row["id"])}">{ref(row["subject_id"], prefix)} — {_text(row["kind"])}{role} → {ref(row["object_id"], prefix)}{metadata(row, prefix, relationship=True)}' + ("<p>Claims: " + ", ".join(ref(cid, prefix) for cid in row["claim_ids"]) + "</p>" if row.get("claim_ids") else "") + "</li>"
+        return f'<li id="{_anchor(row["id"])}">{ref(row["subject_id"], prefix)} — {_text(row["kind"])}{role} → {ref(row["object_id"], prefix)}{metadata(row, prefix, relationship=True)}{change_notes(row["id"], prefix)}' + ("<p>Claims: " + ", ".join(ref(cid, prefix) for cid in row["claim_ids"]) + "</p>" if row.get("claim_ids") else "") + "</li>"
 
     def claim(row: dict[str, Any], prefix: str = "") -> str:
         supporting = evidence_by_claim[row["id"]]
-        parts = [f'<article class="record-card card" id="{_anchor(row["id"])}"><h3>{_text(row["predicate"])}: {_text(row["value"])}</h3>{metadata(row, prefix)}', f'<p>Subject: {ref(row["subject_id"], prefix)}</p>']
+        parts = [f'<article class="record-card card" id="{_anchor(row["id"])}"><h3>{_text(row["predicate"])}: {_text(row["value"])}</h3>{metadata(row, prefix)}{change_notes(row["id"], prefix)}', f'<p>Subject: {ref(row["subject_id"], prefix)}</p>']
         if row.get("rationale"):
             parts.append(f'<p>{_text(row["rationale"])}</p>')
         # One row per assessment, in the claim's citation order; a cited record
@@ -436,7 +471,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def person_item(pid: str, role: str, row: dict[str, Any] | None, prefix: str, extra: str = "") -> str:
         span = lifespan(pid)
         return (f'<li><span class="family-role">{_text(role)}</span> {ref(pid, prefix)}' + (f' <span class="meta">{_text(span)}</span>' if span else "")
-                + (metadata(row, prefix, relationship=True) if row else "") + extra + "</li>")
+                + (metadata(row, prefix, relationship=True) + change_notes(row["id"], prefix) if row else "") + extra + "</li>")
 
     def family(pid: str) -> str:
         """Parents, partners, children and siblings, each with its own recorded label."""
@@ -998,7 +1033,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             self_url=base_url + "findings.xml", author=config.name,
             updated=max((f["recorded_on"] for f in dated), default="1970-01-01"),
             entries=[FeedEntry(id=base_url + record_routes[f["id"]], title=f["conclusion"][:150], link=base_url + record_routes[f["id"]],
-                               updated=f["recorded_on"], summary=f["conclusion"] + (f' Limits: {f["limitations"]}' if f.get("limitations") else ""))
+                               updated=f["recorded_on"], summary=f["conclusion"] + (f' Limits: {f["limitations"]}' if f.get("limitations") else "")
+                               + (" Changed: " + "; ".join(f'{changed_label(c["record_id"])}: {shift(c)}' for c in f["changes"]) + "." if f.get("changes") else ""))
                      for f in dated[:50]])
     branding = config.raw.get("site", {})
     description = branding.get("description", "A public collection of people, records and research.") if isinstance(branding, dict) else "A public collection of people, records and research."

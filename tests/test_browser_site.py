@@ -366,6 +366,24 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual(1, self.page.locator('.tree-node[aria-label="Focus on Bram Fable"]').count())
         self.assertEqual(0, self.page.locator('.tree-node[aria-label="Focus on Nell Fable"]').count())
 
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'set GENEALOGY_AXE_PATH to an axe-core axe.min.js')
+    def test_assessment_changes_pass_axe(self):
+        from test_finding_changes import case as changes_case, config as changes_config, history
+        (self.root / 'changes-project').mkdir(exist_ok=True)
+        build_site(changes_case(history()), changes_config(self.root / 'changes-project'), self.root / 'changes')
+        axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
+        dossier = next(p for p in (self.root / 'changes' / 'people').glob('*.html') if 'data-person-id="ada"' in p.read_text())
+        for route in (f'people/{dossier.name}', 'findings.html', 'research.html'):
+            with self.subTest(route=route):
+                self.page.goto(urljoin(self.base, f'../changes/{route}'), wait_until='networkidle')
+                self.assertGreater(self.page.locator('.assessment-change, .badge.change').count(), 0)
+                self.page.add_script_tag(content=axe)
+                violations = self.page.evaluate(
+                    "async () => (await axe.run(document, {runOnly: {type: 'tag', values: "
+                    "['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']}})).violations"
+                    ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
+                self.assertEqual([], violations)
+
     def test_map_controls_and_source_timeline_filters(self):
         self.page.goto(self.base + 'places.html')
         svg = self.page.locator('#map-output svg')

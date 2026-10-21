@@ -243,6 +243,9 @@ def parser() -> argparse.ArgumentParser:
                              help="a citation the finding rests on directly; repeat for several")
     add_finding.add_argument("--limitations", help="what the finding does not establish")
     add_finding.add_argument("--kind", help="your own grouping, e.g. vital, relationship or record")
+    add_finding.add_argument("--change", action="append", default=[], metavar="RECORD_ID:BEFORE:AFTER",
+                             help="a relationship or claim this finding reassessed, e.g. ada-parent:possible:documented "
+                                  "(confidence values or grade keys; leave BEFORE empty for a new link); repeat for several")
     add_finding.add_argument("--status", default="draft")
     add_finding.add_argument("--recorded-on", help="ISO date the finding was reached (YYYY, YYYY-MM or YYYY-MM-DD); dates the findings log")
     add_finding.add_argument("--confidence", choices=tuple(Confidence), default=Confidence.UNKNOWN)
@@ -294,7 +297,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             print("Research case is valid.")
             return 0
-        if errors:
+        # A finding may record the change that a record's edited grade now
+        # needs, so that command checks the case with the finding added instead.
+        if errors and args.command != "finding":
             raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
         if args.command == "import":
             from .importing import import_file
@@ -326,7 +331,13 @@ def main(argv: list[str] | None = None) -> int:
             service = ResearchService(CaseStore(
                 project_path(args.project, config.case_directory, "project.case_directory")
             ))
-            service.add_finding(case.id, Finding(
+            changes = []
+            for value in args.change:
+                parts = value.rsplit(":", 2)
+                if len(parts) != 3 or not parts[0] or not parts[2]:
+                    raise ValueError(f"--change must be RECORD_ID:BEFORE:AFTER: {value}")
+                changes.append({"record_id": parts[0], "before": parts[1] or None, "after": parts[2], "note": None})
+            finding = Finding(
                 id=args.finding_id,
                 conclusion=args.conclusion,
                 related_ids=args.related,
@@ -338,7 +349,13 @@ def main(argv: list[str] | None = None) -> int:
                 limitations=args.limitations,
                 citation_ids=args.cite,
                 kind=args.kind,
-            ))
+                changes=changes,
+            )
+            case.add(finding)
+            errors = validate_case(case) + grade_errors(case, config.grades)
+            if errors:
+                raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
+            service.add_finding(case.id, finding)
             print(f"Recorded finding {args.finding_id} in case {case.id}.")
             return 0
         service = ResearchService(CaseStore(

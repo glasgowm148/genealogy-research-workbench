@@ -281,6 +281,10 @@ class Finding(Record):
     citation_ids: list[str] = field(default_factory=list)
     # A project's own grouping, e.g. "vital", "relationship" or "record".
     kind: str | None = None
+    # The relationships and claims this finding reassessed, each
+    # {"record_id", "before", "after", "note"}: before and after are confidence
+    # values or project grade keys; before is None for a newly recorded link.
+    changes: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

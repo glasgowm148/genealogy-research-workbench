@@ -15,7 +15,7 @@ from pathlib import Path
 import tempfile
 from typing import Any, Iterable
 
-from .case import ResearchCase, validate_case
+from .case import ResearchCase, reference_values, validate_case
 from .models import Claim, Evidence, Finding, Hypothesis, Record, ResearchQuestion
 from .research import EvidenceCompleteness, UnresolvedWork
 
@@ -113,6 +113,7 @@ def _references(record: Record) -> Iterable[tuple[str, str]]:
             yield field, value
         elif isinstance(value, list):
             yield from ((field, item) for item in value if isinstance(item, str))
+    yield from (("changes[].record_id", item) for item in reference_values(record, "changes[].record_id"))
 
 
 def _json(value: Any) -> str:

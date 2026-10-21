@@ -53,6 +53,11 @@ genealogy --project my-family finding add finding:parentage \
 - `--limitations` says what the finding does not establish. It is shown beside the conclusion, never merged into it.
 - `--cite` links a record the finding rests on directly, when there is no claim-level evidence. Repeat it for several. A finding that cites a private or restricted record is withheld from the site, like any record that depends on one.
 - `--kind` is your own grouping, such as `vital`, `relationship` or `record`, shown as a label.
+- `--change RECORD_ID:BEFORE:AFTER` records that this finding reassessed a relationship or claim, for example `--change rel:ada-parent:possible:documented`. BEFORE and AFTER are confidence values or [your own grade](#use-your-own-grades) keys; leave BEFORE empty (`rel:ada-parent::probable`) for a link the finding added. Repeat it for several. In the case JSON each change is `{"record_id", "before", "after", "note"}`, and `note` can say briefly what moved it.
+
+A change keeps the assessment's history beside the record: the dossier's family row, or the claim, reads "Changed from Possible to Documented, 2026-09-08", linked to the finding, with your grade's wording where the value is a grade. The findings log, the research notebook and the Atom feed show each change as "Possible → Documented". A finding that changed a private or withheld link or claim is withheld with it.
+
+Edit the record first, then record the finding. `genealogy validate` and every build check that the latest change to a record (by `--recorded-on`; undated findings count as the earliest, and on the same date the finding recorded last wins) ends at the record's current `grade`, or its `confidence` when it has no grade. `finding add` checks the case with the new finding, so it can record the change that an edited record now needs.
 
 Use real IDs already in the selected case; validation rejects missing references. Confidence values are `documented`, `probable`, `possible`, `disproved`, and `unknown`. A finding’s confidence does not automatically change a relationship. Preserve alternative hypotheses and record what could change the assessment.
 

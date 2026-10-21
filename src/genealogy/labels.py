@@ -49,6 +49,11 @@ def grade_label(row: Mapping[str, Any], grades: Mapping[str, Mapping[str, str]] 
     return str(grades[grade]["label"]) if grades and grade in grades else None
 
 
+def assessment_label(value: Any, grades: Mapping[str, Mapping[str, str]] | None) -> str:
+    """A finding's before or after value: the project's grade wording, else the standard one."""
+    return grade_label({"grade": value}, grades) or confidence_label(value)
+
+
 def relationship_label(row: Mapping[str, Any], grades: Mapping[str, Mapping[str, str]] | None = None) -> str:
     """E.g. "Unassessed tree link · tree-marked uncertain"."""
     parts = [grade_label(row, grades) or confidence_label(row.get("confidence"), relationship=True)]
