@@ -68,7 +68,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 Check these pages:
 
 - **People:** one dossier per public person, with family, events, sources and labels such as "Unassessed tree link". **Reading the evidence** explains every label.
-- **Families & branches:** surname groups and connected families.
+- **Families & branches:** surname groups and connected families. If one family is split across spellings (Fable, Fabel), [group the spellings](research.md#group-spellings-of-a-surname) in `genealogy.toml`.
 - **Places:** countries and regions, and a map of the coordinates your export supplied.
 - **Site index and downloads:** the public JSON, CSV, GeoJSON and GEDCOM files contain only what the pages show.
 

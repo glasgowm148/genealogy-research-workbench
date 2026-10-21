@@ -95,6 +95,8 @@ class ProjectConfig:
     # A project's own confidence grades, in display order: key -> {label,
     # meaning, confidence}. ``confidence`` is the standard grade it counts as.
     grades: dict[str, dict[str, str]] = field(default_factory=dict)
+    # ``[names] variants``: canonical surname -> other spellings found in records.
+    names: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -116,6 +118,7 @@ class ProjectConfig:
             research=_table(data, "research"),
             paths=_table(data, "paths"),
             grades=_table(data, "grades"),
+            names=_table(data, "names"),
             raw=data,
         )
         config.validate()
@@ -156,6 +159,32 @@ class ProjectConfig:
             if grade.get("confidence") not in {c.value for c in Confidence}:
                 raise ValueError(f"{setting}.confidence must be one of: {', '.join(c.value for c in Confidence)}")
 
+        unknown = set(self.names) - {"variants"}
+        if unknown:
+            raise ValueError(f"names has unknown settings: {', '.join(sorted(unknown))}")
+        self.name_variants  # validates [names.variants]
+
+    @property
+    def name_variants(self) -> dict[str, str]:
+        """Every listed spelling, canonical ones included, casefolded -> canonical surname."""
+        variants = self.names.get("variants", {})
+        if not isinstance(variants, dict):
+            raise ValueError("[names.variants] must be a table")
+        folded: dict[str, str] = {}
+        for canonical, spellings in variants.items():
+            setting = f"names.variants.{canonical}"
+            if not canonical.strip():
+                raise ValueError("names.variants: a canonical surname must be non-empty")
+            if not isinstance(spellings, list) or not all(isinstance(s, str) and s.strip() for s in spellings):
+                raise ValueError(f"{setting} must be a list of non-empty strings")
+            # One spelling, in any case, belongs to one surname only; otherwise
+            # the grouping would depend on the order of genealogy.toml.
+            for spelling in (canonical, *spellings):
+                owner = folded.setdefault(spelling.casefold(), canonical)
+                if owner != canonical:
+                    raise ValueError(f"{setting}: {spelling!r} is already listed under {owner!r}")
+        return folded
+
     def to_dict(self) -> dict[str, Any]:
         # Preserve project-defined extension sections so a toolkit upgrade does
         # not erase a consumer project's configuration vocabulary.
@@ -171,4 +200,6 @@ class ProjectConfig:
                      "research": self.research, "paths": self.paths})
         if self.grades:
             data["grades"] = self.grades
+        if self.names:
+            data["names"] = self.names
         return data

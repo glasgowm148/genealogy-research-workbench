@@ -104,6 +104,19 @@ Then give a relationship, claim, evidence assessment or hypothesis a `grade` as 
 
 `genealogy validate` and every build reject a grade that `genealogy.toml` does not define, or whose `confidence` differs from the one the grade counts as.
 
+## Group spellings of a surname
+
+Records spell the same family name in different ways: Fable, Fabel, Faible. Keep each name as the record gives it, and list the spellings that belong together in `genealogy.toml`, under the spelling you want them grouped as:
+
+```toml
+[names.variants]
+Fable = ["Fabel", "Faible"]
+```
+
+On the site, **Families & branches** then has one Fable row covering everyone recorded under any of the three, with a line such as "Recorded as Fabel (3), Fable (1), Faible (1)"; its link opens the catalogue filtered to the whole group, and the catalogue's surname menu lists "Fable (5, incl. Fabel, Faible)". A catalogue search for any one spelling finds people recorded under the others. Dossiers, the catalogue's Surname column and the downloads keep each spelling as recorded.
+
+Case does not matter, and a spelling can belong to one surname only: `genealogy.toml` is rejected if a spelling is listed under two surnames, or if a surname you group under is also listed as another one's variant. The list is published with the site in `data/site-data.js`, except for a surname that no public person is recorded under, so list spellings, not people.
+
 ## Summarise a record
 
 A citation can carry an `abstract`: your reading of the record, in your own words. Write what the record states (who, what, when, where, and the relationships it names) and keep your interpretation for claims, evidence assessments and findings:

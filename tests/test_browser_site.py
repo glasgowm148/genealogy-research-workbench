@@ -13,6 +13,7 @@ from urllib.parse import urljoin, urlsplit
 
 from genealogy.case import CaseStore
 from genealogy.config import ProjectConfig
+from genealogy.models import AccessLevel, Event, LivingStatus, Name, Person
 from genealogy.server import UploadServer
 from genealogy.site import build_site
 
@@ -35,12 +36,19 @@ class BrowserSiteTests(unittest.TestCase):
         config = ProjectConfig.load(ROOT / 'examples/demo/genealogy.toml')
         # The demo sets no contact; a fictional one adds the corrections page and dossier links.
         config.raw.setdefault('site', {})['contact_email'] = 'corrections@example.invalid'
+        # A fictional spelling variant: Iona Hayle is grouped and found with the Hale family.
+        config.names = {'variants': {'Hale': ['Hayle', 'Hail']}}
         config.validate()
         case = CaseStore(ROOT / 'examples/demo/cases').load(config.default_case)
+        case.add_many(cls.variant_person('person:43', 'Iona Hayle', 'Hayle'))
         build_site(case, config, cls.root / 'nested')
         from test_scale import PEOPLE, large_case  # tests/ is on the path under unittest discovery
         cls.large_people = PEOPLE
         build_site(large_case(), ProjectConfig(name='Fictional large tree'), cls.root / 'large')
+        # The same on a large site, whose catalogue rows are built from the shared data.
+        variants = large_case()
+        variants.add_many(cls.variant_person('p9999', 'Odo Fabel', 'Fabel'))
+        build_site(variants, ProjectConfig(name='Fictional large variants', names={'variants': {'Fable': ['Fabel']}}), cls.root / 'large-variants')
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0),
             partial(QuietHandler, directory=str(cls.root)))
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -55,6 +63,12 @@ class BrowserSiteTests(unittest.TestCase):
         executable = os.environ.get('GENEALOGY_BROWSER_EXECUTABLE')
         cls.browser = cls.pw.chromium.launch(headless=True,
             **({'executable_path': executable} if executable else {}))
+
+    @staticmethod
+    def variant_person(pid, name, surname):
+        return [Person(pid, names=[Name(name, surname=surname)], living=LivingStatus.DECEASED, event_ids=[f'{pid}-birth'],
+                       sensitivity=AccessLevel.PUBLIC),
+                Event(f'{pid}-birth', 'birth', date='1851', participant_ids=[pid], sensitivity=AccessLevel.PUBLIC)]
 
     @classmethod
     def tearDownClass(cls):
@@ -115,7 +129,7 @@ class BrowserSiteTests(unittest.TestCase):
         try:
             page = nojs.new_page()
             page.goto(self.base + 'catalogue.html')
-            self.assertEqual(42, page.locator('[data-person-id]').count())
+            self.assertEqual(43, page.locator('[data-person-id]').count())  # the demo's 42 and Iona Hayle
             page.goto(self.base + 'sources.html')
             self.assertEqual(3, page.locator('[data-source-id]').count())
         finally:
@@ -282,7 +296,7 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.goto(self.base + 'catalogue.html')
         self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
         self.page.get_by_role('button', name='Next').click()
-        self.assertEqual(2, self.page.locator('[data-person-id]:visible').count())
+        self.assertEqual(3, self.page.locator('[data-person-id]:visible').count())  # 43 people, 40 a page
         self.page.get_by_role('searchbox', name='Search people').fill('Ada Alder')
         self.assertGreater(self.page.locator('[data-person-id]:visible').count(), 0)
         self.assertLess(self.page.locator('[data-person-id]:visible').count(), 42)
@@ -304,6 +318,43 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.locator('[data-connection-b]').select_option('person:02')
         self.assertIn('Ada Alder', self.page.locator('#connection-result').inner_text())
         self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
+
+    def test_surname_variants_group_the_filter_and_fold_the_search(self):
+        visible = self.page.locator('[data-person-id]:visible')
+        self.page.goto(self.base + 'branches.html')
+        row = self.page.locator('tr[data-surname="Hale"]')
+        self.assertIn('Recorded as Hale (4), Hayle (1)', row.inner_text())
+        self.assertEqual(0, self.page.locator('tr[data-surname="Hayle"]').count())
+        row.locator('a[href="catalogue.html?surname=Hale"]').click()
+        self.page.locator('.pagination').wait_for()
+        surname = self.page.get_by_label('Surname')
+        self.assertEqual('Hale', surname.input_value())
+        self.assertIn('Hale (5, incl. Hayle)', surname.locator('option').all_inner_texts())
+        self.assertEqual(5, visible.count())
+        iona = self.page.locator('[data-person-id="person:43"]')
+        self.assertTrue(iona.is_visible())
+        self.assertEqual('Hayle', iona.locator('td').nth(1).inner_text())  # shown as recorded
+        surname.select_option('')
+        for query in ('Iona Hale', 'Iona Hail', 'iona hayle'):  # any listed spelling finds her
+            self.page.get_by_role('searchbox', name='Search people').fill(query)
+            self.assertTrue(iona.is_visible(), query)
+        self.page.goto(self.base + 'catalogue.html?surname=Hayle')
+        self.page.locator('.pagination').wait_for()
+        self.assertEqual('Hale', self.page.get_by_label('Surname').input_value())
+        self.assertEqual(5, visible.count())
+
+        large = self.base.replace('/nested/', '/large-variants/')
+        everyone = self.large_people + 1
+        self.page.goto(large + 'catalogue.html?surname=Fabel', wait_until='networkidle')
+        surname = self.page.get_by_label('Surname')
+        self.assertEqual('Fable', surname.input_value())
+        self.assertEqual(['All surnames', f'Fable ({everyone}, incl. Fabel)'], surname.locator('option').all_inner_texts())
+        self.assertIn(f'{everyone:,} of {everyone:,} people', self.page.locator('.result-count').inner_text())
+        self.page.get_by_role('searchbox', name='Search people').fill('Odo Fable')
+        self.assertEqual(1, visible.count())
+        odo = self.page.locator('[data-person-id="p9999"]')
+        self.assertEqual('Fabel', odo.locator('td').nth(1).inner_text())
+        self.assertEqual('Fable', odo.get_attribute('data-surname'))
 
     def test_family_view_draws_recorded_siblings(self):
         from test_siblings import sibling_case

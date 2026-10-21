@@ -100,7 +100,8 @@ def _json(value: Any) -> str:
 
 
 def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_urls: dict[str, str] | None = None,
-                 grades: dict[str, dict[str, str]] | None = None, study_urls: dict[str, str] | None = None) -> dict[str, Any]:
+                 grades: dict[str, dict[str, str]] | None = None, study_urls: dict[str, str] | None = None,
+                 name_variants: dict[str, str] | None = None) -> dict[str, Any]:
     """The public records the interactive pages need, without empty values."""
     def slim(row: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
         out = {key: row[key] for key in fields if row.get(key) is not None and row.get(key) != [] and row.get(key) != ""}
@@ -116,6 +117,8 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
         data["site"]["study_urls"] = study_urls
     if grades:
         data["site"]["grades"] = {key: grade["label"] for key, grade in grades.items()}
+    if name_variants:
+        data["site"]["name_variants"] = name_variants
     return data
 
 
@@ -159,6 +162,11 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     routes = {**ROUTES, **({"corrections.html": OPTIONAL_ROUTES["corrections.html"]} if contact.keys() & {"email", "url"} else {})}
     directory = Path(directory)
     people = {p["id"]: p for p in project["people"]}
+    # Only the surname groups some public person is recorded under are
+    # published: a group listed for withheld people alone stays out of the data.
+    name_variants = config.name_variants
+    public_groups = {name_variants.get(str(n["surname"]).casefold()) for p in people.values() for n in p.get("names", []) if n.get("surname")}
+    name_variants = {spelling: canonical for spelling, canonical in name_variants.items() if canonical in public_groups}
     places = {p["id"]: p for p in project["places"]}
     sources = {s["id"]: s for s in project["sources"]}
     citations = {c["id"]: c for c in project["citations"]}
@@ -293,6 +301,11 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def surname(pid: str) -> str:
         p = people.get(pid, {})
         return next((n["surname"] for n in p.get("names", []) if n.get("surname")), "")
+
+    def canonical_surname(pid: str) -> str:
+        """The surname a person is grouped and filtered under: [names.variants] folds other spellings into one."""
+        recorded = surname(pid)
+        return name_variants.get(recorded.casefold(), recorded)
 
     def lifespan(pid: str) -> str:
         """Recorded birth/death years, e.g. "b. 1840 – d. 1908"; approximate years keep "c."."""
@@ -463,7 +476,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def catalogue_row(pid: str, prefix: str = "") -> str:
         summary = "; ".join(f'{e["kind"]}: {e.get("date") or "date unknown"}' for e in events_by_person[pid])
         span = lifespan(pid)
-        return (f'<tr data-person-id="{_text(pid)}" data-surname="{_text(surname(pid))}" data-search-text="{_text(person_name(pid) + " " + pid + " " + summary)}"><td>{ref(pid, prefix)}'
+        return (f'<tr data-person-id="{_text(pid)}" data-surname="{_text(canonical_surname(pid))}" data-search-text="{_text(person_name(pid) + " " + pid + " " + summary)}"><td>{ref(pid, prefix)}'
                 + (f'<br><span class="meta">{_text(span)}</span>' if span else "") + f'</td><td>{_text(surname(pid) or "—")}</td><td>{_text(summary or "No events recorded.")}</td><td>{_text(pid)}</td></tr>')
 
     def catalogue_table(pids: list[str], prefix: str = "") -> str:
@@ -742,16 +755,19 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     # Families and branches: surname groups and connected groups of recorded relatives.
     groups: dict[str, list[str]] = defaultdict(list)
     for pid in people:
-        groups[surname(pid) or ""].append(pid)
+        groups[canonical_surname(pid) or ""].append(pid)
     branch_rows = []
     for name, members in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0].casefold())):
         years = sorted(y for pid in members for e in events_by_person[pid] if e["kind"] in ("birth", "death", "baptism", "christening", "burial") and (y := year_of(e.get("date"))))
         where = Counter(places[e["place_id"]]["name"] for pid in members for e in events_by_person[pid] if e.get("place_id") in places)
-        founders = [pid for pid in members if not any(surname(r["object_id"]) == name for r in parents_of[pid])]
+        founders = [pid for pid in members if not any(canonical_surname(r["object_id"]) == name for r in parents_of[pid])]
         founders.sort(key=lambda pid: (date_sort_key(next((e.get("date") for e in events_by_person[pid] if e["kind"] == "birth"), None)), person_name(pid)))
         label = name or "No surname recorded"
         link = f'catalogue.html?surname={quote(name)}' if name else "catalogue.html"
-        branch_rows.append(f'<tr data-surname="{_text(name)}"><td><a href="{_text(link)}">{_text(label)}</a></td><td>{len(members)}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{_text("; ".join(place for place, _ in where.most_common(3)) or "—")}</td><td>' + ", ".join(ref(pid) for pid in founders[:3]) + "</td></tr>")
+        spellings = Counter(surname(pid) for pid in members)
+        recorded_as = ("" if set(spellings) <= {name} else '<br><span class="meta">Recorded as '
+                       + _text(", ".join(f"{s} ({n})" for s, n in sorted(spellings.items(), key=lambda item: (-item[1], item[0].casefold())))) + "</span>")
+        branch_rows.append(f'<tr data-surname="{_text(name)}"><td><a href="{_text(link)}">{_text(label)}</a>{recorded_as}</td><td>{len(members)}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{_text("; ".join(place for place, _ in where.most_common(3)) or "—")}</td><td>' + ", ".join(ref(pid) for pid in founders[:3]) + "</td></tr>")
     parent_of = {pid: pid for pid in people}
 
     def find(pid: str) -> str:
@@ -771,11 +787,13 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     singles = sum(1 for members in components.values() if len(members) == 1)
     component_rows = []
     for number, members in enumerate(connected[:60], 1):
-        names = Counter(surname(pid) for pid in members if surname(pid))
+        names = Counter(canonical_surname(pid) for pid in members if surname(pid))
         years = sorted(y for pid in members for e in events_by_person[pid] if e["kind"] == "birth" and (y := year_of(e.get("date"))))
         earliest = min(members, key=lambda pid: (date_sort_key(next((e.get("date") for e in events_by_person[pid] if e["kind"] == "birth"), None)), person_name(pid)))
         component_rows.append(f'<tr><td>Group {number}</td><td>{len(members)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{ref(earliest)} · <a href="tree.html?person={quote(earliest)}">tree</a></td></tr>')
-    pages["branches.html"] = ('<h1>Families and branches</h1><p>Surname groups use each person\'s first recorded surname. Connected groups are people joined by recorded relationships; separate groups may still be related through records not yet found.</p>'
+    pages["branches.html"] = ('<h1>Families and branches</h1><p>Surname groups use each person\'s first recorded surname'
+                              + ("; spellings this project lists as variants of one surname are grouped under it" if name_variants else "")
+                              + '. Connected groups are people joined by recorded relationships; separate groups may still be related through records not yet found.</p>'
                               + '<h2>Surnames</h2>' + ('<div class="table-wrap"><table><thead><tr><th>Surname</th><th>People</th><th>Recorded years</th><th>Most recorded places</th><th>Earliest recorded</th></tr></thead><tbody>' + "".join(branch_rows) + '</tbody></table></div>' if branch_rows else '<p class="empty-state">No public people are available.</p>')
                               + '<h2>Connected groups</h2>' + ('<div class="table-wrap"><table><thead><tr><th>Group</th><th>People</th><th>Main surnames</th><th>Births</th><th>Earliest born</th></tr></thead><tbody>' + "".join(component_rows) + '</tbody></table></div>' if component_rows else '<p class="empty-state">No recorded relationships connect public people yet.</p>')
                               + (f'<p class="meta">{len(connected) - 60} smaller groups are not listed. </p>' if len(connected) > 60 else "") + (f'<p class="meta">{singles} people have no public recorded relatives.</p>' if singles else ""))
@@ -853,7 +871,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     pages["sitemap.html"] = '<h1>Site index and downloads</h1><h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in routes.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
                                                   if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
-                          config.grades, study_urls if compact_studies else None)
+                          config.grades, study_urls if compact_studies else None, name_variants)
     outputs: dict[str, str] = {
         "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
         "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n",

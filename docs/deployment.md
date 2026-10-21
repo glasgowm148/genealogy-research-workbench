@@ -42,14 +42,14 @@ python -m http.server 8000 --bind 127.0.0.1 --directory my-family/dist
 | Route | Contents |
 | --- | --- |
 | `index.html` | Overview, counts and research entry points |
-| `catalogue.html` | Search, surname, year and evidence filters, sort and pagination |
+| `catalogue.html` | Search, surname, year and evidence filters, sort and pagination; the surname filter and search fold the spellings listed under `[names.variants]` into one surname |
 | `people/p-<hash>.html` | Stable person dossier: family (parents, partners, children, siblings), events, claims, sources and research |
 | `tree.html` | Whole-tree canvas, family focus and branch cards |
 | `timeline.html` | Recorded life events with filters |
 | `places.html` | Place/event list and supplied-coordinate map |
 | `sources.html` | Bibliography and citations |
 | `research.html` | Claims, evidence, hypotheses, questions and findings, outstanding work first |
-| `branches.html` | Surname groups and connected groups of recorded relatives, linked to the catalogue and tree |
+| `branches.html` | Surname groups and connected groups of recorded relatives, linked to the catalogue and tree; spellings listed under `[names.variants]` share one group, with the spellings recorded ([Group spellings of a surname](research.md#group-spellings-of-a-surname)) |
 | `studies.html`, `studies/s-<hash>.html` | Written research studies with rationale, conclusion and linked subjects, most recently updated first, with a search by title, summary or linked person; past 300 studies, `studies/page-<n>.html` lists them by title |
 | `findings.html`, `findings/page-<n>.html` | Dated log of findings, newest first (`findings.xml` Atom feed when `site.base_url` is set); past 30 findings, archive pages numbered from the earliest |
 | `compare.html` | Side-by-side person comparison |
