@@ -1860,6 +1860,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                                   if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2>People</h2>' + browse_people + '<h2>Machine-readable data</h2>' + data_links + '<p>Downloads contain only the public records shown on this site.</p>'
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
                           config.grades, study_urls if compact_studies else None, name_variants)
+    # The map lists the places in a cluster with links to where each one is shown.
+    shared["site"]["place_urls"] = {p["id"]: record_routes[p["id"]] for p in project["places"] if p.get("latitude") is not None and p.get("longitude") is not None}
     outputs: dict[str, str] = {
         "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
         "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n",
