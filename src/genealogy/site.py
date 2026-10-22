@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from hashlib import sha256
 from html import escape
+from html import unescape  # a finding's badge words, read back for the findings index
 import json
 from pathlib import Path
 import re
@@ -27,12 +28,14 @@ from .home import SUN_SLICES, file_size, rings as sun_rings, sun_svg, sun_tree  
 from .labels import CLAIM_STATUS, guide_basis  # the evidence guide's basis and example lines
 from .labels import plural  # one rule for every printed count
 from .labels import BADGE_GLYPHS, assessment_anchor, badge_family  # one badge system
+from .labels import RESEARCH_MEANINGS  # the findings legend
 
 # Lists longer than this are not written out in full: the interactive views
 # load them from the shared data script, and readers without JavaScript
 # browse the paged pages instead. Keeps every page small at thousands of people.
 INLINE_LIMIT = 300
 LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are on archive pages
+FINDING_GROUPS = 30  # studies, places and finding types listed by count on the findings log; the rest are counted
 LATEST_SEARCHES = 50  # research.html lists the newest searches; each dossier lists all of its own
 QUESTION_RELATED = 4  # hypotheses and findings about a question's people shown on its card; the rest are on their pages
 FINDINGS_PER_PAGE = 50
@@ -87,6 +90,7 @@ PROGRESS_COUNTS = ("people", "with_assessed_parent", "parent_links", "assessed_p
                    "open_questions", "draft_findings")
 DATA_FILES |= {"data/search-index.json", "data/search-index.js"}  # the sidebar search: titles and one short line per record
 DATA_FILES.add("data/records-index.js")  # the records table: one compact row per public citation
+DATA_FILES.add("data/findings-index.js")  # a long findings log's filters search every finding, not only the newest
 # The fields the browser script reads. ``data/site.json`` keeps every public
 # field; the shared script carries only these, so it stays small to download
 # and parse on a large site.
@@ -1518,23 +1522,86 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     # Latest findings: the dated discovery log; the research page keeps the full account.
     months = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
 
+    def finding_places(row: dict[str, Any]) -> list[str]:
+        """The places a finding is about: named directly, or the place of an event it names."""
+        named = [rid for rid in row.get("related_ids", []) if rid in places]
+        named += [events_by_id[rid]["place_id"] for rid in row.get("related_ids", []) if rid in events_by_id and events_by_id[rid].get("place_id") in places]
+        return list(dict.fromkeys(named))
+
+    def finding_studies(row: dict[str, Any]) -> list[str]:
+        """The studies a finding counts under: one that links it, or concerns a person or place it is about."""
+        return list(dict.fromkeys(s["id"] for rid in [row["id"], *row.get("related_ids", []), *finding_places(row)] for s in studies_by_subject.get(rid, [])))
+
     def finding_item(row: dict[str, Any], prefix: str = "") -> str:
-        subjects = ", ".join(ref(rid, prefix, record_label(rid)) for rid in row.get("related_ids", []) if rid in record_routes)
-        in_studies = ", ".join(f'<a href="{prefix}{study_urls[s["id"]]}">{_text(s["title"])}</a>' for s in studies_by_subject[row["id"]])
-        return (f'<li class="finding-entry" id="{_anchor(row["id"])}" data-recorded-on="{_text(row.get("recorded_on") or "")}"><p class="meta">{when(row.get("recorded_on"), missing="Undated")}</p>'
-                f'<h3><a href="{prefix}{record_routes[row["id"]]}">{_text(row["conclusion"])}</a></h3>{metadata(row, prefix)}{finding_kind(row, prefix)}'
-                + finding_details(row, prefix) + (f'<p>About: {subjects}</p>' if subjects else "") + (f'<p>Studies: {in_studies}</p>' if in_studies else "")
-                + (f'<p class="meta">{plural(len(row.get("evidence_ids", [])), "evidence assessment")}</p>' if row.get("evidence_ids") else "") + "</li>")
+        """One row of the findings table; below 640px its cells stack into a card, each with its column's name."""
+        # data-ref-id names a linked record, so an archive page (without the shared data) can label its filters.
+        tagged = lambda rid, link: f'<span data-ref-id="{_text(rid)}">{link}</span>'
+        related = [rid for rid in row.get("related_ids", []) if rid in record_routes]
+        named = [rid for rid in related if rid in people]
+        # An event it names is shown through its place and people, not as a subject of its own.
+        subjects = ", ".join(tagged(rid, ref(rid, prefix, record_label(rid))) for rid in related if rid not in people and rid not in events_by_id)
+        in_studies = ", ".join(tagged(s["id"], f'<a href="{prefix}{study_urls[s["id"]]}">{_text(s["title"])}</a>') for s in studies_by_subject.get(row["id"], []))
+        cited = [f"<li>{record_link(cid, prefix)}</li>" for cid in row.get("citation_ids", []) if cid in citations]
+        assessed = len(row.get("evidence_ids", []))
+        records = (('<ul class="finding-records">' + "".join(cited) + "</ul>" if cited else "")
+                   + (f'<p class="meta">{assessed} evidence assessment{"" if assessed == 1 else "s"}</p>' if assessed else "")) or '<span class="meta">None cited</span>'
+        listed = lambda ids: _text(json.dumps(ids, ensure_ascii=False, separators=(",", ":")))
+        return (f'<tr class="finding-entry" id="{_anchor(row["id"])}" data-finding-id="{_text(row["id"])}" data-recorded-on="{_text(row.get("recorded_on") or "")}"'
+                f' data-kind="{_text(row.get("kind") or "")}" data-status="{_text(row.get("status") or "")}" data-people="{listed(named)}"'
+                f' data-studies="{listed(finding_studies(row))}" data-places="{listed(finding_places(row))}">'
+                + f'<td data-label="Date">{when(row.get("recorded_on"), missing="Undated")}</td>'
+                + f'<td data-label="Finding"><p class="finding-conclusion"><a href="{prefix}{record_routes[row["id"]]}">{_text(row["conclusion"])}</a></p>'
+                # Limits and changes chips; the records it cites have their own column.
+                + finding_details({**row, "citation_ids": []}, prefix) + (f'<p>About: {subjects}</p>' if subjects else "") + (f'<p>Studies: {in_studies}</p>' if in_studies else "") + "</td>"
+                + '<td data-label="People">' + ('<ul class="finding-people">' + "".join(f"<li>{tagged(rid, ref(rid, prefix))}</li>" for rid in named) + "</ul>" if named else '<span class="meta">None named</span>') + "</td>"
+                + f'<td data-label="Records">{records}</td><td data-label="Status and kind" class="finding-status">{metadata(row, prefix)}{finding_kind(row, prefix)}</td></tr>')
 
     def by_month(rows: list[dict[str, Any]], prefix: str = "") -> str:
+        """One table body per month, its label a row header, so the log still reads as dated groups."""
         out, current = [], None
         for row in rows:
             month = row["recorded_on"][:7]
             if month != current:
-                out.append(("</ul>" if current else "") + f'<h2>{months[int(month[5:7]) - 1] + " " if len(month) == 7 else ""}{_text(month[:4])}</h2><ul class="record-list findings-log">')
+                out.append(("</tbody>" if current else "") + f'<tbody><tr class="findings-month"><th colspan="5" scope="rowgroup">{months[int(month[5:7]) - 1] + " " if len(month) == 7 else ""}{_text(month[:4])}</th></tr>')
                 current = month
             out.append(finding_item(row, prefix))
-        return "".join(out) + ("</ul>" if current else "")
+        return "".join(out) + ("</tbody>" if current else "")
+
+    def findings_table(body: str, total: int, index: bool = False) -> str:
+        """The log as a 5-column table. data-total and data-index tell the filters when the page holds only some findings."""
+        heads = "".join(f'<th scope="col">{name}</th>' for name in ("Date", "Finding", "People", "Records", "Status and kind"))
+        return (f'<div class="table-wrap findings-log" data-findings data-total="{total}"' + (' data-index="data/findings-index.js"' if index else "")
+                + f'><table class="evidence-table findings-table"><caption class="sr-only">Findings, newest first</caption><thead><tr>{heads}</tr></thead>{body}</table></div>')
+
+    def findings_legend(prefix: str = "") -> str:
+        """The status and type badges the log uses, each with what it means; a status links to its guide entry."""
+        statuses = sorted({str(f["status"]) for f in project["findings"] if f.get("status")}, key=str.casefold)
+        kinds = sorted({str(f["kind"]) for f in project["findings"] if f.get("kind")}, key=str.casefold)
+        meaning = lambda s: RESEARCH_MEANINGS.get(s.casefold()) or CLAIM_STATUS.get(s.casefold(), ("", "Recorded in this project's own wording."))[1]
+        items = [f'<li>{badge(status_label(s), status_anchor(s), prefix, f' data-status="{_text(s)}"')} {_text(meaning(s))}</li>' for s in statuses]
+        if kinds:
+            items.append('<li>' + "".join(finding_kind({"kind": k}, prefix) for k in kinds[:FINDING_GROUPS]) + (f' and {len(kinds) - FINDING_GROUPS:,} more' if len(kinds) > FINDING_GROUPS else "")
+                         + " The finding's type, in this project's own grouping.</li>")
+        example = next((c for f in project["findings"] for c in f.get("changes", [])), None)
+        if example:
+            items.append(f'<li>{change_chip(example, prefix)} A grade the finding changed, from before to after.</li>')
+        return (f'<ul class="findings-legend" aria-label="Badges in the findings log">{"".join(items)}</ul>' if items else "") + f'<p class="meta findings-guide"><a href="{prefix}evidence.html">How to read the evidence</a></p>'
+
+    # Findings by study and by place: counts, each linking to the log filtered to it.
+    finding_groups: dict[str, Counter[str]] = {"study": Counter(), "place": Counter()}
+    for row in project["findings"]:
+        finding_groups["study"].update(finding_studies(row))
+        finding_groups["place"].update(finding_places(row))
+
+    def findings_groups(key: str, heading: str, label: Any) -> str:
+        counts = finding_groups[key]
+        if not counts:
+            return ""
+        top = sorted(counts.items(), key=lambda item: (-item[1], label(item[0]).casefold(), item[0]))[:FINDING_GROUPS]
+        more = f'<p class="meta">The {len(top)} with the most findings, of {len(counts):,}. Filter the log above to reach any of them.</p>' if len(counts) > len(top) else ""
+        return (f'<section class="findings-groups" aria-labelledby="by-{key}"><h2 id="by-{key}">{heading}</h2><ul class="findings-group-list">'
+                + "".join(f'<li><a href="findings.html?{key}={quote(rid, safe="")}">{_text(label(rid))}</a> <span class="meta">{n:,} finding{"" if n == 1 else "s"}</span></li>' for rid, n in top)
+                + f'</ul>{more}</section>')
 
     # A long log opens with the newest findings; archive pages are numbered from
     # the earliest, so a finding keeps its page as newer ones are added.
@@ -1545,21 +1612,30 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     archive_url = lambda number: f"findings/page-{number}.html"
     archive_nav = lambda prefix: ('<nav class="pagination findings-archive" aria-label="Finding archive"><span>Archive pages, from the earliest:</span><div>'
                                   + "".join(f'<a href="{prefix}{archive_url(n)}">{n}</a>' for n in sorted(archive)) + "</div></nav>")
-    log = ['<h1>Latest findings</h1><p>A dated log of research conclusions, newest first. Each entry links to the full finding with its evidence; studies and dossiers hold the current account.</p>']
-    if archive:
-        log.append(f'<p class="result-count">The newest {LATEST_FINDINGS} of {len(dated):,} dated findings.</p>' + by_month(dated[:LATEST_FINDINGS]) + archive_nav(""))
+    by_study = findings_groups("study", "Findings by study", lambda sid: studies[sid]["title"])
+    by_place = findings_groups("place", "Findings by place", lambda pid: places[pid]["name"])
+    feed_icon = ('<svg class="feed-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="3" cy="13" r="2"/>'
+                 '<path d="M1 7a8 8 0 0 1 8 8h-2.5A5.5 5.5 0 0 0 1 9.5zM1 1.5A13.5 13.5 0 0 1 14.5 15H12A11 11 0 0 0 1 4z"/></svg>')
+    quick = ([f'{feed_icon}<a href="findings.xml" type="application/atom+xml">Follow new findings (Atom feed)</a>'] if base_url else []) + (
+        ['<a href="#by-study">Findings by study</a>'] if by_study else []) + (['<a href="#by-place">Findings by place</a>'] if by_place else [])
+    log = ['<p class="eyebrow">What the research has found</p><h1>Latest findings</h1><p class="lead">A dated log of research conclusions, newest first. Each entry links to the full finding with its evidence; studies and dossiers hold the current account.</p>'
+           + (f'<p class="findings-links">{" · ".join(quick)}</p>' if quick else "")]
+    shown = dated[:LATEST_FINDINGS] if archive else dated
+    count = (f'The newest {LATEST_FINDINGS} of {len(dated):,} dated findings' if archive else f'{len(dated):,} dated finding{"" if len(dated) == 1 else "s"}') + (f', and {len(undated):,} undated' if undated else "")
+    if project["findings"]:
+        log.append(f'<div class="findings-summary" data-findings-summary><p class="result-count">{count}.</p>{findings_legend()}</div>'
+                   + findings_table(by_month(shown) + ('<tbody><tr class="findings-month"><th colspan="5" scope="rowgroup">Undated findings</th></tr>' + "".join(finding_item(row) for row in undated) + "</tbody>" if undated else ""),
+                                    len(project["findings"]), bool(archive))
+                   + (archive_nav("") if archive else "") + by_study + by_place)
     else:
-        log.append(by_month(dated))
-    if undated:
-        log.append('<h2>Undated findings</h2><ul class="record-list findings-log">' + "".join(finding_item(row) for row in undated) + "</ul>")
-    if not project["findings"]:
         log.append('<p class="empty-state">No public findings recorded yet.</p>')
     pages["findings.html"] = "".join(log)
     for number, rows in archive.items():
         newer = f'<a href="{archive_url(number + 1).split("/")[1]}">← Newer</a>' if number + 1 in archive else '<a href="../findings.html">← Latest findings</a>'
         older = f'<a href="{archive_url(number - 1).split("/")[1]}">Older →</a>' if number - 1 in archive else ""
         pages[archive_url(number)] = (f'<h1>Findings, page {number} of {len(archive)}</h1><p>Archive pages are numbered from the earliest finding, so a finding keeps its page. <a href="../findings.html">Latest findings</a>.</p>'
-                                      + by_month(rows, "../") + f'<nav class="pagination" aria-label="Finding pages"><div>{newer}{older}</div></nav>' + archive_nav("../"))
+                                      + f'<div class="findings-summary" data-findings-summary><p class="result-count">{len(rows):,} findings, {_text(rows[-1]["recorded_on"])} to {_text(rows[0]["recorded_on"])}.</p>{findings_legend("../")}</div>'
+                                      + findings_table(by_month(rows, "../"), len(project["findings"])) + f'<nav class="pagination" aria-label="Finding pages"><div>{newer}{older}</div></nav>' + archive_nav("../"))
         extra_titles[archive_url(number)] = ("findings", f"Findings, page {number}")
 
     # Families and branches: surname groups and connected groups of recorded relatives.
@@ -2734,6 +2810,17 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return {"types": {t: type_label(t) for t in types}, "rows": [entry(r) for r in rows]}
 
     records_index = records_pages()
+    def findings_index() -> list[dict[str, Any]]:
+        """Every finding in brief, newest first, for a long log's filters: what its row is filtered on, and its badge as the row words it."""
+        entries = []
+        for f in [*dated, *undated]:
+            badge = re.search(r'href="evidence\.html#([^"]*)"[^>]*>(?:<span[^>]*>[^<]*</span>)?([^<]*)</a>', metadata(f))
+            entry = {"i": f["id"], "d": f.get("recorded_on"), "c": f["conclusion"], "x": f.get("limitations"), "k": f.get("kind"), "s": f.get("status"),
+                     "a": unescape(badge[1]) if badge else None, "b": unescape(badge[2]) if badge else None, "u": record_routes[f["id"]],
+                     "p": [rid for rid in f.get("related_ids", []) if rid in people and rid in record_routes], "t": finding_studies(f), "g": finding_places(f)}
+            entries.append({key: value for key, value in entry.items() if value not in (None, "", [])})
+        return entries
+
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
@@ -2763,6 +2850,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     outputs["data/search-index.js"] = "window.GENEALOGY_SEARCH_INDEX=" + outputs["data/search-index.json"].rstrip() + ";\n"
     outputs["data/records-index.js"] = "window.GENEALOGY_RECORDS_INDEX=" + json.dumps(records_index, ensure_ascii=False, separators=(",", ":")) + ";\n"
     outputs["data/routes.json"] = json.dumps(sorted(pages), indent=2) + "\n"
+    if archive:
+        outputs["data/findings-index.js"] = "window.GENEALOGY_FINDINGS=" + _json(findings_index()) + ";\n"
     if progress_history:
         outputs["data/progress-history.json"] = progress_history
     if base_url:
@@ -2793,7 +2882,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         # Dossiers need only the menu enhancement. Interactive pages share one
         # data script rather than embedding the whole collection in each page.
         # The paged pages of a large site are plain lists and need no data.
-        interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "studies"}
+        interactive = "/" not in path and view in {"people", "tree", "timeline", "map", "compare", "connections", "sources", "studies", "findings"}
         data_script = f'<script defer src="{prefix}data/site-data.js"></script>' if interactive else ""
         payload = {"project": project["project"], "site": {"root": prefix}}
         corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""

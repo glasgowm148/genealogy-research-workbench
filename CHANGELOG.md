@@ -15,6 +15,7 @@
 - One badge system: every confidence, grade, status, record-quality, finding-type and change pill (in the pages and those the script draws) is a link to its entry in **Reading the evidence**, coloured by its family and marked with a small glyph (✓ ~ ? ○ ✕ ◇) beside the words; a tree's own mark is now a badge of its own. The guide opens with **The labels at a glance**, drawing each badge once with its one-line meaning, and gains an entry for finding types.
 - Large sites now page sources 80 to a page (was 100), so a page of full source cards stays under the 100 KB budget now that every type badge carries its family.
 
+- The findings log is a table: Date, Finding, People, Records, and Status and kind, stacked into labelled cards on narrow screens, with a count, a legend of the status and type badges, a link to the Atom feed (with `site.base_url`), and **Findings by study** and **Findings by place** counts linking to `findings.html?study=<id>` and `?place=<id>`. With JavaScript, filters for words, type, status, person, study and place, plus order, are kept in the address; a log with archive pages writes `data/findings-index.js` so the filters cover every finding. Archive pages use the same table. "1 evidence assessments" now reads "1 evidence assessment". See [Record a finding](docs/research.md#record-a-finding).
 
 ## 0.7.0 — 21 October 2026
 

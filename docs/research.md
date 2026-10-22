@@ -50,6 +50,8 @@ genealogy --project my-family finding add finding:parentage \
 
 `--recorded-on` dates the finding, so it appears in the site's **Latest findings** log, newest first. Undated findings are listed after the dated ones. With `site.base_url` set, the build also writes an Atom feed, `findings.xml`. A log of more than 30 dated findings opens with the newest 30. Older findings are on archive pages (`findings/page-N.html`) numbered from the earliest finding, so a finding never changes page as newer ones are added.
 
+The log is a table of date, finding, people, records, and status and type, filterable by words, type (`--kind`), status, person, study and place. A finding counts under a study when the study links it or concerns a person or place in its `related_ids`, and under a place when it names the place or an event at that place. **Findings by study** and **Findings by place** list those counts, each linking to the log filtered to it. Give findings a `--kind` and relate them to the people and places they concern, so readers can find them.
+
 - `--limitations` says what the finding does not establish. It is shown beside the conclusion, never merged into it.
 - `--cite` links a record the finding rests on directly, when there is no claim-level evidence. Repeat it for several. A finding that cites a private or restricted record is withheld from the site, like any record that depends on one.
 - `--kind` is your own grouping, such as `vital`, `relationship` or `record`, shown as a label.

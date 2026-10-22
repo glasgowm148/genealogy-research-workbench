@@ -131,7 +131,7 @@ class ReadableSiteTests(unittest.TestCase):
         ada, cara = self.dossier("p0001"), self.dossier("p0003")
         self.assertIn('Updated <time datetime="2026-09-14">14 Sep 2026</time>', ada)
         self.assertIn('Recorded <time datetime="2026-10-02">2 Oct 2026</time>', cara)
-        self.assertIn('<p class="meta"><time datetime="2026-10-02">2 Oct 2026</time></p>', self.page("findings.html"))
+        self.assertIn('<td data-label="Date"><time datetime="2026-10-02">2 Oct 2026</time></td>', self.page("findings.html"))
         index = json.loads((self.root / "data/search-index.json").read_text())
         self.assertIn({"t": "Cara was baptised at Lanternford.", "k": "finding", "s": "2 Oct 2026"}, [{k: r[k] for k in ("t", "k", "s")} for r in index if r["k"] == "finding"])
 

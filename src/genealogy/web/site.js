@@ -688,10 +688,98 @@ function records(){
 }
 // After tree, comparison and connections, which fill and preselect these menus.
 function personPickers(){for(const [menu,label] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person'],['[data-compare-b]','Find the second person'],['[data-connection-a]','Find the first person'],['[data-connection-b]','Find the second person']])picker($(menu),label);}
+// Latest findings: filter the table by words, type, status, person, study and place. Every filter is in the address
+// (?q=&kind=&status=&person=&study=&place=&order=), so the "Findings by study" and "by place" links open a filtered view.
+// A long log's page holds only the newest findings; it then loads data/findings-index.js, so a filter searches them all.
+const FINDINGS_SHOWN=100;
+function findingsTable(){
+ const host=$('[data-findings]'),table=host&&$('table',host),rows=host?$$('tr.finding-entry',host):[];if(!table||!rows.length)return;
+ const ids=v=>{try{const a=JSON.parse(v||'[]');return Array.isArray(a)?a.map(String):[];}catch(_){return[];}};
+ // Names from the shared data where the page loads it (findings.html), else from the page's own links (an archive page).
+ const studyTitle=new Map(list('studies').map(s=>[s.id,s.title])),seen=new Map;
+ $$('[data-ref-id]',host).forEach(n=>{if(!seen.has(n.dataset.refId))seen.set(n.dataset.refId,n.textContent.trim());});
+ const label=id=>personBy.has(id)?name(personBy.get(id)):studyTitle.get(id)||placeBy.get(id)?.name||seen.get(id)||id;
+ // As site.py words them: finding_kind() and labels.status_label().
+ const kindLabel=k=>{const s=String(k).replace(/[-_]/g,' ');return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase();};
+ const statusLabel=s=>STUDY_STATUS[String(s).toLowerCase()]||s;
+ const byId=new Map(rows.map(r=>[r.dataset.findingId,r]));
+ let records=rows.map((row,n)=>({id:row.dataset.findingId||'',n,d:row.dataset.recordedOn||'',k:row.dataset.kind||'',s:row.dataset.status||'',p:ids(row.dataset.people),t:ids(row.dataset.studies),g:ids(row.dataset.places),row,page:row,text:null}));
+ const textOf=r=>r.text??(r.text=fold([r.page?.textContent||'',r.e?[r.e.c,r.e.x,r.e.b].join(' '):'',r.k?kindLabel(r.k):'',...[...r.p,...r.t,...r.g].map(label)].join(' ')));
+ const search=el('input');search.type='search';search.placeholder='Words in a finding, a name or a place';
+ const menus={kind:select([['','All types']]),status:select([['','All statuses']]),person:select([['','Everyone']]),study:select([['','All studies']]),place:select([['','All places']])};
+ const order=select([['newest','Newest first'],['oldest','Oldest first']]);
+ const words={kind:kindLabel,status:statusLabel,person:label,study:label,place:label};
+ const titles={kind:'Finding type',status:'Status',person:'Person',study:'Family or place study',place:'Place'};
+ const bar=el('div',undefined,'toolbar findings-filters'),query=field('Search findings',search);query.className='grow';bar.append(query);
+ const holders={};for(const key of Object.keys(menus)){holders[key]=field(titles[key],menus[key]);bar.append(holders[key]);}
+ const clear=el('button','Reset');clear.type='button';bar.append(field('Order',order),clear);
+ const summary=$('[data-findings-summary]'),count=summary&&$('.result-count',summary);(summary||host).before(bar);
+ const status=el('p',undefined,'result-count findings-match');status.setAttribute('role','status');if(count)count.after(status);else host.before(status);
+ const results=el('tbody',undefined,'findings-results');results.hidden=true;table.append(results);
+ const groups=$$('tbody',table).filter(t=>t!==results),placed=rows.map(row=>[row,row.parentElement]);
+ // Values from the address wait here until the menus that offer them are filled.
+ const pending={},params=new URLSearchParams(location.search);
+ for(const key of Object.keys(menus)){const v=params.get(key);if(v)pending[key]=v;}
+ if(params.get('q'))search.value=params.get('q');if(params.get('order')==='oldest')order.value='oldest';
+ function fill(){
+  const counts=Object.fromEntries(Object.keys(menus).map(k=>[k,new Map]));
+  const add=(key,v)=>{if(v)counts[key].set(v,(counts[key].get(v)||0)+1);};
+  for(const r of records){add('kind',r.k);add('status',r.s);r.p.forEach(v=>add('person',v));r.t.forEach(v=>add('study',v));r.g.forEach(v=>add('place',v));}
+  for(const [key,menu] of Object.entries(menus)){
+   const keep=pending[key]??menu.value;delete pending[key];if(keep&&!counts[key].has(keep))counts[key].set(keep,0);
+   const items=[...counts[key]].map(([v,n])=>[v,words[key](v),n]).sort((a,b)=>String(a[1]).localeCompare(String(b[1]))||a[0].localeCompare(b[0]));
+   menu.replaceChildren(menu.options[0],...items.map(([v,t,n])=>option(v,`${t} (${n.toLocaleString()})`)));menu.value=keep||'';holders[key].hidden=!items.length;}
+ }
+ const idle=()=>!search.value.trim()&&Object.values(menus).every(m=>!m.value)&&order.value==='newest';
+ const restore=()=>{for(const [row,parent] of placed)parent.append(row);};
+ const cell=(label,...nodes)=>{const td=el('td');td.dataset.label=label;td.append(...nodes);return td;};
+ const anchor=(href,text,cls)=>{const a=el('a',text,cls);a.href=href;return a;};
+ // A finding not on this page, from the index: its row links to the page that shows its records and changes.
+ function build(e){
+  const tr=el('tr',undefined,'finding-entry');tr.dataset.findingId=e.i;
+  const date=e.d?el('time',e.d):document.createTextNode('Undated');if(e.d)date.dateTime=e.d;
+  const what=el('p',undefined,'finding-conclusion');what.append(anchor(root+e.u,e.c));const finding=[what];
+  if(e.x){const p=el('p',undefined,'finding-limitations');p.append(el('strong','Limits:'),` ${e.x}`);finding.push(p);}
+  let named=el('span','None named','meta');if(e.p?.length){named=el('ul',undefined,'finding-people');for(const id of e.p){const li=el('li');li.append(linkTo(id,label(id)));named.append(li);}}
+  // The same badge system as the page's own rows: family from the guide anchor, glyph for evidence strength only.
+  const famOf=a=>{const [kind,...rest]=String(a).split('-'),v=rest.join('-');return a==='confidence-tree-link'?'unassessed':kind==='confidence'?FAMILY[v]||'unassessed':kind==='grade'?FAMILY[data.site?.grade_confidence?.[v]]||'unassessed':kind==='status'?FAMILY[v]||'status':'status';};
+  const badges=[];if(e.b){const a=badgeEl(e.b,e.a||'',famOf(e.a||''));if(e.s)a.dataset.status=e.s;badges.push(a);}
+  if(e.k){const k=badgeEl(kindLabel(e.k),'finding-kind','kind');k.classList.add('finding-kind');k.dataset.kind=e.k;badges.push(k);}
+  tr.append(cell('Date',date),cell('Finding',...finding),cell('People',named),cell('Records',anchor(root+e.u,'On the finding’s page')),cell('Status and kind',...badges));
+  return tr;}
+ let loaded=false,loading=false;const index=host.dataset.index,total=Number(host.dataset.total||0);
+ function render(){
+  restore();
+  if(idle()){results.hidden=true;results.replaceChildren();groups.forEach(g=>g.hidden=false);status.textContent='';if(count)count.hidden=false;return;}
+  const q=fold(search.value).trim().split(/\s+/).filter(Boolean),[k,s,p,t,g]=['kind','status','person','study','place'].map(key=>menus[key].value);
+  const found=records.filter(r=>(!k||r.k===k)&&(!s||r.s===s)&&(!p||r.p.includes(p))&&(!t||r.t.includes(t))&&(!g||r.g.includes(g))&&q.every(w=>textOf(r).includes(w)));
+  // Newest first as the page lists them (date, then id); undated findings last, in page order, either way.
+  const dir=order.value==='oldest'?-1:1;found.sort((a,b)=>a.d&&b.d?dir*(b.d.localeCompare(a.d)||b.id.localeCompare(a.id)):a.d?-1:b.d?1:a.n-b.n);
+  const shown=found.slice(0,FINDINGS_SHOWN);
+  if(shown.length)results.replaceChildren(...shown.map(r=>r.row||(r.row=build(r.e))));
+  else{const tr=el('tr'),td=el('td','No findings match these filters.','empty-state');td.colSpan=5;tr.append(td);results.replaceChildren(tr);}
+  groups.forEach(g=>g.hidden=true);results.hidden=false;if(count)count.hidden=true;
+  const all=loaded?'findings':total>rows.length?'findings on this page':'findings';
+  status.textContent=`${found.length.toLocaleString()} of ${records.length.toLocaleString()} ${all} match`+(found.length>shown.length?`; the first ${shown.length} are shown. Narrow the filters to see the others.`:'.')+(loading?' Loading every finding…':'');}
+ const keep=()=>{clear.hidden=idle();try{const u=new URL(location.href);for(const key of ['q',...Object.keys(menus),'order'])u.searchParams.delete(key);
+  if(search.value.trim())u.searchParams.set('q',search.value);for(const [key,m] of Object.entries(menus))if(m.value)u.searchParams.set(key,m.value);if(order.value!=='newest')u.searchParams.set('order',order.value);
+  if(u.href!==location.href)history.replaceState(history.state,'',u.href);}catch(_){/* file:// pages may refuse a new address; the filters still work */}};
+ const changed=()=>{render();keep();};
+ search.addEventListener('input',changed);[...Object.values(menus),order].forEach(m=>m.addEventListener('change',changed));
+ clear.addEventListener('click',()=>{search.value='';Object.values(menus).forEach(m=>m.value='');order.value='newest';changed();search.focus();});
+ fill();render();clear.hidden=idle();
+ if(index&&total>rows.length){
+  const ready=()=>{const all=window.GENEALOGY_FINDINGS;loading=false;if(!Array.isArray(all)){render();return;}
+   records=all.filter(e=>e&&e.i&&e.u).map((e,n)=>({id:e.i,n,d:e.d||'',k:e.k||'',s:e.s||'',p:e.p||[],t:e.t||[],g:e.g||[],e,row:byId.get(e.i)||null,page:byId.get(e.i)||null,text:null}));
+   loaded=true;fill();render();};
+  if(window.GENEALOGY_FINDINGS)ready();else{loading=true;const script=document.createElement('script');script.src=index;script.async=true;script.addEventListener('load',ready);
+   script.addEventListener('error',()=>{loading=false;script.remove();render();});document.head.append(script);if(!idle())render();}}
+}
 // A link into a closed <details> (a claim row on research.html) opens it; browsers that do not do so themselves still show the target.
 function openTargets(){const open=()=>{const target=location.hash.length>1&&document.getElementById(decodeURIComponent(location.hash.slice(1)));let n=target,opened=false;while(n){if(n.tagName==='DETAILS'&&!n.open){n.open=true;opened=true;}n=n.parentElement;}if(opened)target.scrollIntoView();};open();window.addEventListener('hashchange',open);}
 const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers,openTargets];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
 for(const task of [mapFit,placeCards,placeEvents]){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{records();}catch(error){console.warn('Optional genealogy enhancement unavailable: records',error);}
+try{findingsTable();}catch(error){console.warn('Optional genealogy enhancement unavailable: findingsTable',error);}
 })();
