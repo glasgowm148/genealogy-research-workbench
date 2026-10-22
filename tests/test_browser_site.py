@@ -521,11 +521,13 @@ class BrowserSiteTests(unittest.TestCase):
     def test_map_controls_and_source_timeline_filters(self):
         self.page.goto(self.base + 'places.html')
         svg = self.page.locator('#map-output svg')
-        original = svg.get_attribute('viewBox')
-        self.page.locator('[data-map-fit]').click()
-        self.assertNotEqual(original, svg.get_attribute('viewBox'))
+        # The map opens framed on its places; World shows the whole map and Fit places frames them again.
+        framed = svg.get_attribute('viewBox')
+        self.assertNotEqual('0 0 900 470', framed)
         self.page.locator('[data-map-world]').click()
-        self.assertEqual(original, svg.get_attribute('viewBox'))
+        self.assertEqual('0 0 900 470', svg.get_attribute('viewBox'))
+        self.page.locator('[data-map-fit]').click()
+        self.assertEqual(framed, svg.get_attribute('viewBox'))
         self.page.goto(self.base + 'timeline.html')
         self.page.get_by_role('searchbox', name='Search timeline').fill('no-such-synthetic-event')
         self.assertEqual(0, self.page.locator('[data-event-id]:visible').count())

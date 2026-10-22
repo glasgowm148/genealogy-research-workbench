@@ -593,8 +593,51 @@ function siteSearch(){
  form.addEventListener('focusout',e=>{if(e.relatedTarget&&!form.contains(e.relatedTarget))close();});
  document.addEventListener('pointerdown',e=>{if(!form.contains(e.target))close();});
 }
+// The places map opens framed on its places, through the map's own Fit places button; World zooms back out.
+function mapFit(){$('#map-output [data-map-fit]')?.click();}
+// Places page: a region menu and a place-or-surname search over every place, drawn as the same cards; the first LIMIT matches are shown.
+function placeCards(){
+ const host=$('[data-place-filter]'),listing=$('[data-place-cards]'),status=$('#place-count');if(!host||!listing||!status||!places.length)return;
+ const LIMIT=100,unplaced=host.dataset.unplaced||'',initial=status.textContent,routes={...(data.site?.place_urls||{}),...(data.site?.place_routes||{})};
+ // A place's region is the last part of its name as recorded, as the page groups it.
+ const regionOf=p=>{const parts=String(p.name).split(',').map(s=>s.trim()).filter(Boolean);return parts.length>1?parts[parts.length-1]:unplaced;};
+ // As the cards count them: an event's people are its participants and anyone listing it among their own events.
+ const at=new Map(places.map(p=>[p.id,{p,region:regionOf(p),events:0,people:new Set,years:[]}]));
+ for(const [pid,evs] of eventsByPerson){if(!personBy.has(pid))continue;for(const e of evs.values())at.get(e.place_id)?.people.add(pid);}
+ for(const e of events){const s=at.get(e.place_id);if(!s)continue;s.events++;const y=year(e.date);if(y!==null)s.years.push(y);}
+ const records=[...at.values()].map(s=>{const counts=new Map;for(const pid of s.people){const c=canonical(surnameOf(personBy.get(pid)));if(c)counts.set(c,(counts.get(c)||0)+1);}
+  s.surnames=[...counts].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).map(([n])=>n);s.text=fold([s.p.name,...s.surnames].join(' '));return s;})
+  .sort((a,b)=>b.people.size-a.people.size||b.events-a.events||String(a.p.name).localeCompare(String(b.p.name))||a.p.id.localeCompare(b.p.id));
+ const counts=new Map;records.forEach(s=>counts.set(s.region,(counts.get(s.region)||0)+1));
+ const order=[...counts].sort((a,b)=>(a[0]===unplaced)-(b[0]===unplaced)||b[1]-a[1]||a[0].localeCompare(b[0]));
+ const search=el('input'),region=select([['','Any region'],...order.map(([r,n])=>[r,`${r} (${n.toLocaleString()})`])]);search.type='search';search.placeholder='Place name or surname';
+ const bar=el('div',undefined,'toolbar place-filters'),query=field('Find a place',search);query.className='grow';bar.append(query);if(order.length>1)bar.append(field('Region',region));host.append(bar);
+ const results=el('ul',undefined,'place-cards');results.setAttribute('aria-label','Matching places');results.hidden=true;listing.before(results);
+ const pill=n=>{const a=el('a',n,'pill');a.href=`${root}catalogue.html?surname=${encodeURIComponent(n)}`;return a;};
+ function card(s){const li=el('li',undefined,'place-card'),h=el('h3'),url=routes[s.p.id];if(url){const a=el('a',s.p.name);a.href=window.GENEALOGY_SITE_DATA?root+url:url;h.append(a);}else h.append(s.p.name);
+  const facts=s.region!==unplaced?[s.region]:[],n=s.people.size,lo=s.years.reduce((m,y)=>Math.min(m,y),Infinity),hi=s.years.reduce((m,y)=>Math.max(m,y),-Infinity);
+  if(s.events)facts.push(`${n.toLocaleString()} ${n===1?'person':'people'}`,`${s.events.toLocaleString()} event${s.events===1?'':'s'}`,...(s.years.length?[lo===hi?`${lo}`:`${lo}–${hi}`]:[]));else facts.push('No public events recorded');
+  li.append(h,el('p',facts.join(' · '),'place-facts'));
+  if(s.surnames.length){const p=el('p',undefined,'place-surnames');p.append(el('span','Surnames: ','sr-only'),...s.surnames.slice(0,5).map(pill));if(s.surnames.length>5)p.append(el('span',`and ${(s.surnames.length-5).toLocaleString()} more`,'meta'));li.append(p);}
+  const located=typeof s.p.latitude==='number'&&typeof s.p.longitude==='number';let where=located?`${s.p.latitude}, ${s.p.longitude}`:'Coordinates not supplied';if(located&&s.p.precision)where+=s.p.precision!=='exact'?` · located to ${s.p.precision} level`:' · exact location';
+  li.append(el('p',where,'meta'));return li;}
+ // With nothing chosen the written cards (or, on a large site, the busiest places) are shown again.
+ function render(){const words=fold(search.value).trim().split(/\s+/).filter(Boolean),r=region.value;
+  if(!words.length&&!r){results.hidden=true;results.replaceChildren();listing.hidden=false;status.textContent=initial;return;}
+  const found=records.filter(s=>(!r||s.region===r)&&words.every(w=>s.text.includes(w)));results.replaceChildren(...found.slice(0,LIMIT).map(card));results.hidden=!found.length;listing.hidden=true;
+  status.textContent=`${found.length.toLocaleString()} of ${records.length.toLocaleString()} places${found.length>LIMIT?` · first ${LIMIT} shown`:''}`;}
+ search.addEventListener('input',render);region.addEventListener('change',render);
+}
+// A place's event table sorts by year, earliest or latest first; events without a year stay at the end.
+function placeEvents(){
+ for(const table of $$('table[data-place-events]')){const th=$('th[aria-sort]',table),body=table.tBodies[0];if(!th||!body)continue;
+  const rows=[...body.rows],index=new Map(rows.map((r,i)=>[r,i])),y=r=>r.dataset.year?Number(r.dataset.year):null,button=el('button',th.textContent,'sort-button'),arrow=el('span',' ↑');arrow.setAttribute('aria-hidden','true');button.append(arrow);th.replaceChildren(button);
+  button.addEventListener('click',()=>{const asc=th.getAttribute('aria-sort')!=='ascending';th.setAttribute('aria-sort',asc?'ascending':'descending');arrow.textContent=asc?' ↑':' ↓';
+   body.append(...[...rows].sort((a,b)=>{const ya=y(a),yb=y(b);return (ya===null)-(yb===null)||(ya===null?0:asc?ya-yb:yb-ya)||index.get(a)-index.get(b);}));});}
+}
 // After tree, comparison and connections, which fill and preselect these menus.
 function personPickers(){for(const [menu,label] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person'],['[data-compare-b]','Find the second person'],['[data-connection-a]','Find the first person'],['[data-connection-b]','Find the second person']])picker($(menu),label);}
 const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
+for(const task of [mapFit,placeCards,placeEvents]){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 })();

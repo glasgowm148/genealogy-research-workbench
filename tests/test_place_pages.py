@@ -1,4 +1,4 @@
-"""Each place with a public event or a sub-place has a page: its parents, sub-places and the people recorded there."""
+"""Each place with a public event or a sub-place has a page: its parents, sub-places and the events and people recorded there."""
 from __future__ import annotations
 
 import json
@@ -105,14 +105,15 @@ class PlacePageTests(unittest.TestCase):
         self.assertNotIn("Quiet Hamlet", fableland)  # a place with no parent_id is not within Fableland
         shire = main(self.text(page("shire")))
         self.assertIn(f'<a href="../{page("parish")}">Invented Parish, Invented Shire, Fableland</a> <span class="meta">three events, one place within</span>', shire)
-        self.assertIn("No public people have events recorded here.", shire)
+        self.assertIn("No public events are recorded at this place.", shire)
+        self.assertNotIn("data-place-events", shire)
 
     def test_people_surnames_years_coordinates_and_studies(self):
         parish = main(self.text(page("parish")))
-        people = [(who, "; ".join(re.sub(r"<[^>]+>", "", item) for item in re.findall(r"<li>(.*?)</li>", events)))
-                  for who, events in re.findall(r'<li><a href="\.\./people/[^"]+">([^<]+)</a><ul class="pills">(.*?)</ul></li>', parish)]
-        self.assertEqual([("Bram Fable", "birth 1799"), ("Ada Fable", "birth c. 1801; burial 1870")], people)
-        self.assertIn('<span class="date" data-date="ABT 1801">c. 1801</span>', parish)
+        # The events as a Year · Event · Person · Source table in date order; an approximate year keeps "c.".
+        self.assertIn('<th scope="col" aria-sort="ascending">Year</th><th scope="col">Event</th><th scope="col">Person</th><th scope="col">Source</th>', parish)
+        rows = re.findall(r'<tr data-year="(\d*)"><td>([^<]+)</td><td>([^<]+)</td><td><a href="\.\./people/[^"]+">([^<]+)</a></td>', parish)
+        self.assertEqual([("1799", "1799", "Birth", "Bram Fable"), ("1801", "c. 1801", "Birth", "Ada Fable"), ("1870", "1870", "Burial", "Ada Fable")], rows)
         self.assertIn("Three public events are recorded here, involving two people; recorded years 1799–1870.", parish)
         self.assertIn('<a href="../catalogue.html?surname=Fable">Fable</a> <span class="meta">(2)</span>', parish)
         self.assertIn("55.9, -4.2 · located to parish level", parish)
@@ -134,7 +135,7 @@ class PlacePageTests(unittest.TestCase):
         places = self.text("places.html")
         self.assertIn(f'<h3><a href="{page("parish")}">', places)
         # A place without a page keeps its entry on the places page, and the place page links back to its entry.
-        self.assertIn(f'id="{_anchor("quiet")}"><h3>Quiet Hamlet, Fableland</h3>', places)
+        self.assertIn(f'<li class="place-card" id="{_anchor("quiet")}"><h3>Quiet Hamlet, Fableland</h3>', places)
         self.assertIn(f'href="../places.html#{_anchor("parish")}">Listed with its region</a>', self.text(page("parish")))
         study = next(p for p in (self.out / "studies").glob("*.html") if "A walk through the town" in p.read_text()).read_text()
         self.assertIn(f'<a href="../{page("town")}"', study)
@@ -182,7 +183,7 @@ class BusyPlaceTests(unittest.TestCase):
             listed = re.findall(r'<a href="\.\./people/[^"]+">Person (\d{4})', body)
             self.assertEqual(listed, sorted(listed))  # date order
             self.assertLessEqual(len(listed), PLACE_LIST_LIMIT)
-            self.assertIn(f"and {people - len(listed):,} more people", body)
+            self.assertIn(f"and {people - len(listed):,} more events", body)  # one event a person here
             self.assertIn("and ", body.split("<h2>Places within it</h2>", 1)[1].split("<h2>", 1)[0])
             self.assertIn("more places", body)
             self.assertIn("<h2>Surnames recorded here</h2>", body)

@@ -309,7 +309,7 @@ Coordinates supplied for a whole parish, county or country should not be read as
 
 ## Place hierarchy
 
-To say that a place lies within another, set the smaller place's `parent_id` to the larger place's ID: a town's parent is its parish, the parish's its county, the county's its country. Each place with a public event or a place within it gets a page of its own, which names the places it lies within (broadest first, each linked), the places recorded within it, and the people, surnames, years and studies recorded there. Nothing is inferred from a place's name; a place with no `parent_id` stands alone. A place whose parent is withheld is withheld with it, so record the hierarchy with public places.
+To say that a place lies within another, set the smaller place's `parent_id` to the larger place's ID: a town's parent is its parish, the parish's its county, the county's its country. Each place with a public event or a place within it gets a page of its own, which names the places it lies within (broadest first, each linked), the places recorded within it, and the events (with their people and the sources their claims cite), surnames, years and studies recorded there. The places page shows each place as a card with its counts, years and main surnames. Nothing is inferred from a place's name; a place with no `parent_id` stands alone. A place whose parent is withheld is withheld with it, so record the hierarchy with public places.
 
 ## Python API
 

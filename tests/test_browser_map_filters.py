@@ -119,7 +119,10 @@ class BrowserMapFilterTests(unittest.TestCase):
 
     def test_demo_cluster_lists_its_places_and_splits_when_framed(self):
         self.page.goto(self.base + 'demo/places.html', wait_until='networkidle')
-        # The three fictional places lie within a few pixels of each other at world zoom.
+        # The map opens framed on its places, so the three fictional places are drawn apart.
+        self.assertEqual((3, []), self.visible_markers())
+        self.page.locator('[data-map-world]').click()
+        # They lie within a few pixels of each other at world zoom.
         self.assertEqual((0, [3]), self.visible_markers())
         cluster = self.page.locator('.map-cluster-point')
         self.assertEqual('3 places: Lanternford (fictional); Reedhaven (fictional); Willowmere (fictional)', cluster.get_attribute('aria-label'))
@@ -148,6 +151,7 @@ class BrowserMapFilterTests(unittest.TestCase):
         self.assertEqual(f'{self.located} of {self.located} places shown · {self.located} events', self.status())
         # Every located place keeps its own marker in the page; merged ones are hidden behind their cluster.
         self.assertEqual(self.located, self.page.locator('#map-output .map-point').count())
+        self.page.locator('[data-map-world]').click()  # the map opens framed on the places; start from the world
         singles, world = self.visible_markers()
         self.assertGreaterEqual(len(world), 1)
         self.assertEqual(self.located, singles + sum(world))
@@ -189,6 +193,7 @@ class BrowserMapFilterTests(unittest.TestCase):
             for site in ('demo', 'large'):
                 with self.subTest(width=width, site=site):
                     self.page.goto(self.base + f'{site}/places.html', wait_until='networkidle')
+                    self.page.locator('[data-map-world]').click()  # at world zoom the places cluster
                     self.page.locator('.map-cluster-point').first.focus()  # the cluster's place list is part of what axe checks
                     self.assertTrue(self.page.locator('.map-cluster-places').is_visible())
                     self.assertTrue(self.page.locator('.map-filters').is_visible())

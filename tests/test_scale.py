@@ -147,8 +147,12 @@ class LargeSiteTests(unittest.TestCase):
         self.assertIn(f'id="{_anchor("pl0003")}"', first + second)
         self.assertIn('href="fableland--2.html">Page 2</a>', first)
         self.assertIn(f'id="{_anchor("pl0050")}"', self.text("places/other.html"))
-        # A place's events are listed with it, linking to the people.
-        self.assertIn("../people/", self.text("places/other.html"))
+        # A place's card links to its own page, which lists its events and links to the people.
+        other = self.text("places/other.html")
+        self.assertNotIn("../people/", other)
+        page = re.search(r'<h3><a href="\.\./(places/pl-[0-9a-f]{64}\.html)">Hamlet 0050</a></h3>', other)[1]
+        self.assertIn("1 person · 1 event · 1750", other)
+        self.assertIn('<a href="../people/', self.text(page).split("data-place-events", 1)[1])
 
     def test_sources_write_one_page_and_keep_the_rest_on_paged_pages(self):
         sources = self.text("sources.html")

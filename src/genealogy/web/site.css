@@ -124,3 +124,13 @@ body[data-view=progress] .table-wrap+.table-wrap{margin-top:1rem}.progress-table
 .pills{list-style:none;display:flex;flex-wrap:wrap;gap:.3rem;margin:.3rem 0;padding:0}.pills li{margin:0;padding:.1rem .55rem;border:1px solid var(--line);border-radius:999px;background:var(--soft);font-size:.8rem;line-height:1.5;overflow-wrap:anywhere}td .pills{margin:0}
 .record-id.meta{font-family:inherit;font-size:.76rem;letter-spacing:.02em}.connection-sentences{margin:.6rem 0;padding-left:1.4rem;font-size:.86rem}
 li>a+.pills{display:inline-flex;margin:0 0 0 .5rem;vertical-align:baseline}
+/* Places: one summary card per place; its events are on the place's own page. */
+.place-filter{margin:1.2rem 0 0;padding:.2rem 1.1rem 1rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}.place-filter:empty{display:none}.place-filter+.result-count{margin:.6rem 0}
+.place-filters input[type=search]{width:100%;min-width:0}
+.place-cards{list-style:none;margin:.6rem 0 1.4rem;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,22rem),1fr));gap:.8rem}
+.place-card{padding:1rem 1.15rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);min-width:0;overflow-wrap:anywhere}
+.place-card h3{margin:0 0 .35rem;font-size:1.15rem;line-height:1.3}.place-card .place-facts{margin:0}
+.place-surnames{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin:.55rem 0 .35rem}.place-surnames .meta{margin:0}
+.place-surnames .pill{display:inline-block;padding:.05rem .55rem;border:1px solid var(--line);border-radius:999px;background:var(--soft);font-size:.78rem;text-decoration:none}.place-surnames .pill:hover{text-decoration:underline}
+.place-events td .meta{display:block}.place-events th .sort-button{padding:0;border:0;background:none;font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;text-decoration:underline;text-underline-offset:3px}
+.map-grid{vector-effect:non-scaling-stroke}.place-surnames .meta{font-size:.78rem}

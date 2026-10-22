@@ -166,9 +166,10 @@ class ReadableSiteTests(unittest.TestCase):
     def test_place_lists_are_pills(self):
         branches = self.page("branches.html")
         self.assertRegex(branches, r'<td><ul class="pills"><li><a href="places/pl-[0-9a-f]{64}\.html">Lanternford \(fictional\)</a></li></ul></td>')
+        # A place page lists its events as a table, in readable years, in date order.
         place = next(p.read_text() for name, p in self.paths.items() if name.startswith("places/pl-"))
-        self.assertIn('<ul class="pills"><li>birth <time datetime="1754" data-date="1754-01-01">1754</time></li>'
-                      '<li>marriage <time datetime="1777-06" data-date="1777-06-01">Jun 1777</time></li></ul>', place)
+        self.assertIn('<tr data-year="1754"><td>1754</td><td>Birth</td>', place)
+        self.assertLess(place.index('<tr data-year="1754">'), place.index('<tr data-year="1777">'))
 
     def test_the_browser_data_carries_only_precisions_that_change_a_date(self):
         data = json.loads(re.search(r"=\s*(\{.*\})\s*;?\s*$", (self.root / "data/site-data.js").read_text(), re.S)[1])

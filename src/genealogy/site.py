@@ -41,10 +41,13 @@ CITED_FOR_LIMIT = 20  # people, findings or family links listed under a source's
 STUDY_GROUPS_DRAWN = 20  # groups drawn in a study's connection diagram; all are listed
 CHRONOLOGY_LANES = 30  # people drawn in a study's chronology; the rest are counted, not drawn
 CHRONOLOGY_BYTES = 36_000  # lanes stop once the drawing reaches this, so a busy study page stays small
-PLACE_LIST_LIMIT = 200  # people, sub-places, surnames or studies listed on a place's page; the rest are counted
-PLACE_PEOPLE_BYTES = 40_000  # a place's people list also stops here, and each of its other lists at a third of it
+PLACE_LIST_LIMIT = 200  # events, sub-places, surnames or studies listed on a place's page; the rest are counted
+PLACE_PEOPLE_BYTES = 40_000  # a place's event table also stops here, and each of its other lists at a third of it
 STATISTICS_ROWS = 25  # rows per statistics table; the rest are counted, so the page stays small on a large site
 UNPLACED_REGION = "Places without a broader jurisdiction"
+PLACE_CARDS = 100  # places drawn as cards on places.html and by its filter; past this a site pages its places by region
+PLACE_CARD_BYTES = 50_000  # a large site's places page stops its busiest-places cards here
+PLACE_CARD_SURNAMES = 5  # surnames named on a place's card, most people first; the place page lists them all
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
     "tree.html": ("tree", "Family tree"), "branches.html": ("branches", "Families & branches"),
@@ -312,7 +315,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     compact_relationships = len(project["relationships"]) > INLINE_LIMIT
     compact_claims = len(project["claims"]) > INLINE_LIMIT
     compact_events = len(project["events"]) > INLINE_LIMIT
-    compact_places = len(project["places"]) > INLINE_LIMIT
+    compact_places = len(project["places"]) > PLACE_CARDS  # a card is larger than a list row
     compact_sources = len(project["sources"]) > INLINE_LIMIT
     compact_studies = len(studies) > INLINE_LIMIT
     sources_ordered = sorted(sources, key=lambda sid: (str(sources[sid]["title"]).casefold(), sid))
@@ -846,14 +849,35 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             extra_titles[f"timeline/{d}.html"] = ("timeline", f"Timeline: {label(d)}")
     else:
         pages["timeline.html"] = '<h1>Timeline</h1><p>Recorded dates are preserved, including approximate and incomplete dates.</p><div data-timeline>' + timeline_list(events_sorted) + '</div>'
-    def place_item(p: dict[str, Any], prefix: str = "") -> str:
+    # A place's people are its events' participants and anyone listing one of
+    # those events as their own, as on the place's page.
+    place_people = {pid: {person_id for e in events_by_place.get(pid, []) for person_id in set(e.get("participant_ids", [])) | event_owners[e["id"]]
+                          if person_id in people} for pid in places}
+    place_region = {p["id"]: region for region, members in regions.items() for p in members}
+    busiest = lambda p: (-len(place_people[p["id"]]), -len(events_by_place.get(p["id"], [])), str(p["name"]).casefold(), p["id"])
+    place_cards = lambda items: '<ul class="place-cards">' + "".join(items) + "</ul>"
+
+    def place_item(p: dict[str, Any], prefix: str = "", *, canonical: bool = True) -> str:
+        """A place's summary card. Its events are listed on its own page, so a busy place adds one card, not its events."""
+        here, who, region = events_by_place.get(p["id"], []), place_people[p["id"]], place_region[p["id"]]
+        years = sorted(y for e in here if (y := year_of(e.get("date"))))
+        facts = [region] if region != UNPLACED_REGION else []
+        if here:
+            facts += [f'{len(who):,} {"person" if len(who) == 1 else "people"}', f'{len(here):,} event{"" if len(here) == 1 else "s"}']
+            facts += [f"{years[0]}" if years[0] == years[-1] else f"{years[0]}–{years[-1]}"] if years else []
+        else:
+            facts.append("No public events recorded")
+        names = sorted(Counter(canonical_surname(i) for i in who if canonical_surname(i)).items(), key=lambda item: (-item[1], item[0].casefold()))
+        pills = ('<p class="place-surnames"><span class="sr-only">Surnames: </span>' + "".join(
+            f'<a class="pill" href="{prefix}catalogue.html?surname={_text(quote(n))}">{_text(n)}</a>' for n, _ in names[:PLACE_CARD_SURNAMES])
+            + (f'<span class="meta">and {len(names) - PLACE_CARD_SURNAMES:,} more</span>' if len(names) > PLACE_CARD_SURNAMES else "") + "</p>") if names else ""
         coords = p.get("latitude") is not None and p.get("longitude") is not None
         details = f'{p["latitude"]}, {p["longitude"]}' if coords else "Coordinates not supplied"
         if coords and p.get("precision"):
             details += f' · located to {p["precision"]} level' if p["precision"] != "exact" else " · exact location"
         name = f'<a href="{prefix}{place_urls[p["id"]]}">{_text(p["name"])}</a>' if p["id"] in place_urls else _text(p["name"])
-        return (f'<li id="{_anchor(p["id"])}"><h3>{name}</h3><p>{_text(details)}</p>'
-                + empty([event(e, prefix, canonical=False) for e in events_by_place[p["id"]]], "No events linked to this place.") + '</li>')
+        anchor = f' id="{_anchor(p["id"])}"' if canonical else ""
+        return f'<li class="place-card"{anchor}><h3>{name}</h3><p class="place-facts">{_text(" · ".join(facts))}</p>{pills}<p class="meta">{_text(details)}</p></li>'
 
     points, place_rows = [], []
     region_rows = []
@@ -877,11 +901,21 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 page_note = f", page {n + 1} of {len(urls)}" if len(urls) > 1 else ""
                 pages[url] = (f'<h1>Places: {_text(region)}</h1><p>{len(regions[region]):,} place{"" if len(regions[region]) == 1 else "s"}{page_note}, '
                               'grouped by the last part of each place name as recorded. <a href="../places.html">All countries and regions</a>.</p>'
-                              + nav + empty([place_item(p, "../") for p in chunk]) + nav)
+                              + nav + place_cards([place_item(p, "../") for p in chunk]) + nav)
                 extra_titles[url] = ("map", f"Places: {region}" + (f", page {n + 1}" if n else ""))
         located_note = (f'<p>{located_count:,} of {len(project["places"]):,} places have supplied coordinates. The map needs JavaScript; '
                         'each region\'s page lists the coordinates.</p>' if located_count else "<p>No coordinates supplied.</p>")
         map_block = f'<div id="map-output">{located_note}</div>'
+        # The places page opens with the busiest places; every place is on its region's pages.
+        featured, size = [], 0
+        for p in sorted(project["places"], key=busiest)[:PLACE_CARDS]:
+            item = place_item(p, canonical=False)  # its anchor is on its region's page
+            size += len(item)
+            if featured and size > PLACE_CARD_BYTES:
+                break
+            featured.append(item)
+        place_rows.append('<h2>Places with the most people</h2><p class="meta">Every place is listed on its country or region\'s pages, linked above.</p>'
+                          + place_cards(featured))
     else:
         for region in region_order:
             items = []
@@ -890,14 +924,21 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                     x, y = (p["longitude"] + 180) * 960 / 360, (90 - p["latitude"]) * 480 / 180
                     broad = p.get("precision") in BROAD_PRECISIONS
                     points.append(f'<a href="#{_anchor(p["id"])}"><circle cx="{x:.3f}" cy="{y:.3f}" r="{9 if broad else 5}"' + (' class="broad"' if broad else "") + f'><title>{_text(p["name"])}</title></circle></a>')
-                items.append(place_item(p))
-            place_rows.append(f'<section class="place-region" id="{_anchor("region:" + region)}"><h2>{_text(region)}</h2>' + empty(items) + '</section>')
+            items = [place_item(p) for p in sorted(regions[region], key=busiest)]
+            place_rows.append(f'<section class="place-region" id="{_anchor("region:" + region)}"><h2>{_text(region)}</h2>' + place_cards(items) + '</section>')
         map_block = ('<div id="map-output"><svg class="place-map" viewBox="0 0 960 480" role="img" aria-label="Places with supplied coordinates"><rect width="960" height="480" fill="#e8efec"/><image href="assets/world.svg" width="960" height="480"/><path d="M0 240H960M480 0V480" stroke="#a8b9af"/>'
                      + "".join(points) + '</svg></div>' + ("<p>No coordinates supplied.</p>" if not points else ""))
     summary_table = ('<h2>By country or region</h2><p class="meta">Grouped by the last part of each place name as recorded.</p><div class="table-wrap"><table><thead><tr><th>Country or region</th><th>Places</th><th>With coordinates</th><th>Events</th><th>People</th></tr></thead><tbody>'
                      + "".join(region_rows) + '</tbody></table></div>') if len(region_rows) > 1 or compact_places else ""
-    pages["places.html"] = ('<h1>Places</h1><p>This offline coordinate overview uses supplied coordinates only. No geocoding or external map service is used. Basemap: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain).</p>'
-                            + map_block + summary_table + ("" if compact_places else "".join(place_rows) if place_rows else empty([])))
+    # The script adds a region menu and a place-or-surname search above the cards; without it the cards and region pages are the list.
+    total = len(project["places"])
+    shown = f" · the {len(featured):,} with the most people shown" if compact_places and len(featured) < total else ""
+    finder = (f'<div class="place-filter" data-place-filter data-unplaced="{_text(UNPLACED_REGION)}"></div>'
+              f'<p class="result-count" id="place-count" role="status">{total:,} place{"" if total == 1 else "s"}{shown}</p>') if total else ""
+    pages["places.html"] = ('<p class="eyebrow">Towns, parishes and mapped places</p><h1>Places</h1>'
+                            + (f'<p>{total:,} place{"" if total == 1 else "s"} recorded with the people and events in this collection. ' if total else "<p>")
+                            + 'This offline coordinate overview uses supplied coordinates only. No geocoding or external map service is used. Basemap: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain).</p>'
+                            + map_block + summary_table + finder + ('<div data-place-cards>' + "".join(place_rows) + '</div>' if place_rows else empty([])))
     def cited_for(sid: str) -> tuple[dict[str, list[str]], list[dict[str, Any]], list[dict[str, Any]]]:
         """The public people (with claim predicates), findings and family links resting on a source's citations."""
         claimed: dict[str, dict[str, Any]] = {}
@@ -1598,6 +1639,32 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 '<figcaption>Supplied coordinates on a Natural Earth overview' + ("; the ring marks a place located only broadly" if broad else "")
                 + ". Not a street map.</figcaption></figure>")
 
+    def place_events(here: list[dict[str, Any]], prefix: str) -> str:
+        """A place's events as a Year · Event · Person · Source table in date order, capped like its other lists.
+        The source is what the event's own claims cite; nothing is matched by name or date."""
+        rows, size = [], 0
+        for e in here[:PLACE_LIST_LIMIT]:
+            year = year_of(e.get("date"))
+            qualifier = re.match(r"\s*(ABOUT|ABT|EST|CAL|CIRCA|CA|C|BEF|BEFORE|AFT|AFTER|BET|FROM|INT)\b\.?", str(e.get("date") or "").upper())
+            shown = ({"BEF": "bef. ", "BEFORE": "bef. ", "AFT": "aft. ", "AFTER": "aft. "}.get(qualifier[1], "c. ") if qualifier else "") + str(year) if year else "—"
+            who = sorted((set(e.get("participant_ids", [])) | event_owners[e["id"]]) & people.keys(), key=lambda i: (person_name(i).casefold(), i))
+            cited = list(dict.fromkeys(citations[cid]["source_id"] for c in claims_by_subject.get(e["id"], [])
+                                       for cid in [*c.get("citation_ids", []), *(ev["citation_id"] for ev in evidence_by_claim.get(c["id"], []))]
+                                       if cid in citations and citations[cid]["source_id"] in sources))
+            source = (", ".join(ref(sid, prefix, sources[sid]["title"]) for sid in cited[:2]) + (f' <span class="meta">and {len(cited) - 2:,} more</span>' if len(cited) > 2 else "")
+                      if cited else '<span class="meta">None linked</span>')
+            row = (f'<tr data-year="{year or ""}"><td>{_text(shown)}</td><td>{_text(str(e["kind"]).capitalize())}'
+                   + (f'<span class="meta">{_text(e["description"])}</span>' if e.get("description") else "") + "</td>"
+                   f'<td>{", ".join(ref(i, prefix) for i in who) or "—"}</td><td>{source}</td></tr>')
+            size += len(row)
+            if rows and size > PLACE_PEOPLE_BYTES:
+                break
+            rows.append(row)
+        more = len(here) - len(rows)
+        return ('<div class="table-wrap"><table class="place-events" data-place-events><thead><tr><th scope="col" aria-sort="ascending">Year</th>'
+                '<th scope="col">Event</th><th scope="col">Person</th><th scope="col">Source</th></tr></thead><tbody>' + "".join(rows) + "</tbody></table></div>"
+                + (f'<p class="meta">and {more:,} more events</p>' if more > 0 else ""))
+
     for pid, url in place_urls.items():
         prefix, p = "../", places[pid]
         content = f'<p class="eyebrow">Place</p><h1>{_text(p["name"])}</h1>'
@@ -1626,9 +1693,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 ([count(len(events_by_place[c["id"]]), "event", "events")] if events_by_place.get(c["id"]) else [])
                 + ([count(len(sub_places[c["id"]]), "place", "places") + " within"] if sub_places.get(c["id"]) else []))) else "") + "</li>"
             for c in sub_places.get(pid, [])], "places") if sub_places.get(pid) else '<p class="empty-state">No public places are recorded within this one.</p>')
-        content += '<h2>People recorded here</h2>' + (place_list([
-            f'<li>{ref(person_id, prefix)}' + pills([f'{_text(e["kind"])} {when(e.get("date"), e.get("date_precision"), "date unknown")}' for e in evs]) + "</li>"
-            for person_id, evs in who.items()], "people", PLACE_PEOPLE_BYTES) if who else '<p class="empty-state">No public people have events recorded here.</p>')
+        content += '<h2 id="place-events">Events recorded here</h2>' + (place_events(here, prefix) if here else '<p class="empty-state">No public events are recorded at this place.</p>')
         names = Counter(canonical_surname(person_id) for person_id in who if canonical_surname(person_id))
         content += '<h2>Surnames recorded here</h2>' + (place_list([
             f'<li><a href="{prefix}catalogue.html?surname={_text(quote(name))}">{_text(name)}</a> <span class="meta">({n:,})</span></li>'
@@ -2093,6 +2158,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                           config.grades, study_urls if compact_studies else None, name_variants)
     # The map lists the places in a cluster with links to where each one is shown.
     shared["site"]["place_urls"] = {p["id"]: record_routes[p["id"]] for p in project["places"] if p.get("latitude") is not None and p.get("longitude") is not None}
+    # The places filter links every place it draws; the located ones are already listed for the map.
+    shared["site"]["place_routes"] = {p["id"]: record_routes[p["id"]] for p in project["places"] if p["id"] not in shared["site"]["place_urls"]}
     outputs: dict[str, str] = {
         "data/site.json": exports.to_json(project), "data/site.csv": exports.to_csv(project),
         "data/places.geojson": json.dumps(geojson(project), ensure_ascii=False, indent=2) + "\n",
