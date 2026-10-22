@@ -36,6 +36,7 @@ from .labels import SOURCE_QUALITY  # the catalogue's Source quality menu
 # browse the paged pages instead. Keeps every page small at thousands of people.
 INLINE_LIMIT = 300
 LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are on archive pages
+MONTHS_LISTED = 24  # a findings page's month list names this many months; past that, the older half go by year
 FINDING_GROUPS = 30  # studies, places and finding types listed by count on the findings log; the rest are counted
 LATEST_SEARCHES = 50  # research.html lists the newest searches; each dossier lists all of its own
 QUESTION_RELATED = 4  # hypotheses and findings about a question's people shown on its card; the rest are on their pages
@@ -1726,10 +1727,30 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         for row in rows:
             month = row["recorded_on"][:7]
             if month != current:
-                out.append(("</tbody>" if current else "") + f'<tbody><tr class="findings-month"><th colspan="5" scope="rowgroup">{months[int(month[5:7]) - 1] + " " if len(month) == 7 else ""}{_text(month[:4])}</th></tr>')
+                out.append(("</tbody>" if current else "") + f'<tbody id="month-{_text(month)}"><tr class="findings-month"><th colspan="5" scope="rowgroup">{month_label(month)}</th></tr>')
                 current = month
             out.append(finding_item(row, prefix))
         return "".join(out) + ("</tbody>" if current else "")
+
+    month_label = lambda month: (months[int(month[5:7]) - 1] + " " if len(month) == 7 else "") + _text(month[:4])
+
+    def months_nav(rows: list[dict[str, Any]], undated_count: int = 0) -> str:
+        """Links to the page's month groups, newest first; past 24 months, the older ones go by year, each to its newest month."""
+        counts = Counter(row["recorded_on"][:7] for row in rows)
+        ordered = sorted(counts, reverse=True)
+        item = lambda month, text, n: f'<li><a href="#month-{_text(month)}">{text}</a> <span class="meta">· {n:,}</span></li>'
+        if len(ordered) > MONTHS_LISTED:
+            recent, older = ordered[:MONTHS_LISTED // 2], ordered[MONTHS_LISTED // 2:]
+            years: dict[str, list[str]] = defaultdict(list)
+            for month in older:
+                years[month[:4]].append(month)
+            earlier = ('<li class="findings-months-earlier"><span>Earlier years:</span> <ul>'
+                       + "".join(item(group[0], _text(year), sum(counts[m] for m in group)) for year, group in years.items()) + "</ul></li>")
+        else:
+            recent, earlier = ordered, ""
+        undated = f'<li><a href="#month-undated">Undated</a> <span class="meta">· {undated_count:,}</span></li>' if undated_count else ""
+        return (f'<nav class="findings-months" aria-label="Months" data-findings-months><ul>{"".join(item(m, month_label(m), counts[m]) for m in recent)}{earlier}{undated}</ul></nav>'
+                if ordered or undated else "")
 
     def findings_table(body: str, total: int, index: bool = False) -> str:
         """The log as a 5-column table. data-total and data-index tell the filters when the page holds only some findings."""
@@ -1793,8 +1814,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     shown = dated[:LATEST_FINDINGS] if archive else dated
     count = (f'The newest {LATEST_FINDINGS} of {len(dated):,} dated findings' if archive else f'{len(dated):,} dated finding{"" if len(dated) == 1 else "s"}') + (f', and {len(undated):,} undated' if undated else "")
     if project["findings"]:
-        log.append(f'<div class="findings-summary" data-findings-summary><p class="result-count">{count}.</p>{findings_legend()}</div>'
-                   + findings_table(by_month(shown) + ('<tbody><tr class="findings-month"><th colspan="5" scope="rowgroup">Undated findings</th></tr>' + "".join(finding_item(row) for row in undated) + "</tbody>" if undated else ""),
+        log.append(f'<div class="findings-summary" data-findings-summary><p class="result-count">{count}.</p>{findings_legend()}</div>' + months_nav(shown, len(undated))
+                   + findings_table(by_month(shown) + ('<tbody id="month-undated"><tr class="findings-month"><th colspan="5" scope="rowgroup">Undated findings</th></tr>' + "".join(finding_item(row) for row in undated) + "</tbody>" if undated else ""),
                                     len(project["findings"]), bool(archive))
                    + (archive_nav("") if archive else "") + by_study + by_place)
     else:
@@ -1804,7 +1825,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         newer = f'<a href="{archive_url(number + 1).split("/")[1]}">← Newer</a>' if number + 1 in archive else '<a href="../findings.html">← Latest findings</a>'
         older = f'<a href="{archive_url(number - 1).split("/")[1]}">Older →</a>' if number - 1 in archive else ""
         pages[archive_url(number)] = (f'<h1>Findings, page {number} of {len(archive)}</h1><p>Archive pages are numbered from the earliest finding, so a finding keeps its page. <a href="../findings.html">Latest findings</a>.</p>'
-                                      + f'<div class="findings-summary" data-findings-summary><p class="result-count">{len(rows):,} findings, {_text(rows[-1]["recorded_on"])} to {_text(rows[0]["recorded_on"])}.</p>{findings_legend("../")}</div>'
+                                      + f'<div class="findings-summary" data-findings-summary><p class="result-count">{len(rows):,} findings, {_text(rows[-1]["recorded_on"])} to {_text(rows[0]["recorded_on"])}.</p>{findings_legend("../")}</div>' + months_nav(rows)
                                       + findings_table(by_month(rows, "../"), len(project["findings"])) + f'<nav class="pagination" aria-label="Finding pages"><div>{newer}{older}</div></nav>' + archive_nav("../"))
         extra_titles[archive_url(number)] = ("findings", f"Findings, page {number}")
 

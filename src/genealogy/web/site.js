@@ -986,6 +986,8 @@ function findingsTable(){
  const summary=$('[data-findings-summary]'),count=summary&&$('.result-count',summary);(summary||host).before(bar);
  const status=el('p',undefined,'result-count findings-match');status.setAttribute('role','status');if(count)count.after(status);else host.before(status);
  const results=el('tbody',undefined,'findings-results');results.hidden=true;table.append(results);
+ // The month list leads to the month groups, which a filtered view hides, so it goes with them.
+ const months=$('[data-findings-months]');
  const groups=$$('tbody',table).filter(t=>t!==results),placed=rows.map(row=>[row,row.parentElement]);
  // Values from the address wait here until the menus that offer them are filled.
  const pending={},params=new URLSearchParams(location.search);
@@ -1020,7 +1022,7 @@ function findingsTable(){
  let loaded=false,loading=false;const index=host.dataset.index,total=Number(host.dataset.total||0);
  function render(){
   restore();
-  if(idle()){results.hidden=true;results.replaceChildren();groups.forEach(g=>g.hidden=false);status.textContent='';if(count)count.hidden=false;return;}
+  if(idle()){results.hidden=true;results.replaceChildren();groups.forEach(g=>g.hidden=false);status.textContent='';if(count)count.hidden=false;if(months)months.hidden=false;return;}
   const q=fold(search.value).trim().split(/\s+/).filter(Boolean),[k,s,p,t,g]=['kind','status','person','study','place'].map(key=>menus[key].value);
   const found=records.filter(r=>(!k||r.k===k)&&(!s||r.s===s)&&(!p||r.p.includes(p))&&(!t||r.t.includes(t))&&(!g||r.g.includes(g))&&q.every(w=>textOf(r).includes(w)));
   // Newest first as the page lists them (date, then id); undated findings last, in page order, either way.
@@ -1028,7 +1030,7 @@ function findingsTable(){
   const shown=found.slice(0,FINDINGS_SHOWN);
   if(shown.length)results.replaceChildren(...shown.map(r=>r.row||(r.row=build(r.e))));
   else{const tr=el('tr'),td=el('td','No findings match these filters.','empty-state');td.colSpan=5;tr.append(td);results.replaceChildren(tr);}
-  groups.forEach(g=>g.hidden=true);results.hidden=false;if(count)count.hidden=true;
+  groups.forEach(g=>g.hidden=true);results.hidden=false;if(count)count.hidden=true;if(months)months.hidden=true;
   const all=loaded?'findings':total>rows.length?'findings on this page':'findings';
   status.textContent=`${found.length.toLocaleString()} of ${records.length.toLocaleString()} ${all} match`+(found.length>shown.length?`; the first ${shown.length} are shown. Narrow the filters to see the others.`:'.')+(loading?' Loading every finding…':'');}
  const keep=()=>{clear.hidden=idle();try{const u=new URL(location.href);for(const key of ['q',...Object.keys(menus),'order'])u.searchParams.delete(key);
