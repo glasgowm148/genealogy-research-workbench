@@ -393,7 +393,9 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertIn('Person 0003 Fable', self.page.locator('#connection-result').inner_text())
         self.page.goto(self.base + 'people/' + dossier.name)
         self.page.locator('p.explore').get_by_role('link', name='Family tree').click()
-        self.page.locator('#tree-output svg').wait_for()
+        # The link opens the reading room (Branch cards) on the person.
+        self.page.locator('#tree-output [data-reading-room]').wait_for()
+        self.assertEqual('true', self.page.locator('[data-tree-view="branches"]').get_attribute('aria-pressed'))
         self.assertEqual('person:01', self.page.locator('#tree-root').input_value())
         # Wide screens keep the numbered menu in view as a column beside the sections; a jump
         # leaves its heading clear of it. Narrow screens leave it in the flow, above the sections.

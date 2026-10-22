@@ -1,5 +1,6 @@
 from html.parser import HTMLParser
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -92,7 +93,8 @@ class SiteTests(unittest.TestCase):
                         continue
                     target = (path.parent / unquote(url.path)).resolve() if url.path else path
                     self.assertTrue(target.is_file(), (name, link))
-                    if url.fragment and target.suffix == '.html':
+                    # A fragment of key=value pairs is an address the page's script reads (tree.html#view=branches&person=…).
+                    if url.fragment and target.suffix == '.html' and not re.fullmatch(r'[\w-]+=[^&=]*(?:&[\w-]+=[^&=]*)*', url.fragment):
                         other = Links()
                         other.feed(target.read_text())
                         self.assertIn(url.fragment, other.ids, (name, link))

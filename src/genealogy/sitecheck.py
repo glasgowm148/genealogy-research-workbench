@@ -9,7 +9,9 @@ is reported as ``html-fallback`` because many static servers do not add the
 extension. External, ``mailto:``/``tel:``/``javascript:``/``data:`` and
 same-page ``#…`` links are ignored, as are values inside scripts, styles,
 text areas and comments. ``#fragment`` targets are checked against the
-target page's ``id``/``name`` attributes.
+target page's ``id``/``name`` attributes, except a fragment of ``key=value``
+pairs, which is an address the page's script reads
+(``tree.html#view=branches&person=p1``), not an element.
 
 A baseline of known (page, target) pairs lets a project ratchet: new broken
 pairs fail, fixed ones can be removed, and the baseline never grows on update.
@@ -40,6 +42,7 @@ _ID = re.compile(r"""\s(?:id|name)\s*=\s*["']([^"']+)["']""", re.I)
 _SKIP_SCHEMES = ("mailto:", "tel:", "javascript:", "data:", "blob:", "about:", "sms:", "file:")
 _TEMPLATE = ("${", "{{", "<%", "' +", "\" +")
 _SKIP_TAGS = {"base", "form"}
+_STATE_FRAGMENT = re.compile(r"[\w-]+=[^&=]*(?:&[\w-]+=[^&=]*)*")
 BASELINE_SCHEMA_VERSION = 1
 
 
@@ -184,7 +187,8 @@ def scan(relative: str, site_root: str) -> dict[str, Any]:
                 continue
             if options.generated_prefixes and target.startswith(options.generated_prefixes):
                 refs.add(target)
-            if parts.fragment and target.endswith(".html") and target != relative and (anchor_pages is None or anchor_pages.fullmatch(target)):
+            if (parts.fragment and not _STATE_FRAGMENT.fullmatch(parts.fragment) and target.endswith(".html") and target != relative
+                    and (anchor_pages is None or anchor_pages.fullmatch(target))):
                 anchors.append((target, unquote(parts.fragment), value[:300]))
     ids = None
     if relative.endswith(".html") and (anchor_pages is None or anchor_pages.fullmatch(relative)):

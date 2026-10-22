@@ -143,6 +143,8 @@ A link you mark `disproved`, or give a grade that counts as disproved, leaves th
 
 A sibling can be recorded directly, for example when a will or census names a brother but neither parent is yet in the project: add a relationship with `"kind": "sibling"` (or `half_sibling`). It is symmetric, like a spouse link, so the order of `subject_id` and `object_id` does not matter, and it is assessed like any other link, with a `confidence`, `estimate`, `grade` and linked claims. Both dossiers list it under **Siblings** as "Recorded sibling", or with the siblings found through shared parents when they also have parents in common; a disproved link moves to **Rejected and superseded links**.
 
+When two people could each be the father (or mother), record a parent link to each candidate, each with its own `confidence`, `estimate` and reasoning, rather than keeping only the likelier one. The tree page's family reading room (**Branch cards**) then draws every candidate that is not disproved side by side in the parents' band, the best-assessed father and mother first and the others marked "Alternative father of …" with a dashed line, and the child's card carries a chip per link naming each parent ("Father (Tobin): Probable · 84%"). A candidate's recorded spouse who is also a candidate parent stands beside them as one alternative set. Once you rule a candidate out, mark the link `disproved`: it leaves the drawing and is listed in the **Rejected** strip under the parents' band.
+
 ### Use your own grades
 
 If your project already grades evidence in its own words, such as "strongly supported" or "uncertain", define those grades in `genealogy.toml`, in the order you want them listed. Each one says which standard grade it counts as:

@@ -428,12 +428,14 @@ function catalogue(){
 function tree(){
  const output=$('#tree-output'),root=$('#tree-root');if(!output||!root)return;
  fillPeople(root);
- const requested=new URLSearchParams(location.search).get('person');if(requested&&personBy.has(requested))root.value=requested;
+ // The address can name the person and view in its query (?person=&view=) or its fragment (#view=branches&person=, a dossier's link).
+ const asked=key=>new URLSearchParams(location.hash.slice(1)).get(key)||new URLSearchParams(location.search).get(key);
+ const requested=asked('person');if(requested&&personBy.has(requested))root.value=requested;
  const controls=el('div',undefined,'tree-controls'),out=el('button','−'),inn=el('button','+'),reset=el('button','Fit tree'),help=el('span','Drag to pan · wheel or buttons to zoom','hint');out.setAttribute('aria-label','Zoom out');inn.setAttribute('aria-label','Zoom in');controls.append(out,inn,reset,help);output.before(controls);
  let tx=0,ty=0,scale=1,group,svg,initial,mode=new URLSearchParams(location.search).get('person')&&personBy.has(new URLSearchParams(location.search).get('person'))?'family':'whole',wholeController;
  const modes=el('div',undefined,'tree-modes');modes.setAttribute('role','group');modes.setAttribute('aria-label','Tree view');const modeButtons=new Map;for(const [value,label] of [['whole','Whole tree'],['family','Focus family'],['branches','Branch cards'],['hourglass','Hourglass'],['sun','Family sun'],['lanes','Lanes']]){const button=el('button',label);button.dataset.treeView=value;button.setAttribute('aria-pressed',String(mode===value));button.addEventListener('click',()=>{mode=value;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});modes.append(button);modeButtons.set(value,button);}controls.before(modes);
  // ?view=hourglass, sun or lanes opens that view (with ?person=, around that person).
- {const asked=new URLSearchParams(location.search).get('view');if(TREE_VIEWS[asked]){mode=asked;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));}}
+ {const view=asked('view');if(TREE_VIEWS[view]){mode=view;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));}}
  function transform(){group?.setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`);}
  function draw(){wholeController?.dispose();wholeController=null;output.replaceChildren();if(mode==='whole'){wholeController=wholeTree(output,root,()=>{mode='family';modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});return;}if(TREE_VIEWS[mode]){wholeController=TREE_VIEWS[mode](output,root,id=>{root.value=id;draw();});return;}const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return;}
  const nodes=new Map([[id,{id,depth:0}]]),edges=[];let frontier=[id];for(let depth=0;depth<3;depth++){const next=[];for(const n of frontier){for(const r of relationships){const sibling=SIBLING_KINDS.includes(r.kind);if(r.confidence==='disproved'||!(sibling||['parent','father','mother','parent_child','child','biological_parent','adoptive_parent'].includes(r.kind)))continue;if(r.subject_id!==n&&r.object_id!==n)continue;const other=r.subject_id===n?r.object_id:r.subject_id;if(!personBy.has(other))continue;const d=nodes.get(n).depth+(sibling?0:r.subject_id===n?-1:1);if(!nodes.has(other)&&nodes.size<70){nodes.set(other,{id:other,depth:d});next.push(other);}if(nodes.has(other)&&!edges.some(e=>e.id===r.id))edges.push(r);}}frontier=next;}
@@ -635,6 +637,10 @@ function familyLanes(output,root,refocus){
  output.append(viewport,note,extra,text);const pz=svgPanZoom(svg,group,W,height);return {zoom:pz.zoom,fit:pz.fit,dispose(){}};
 }
 const TREE_VIEWS={hourglass:hourglassTree,sun:familySun,lanes:familyLanes};
+// A view in its own module (reading_room.js, the Branch cards view) registers a maker before this script runs; it is
+// handed the shared data and helpers, and an assessment read as a badge reads it: a grade counts as its confidence.
+const assess=r=>{const c=String(r?.confidence||'unknown'),g=GRADES[r?.grade],level=(g&&data.site?.grade_confidence?.[r.grade])||c;return {level,family:FAMILY[level]||'unassessed',words:(g||CONFIDENCE[c]||'Unassessed')+(Number.isInteger(r?.estimate)?` · ${r.estimate}%`:'')};};
+for(const [key,make] of Object.entries(window.GENEALOGY_TREE_VIEWS||{})){try{TREE_VIEWS[key]=make({people,personBy,placeBy,relationships,links,el,svgEl,name,lifespan,pe,year,assess,empty,PARENT_KINDS,PARTNER_KINDS,SIBLING_KINDS});}catch(error){console.warn('Optional genealogy enhancement unavailable:',key,error);}}
 // The dossier anchors each relationship as "r-" + the SHA-256 of its id (site.py's _anchor), so a step can link to its entry.
 function sha256(text){
  const K=[],H=[],prime=n=>{for(let d=2;d*d<=n;d++)if(n%d===0)return false;return true;};

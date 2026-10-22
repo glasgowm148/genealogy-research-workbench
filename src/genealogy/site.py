@@ -126,6 +126,8 @@ BROWSER_FIELDS["people"] += ("sex", "external_id", "study_ids", "record_types", 
 OUTSTANDING = ("open", "draft")  # research statuses the notebook lists first as work still to do
 BROAD_PRECISIONS = {"parish", "district", "county", "region", "country", "approximate"}
 ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
+# The tree page's reading room (the Branch cards view), loaded by tree.html alone; the tree page adds its script tag.
+ASSETS += ("reading_room.js",)
 MANIFEST = ".genealogy-site-manifest.json"
 PARENT_KINDS = {"parent", "father", "mother", "biological_parent", "adoptive_parent", "parent_child"}
 PARTNER_KINDS = {"spouse", "partner", "husband", "wife", "marriage"}
@@ -2302,6 +2304,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         updates = pending_updates_section(pid, person)
         jumps.insert([key for key, _, _ in jumps].index("relationships"), ("updates", f'Pending {config.tree_name or "tree"} updates', updates))
         explore = [(f"tree.html?person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
+        explore = [(f"tree.html#view=branches&person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
         if canonical_surname(pid):
             explore.append((f"catalogue.html?surname={quote(canonical_surname(pid))}", f"Everyone surnamed {canonical_surname(pid)}"))
         if updates:
@@ -3627,6 +3630,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     if "dna.html" in routes:
         dna_pages()
 
+    # The reading room registers itself with site.js, so it is a plain (not deferred) script: it runs while the page
+    # is read, before the deferred site.js, and only the tree page carries it.
+    pages["tree.html"] += '<script src="assets/reading_room.js"></script>'
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
