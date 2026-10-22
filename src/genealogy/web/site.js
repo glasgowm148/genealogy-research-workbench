@@ -1068,9 +1068,19 @@ function findingsTable(){
 }
 // A link into a closed <details> (a claim row on research.html) opens it; browsers that do not do so themselves still show the target.
 function openTargets(){const open=()=>{const target=location.hash.length>1&&document.getElementById(decodeURIComponent(location.hash.slice(1)));let n=target,opened=false;while(n){if(n.tagName==='DETAILS'&&!n.open){n.open=true;opened=true;}n=n.parentElement;}if(opened)target.scrollIntoView();};open();window.addEventListener('hashchange',open);}
+// The sidebar's saved catalogue views ([[catalogue.views]]): on the catalogue, the one whose query the address carries (in any order) is the current page.
+// The address changes as filters change, so it is read again after each interaction.
+function catalogueViews(){
+ const links=$$('[data-catalogue-view]'),home=links.length?$('a[href$="catalogue.html"][aria-current="page"]',links[0].closest('ul')):null;if(!home)return;
+ const pairs=q=>[...new URLSearchParams(q)].map(p=>JSON.stringify(p)).sort().join('&');
+ const mark=()=>{const here=pairs(location.search),current=links.find(a=>pairs(a.dataset.catalogueView)===here);for(const a of links){if(a===current)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}
+  if(current)home.removeAttribute('aria-current');else home.setAttribute('aria-current','page');};
+ mark();for(const type of ['input','change','click','keydown','submit'])document.addEventListener(type,()=>setTimeout(mark));window.addEventListener('popstate',mark);
+}
 const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers,personForms,openTargets];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
 for(const task of [mapFit,placeCards,placeEvents]){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{records();}catch(error){console.warn('Optional genealogy enhancement unavailable: records',error);}
 try{findingsTable();}catch(error){console.warn('Optional genealogy enhancement unavailable: findingsTable',error);}
+try{catalogueViews();}catch(error){console.warn('Optional genealogy enhancement unavailable: catalogueViews',error);}
 })();

@@ -67,6 +67,20 @@ When the case has public DNA branches ([Record DNA branches](research.md#record-
 dna_heading = "Y-DNA"
 ```
 
+To give readers ready-made searches of the people catalogue ("No WikiTree link", "Early records"), list them as saved views. Each is a `label` (at most 60 characters) and a `query`: the catalogue address after `catalogue.html?`, written with the parameters listed under `catalogue.html` in [the pages produced](#build-and-inspect) (`q`, `no_external`, `needs_update`, `date_type`, `year_to`, `sort`, …), each once and with a value, joined by `&`, without the `?` and with spaces written as `+` or `%20`:
+
+```toml
+[[catalogue.views]]
+label = "No WikiTree link"
+query = "no_external=1"
+
+[[catalogue.views]]
+label = "Early records"
+query = "date_type=birth&year_to=1750&sort=birth"
+```
+
+The sidebar lists them under **People**, in this order, after **People catalogue**, each linking to `catalogue.html?<query>`. With JavaScript the catalogue marks a view as the current page while its address carries exactly that view's parameters and values, in any order; changing a filter leaves the view, and the catalogue is marked current again. The catalogue drops a parameter set to its default from the address (Any, Name A–Z, Table), so leave those out of a view's query or it is never marked. A query using a parameter the catalogue does not read, an older key it rewrites (`birth_from`, `no_parent`), the same parameter twice, or the same parameters as an earlier view stops the build with the view's number named.
+
 `[project].case_directory` and `default_case` select the case; use the CLI `--case` option for a different one. Existing catalogue/maps/timelines format/output settings control compatible standalone exports as well as the cohesive website built by the CLI.
 
 ## Build and inspect

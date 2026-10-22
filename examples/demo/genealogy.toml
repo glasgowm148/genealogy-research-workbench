@@ -30,3 +30,11 @@ label = "On this site"
 title = "About the data"
 description = "Where the demo's invented records came from, and what the site leaves out."
 url = "about-data.html"
+# Saved catalogue searches, listed in the sidebar under People after the catalogue.
+[[catalogue.views]]
+label = "No external link"
+query = "no_external=1"
+
+[[catalogue.views]]
+label = "Born before 1800"
+query = "date_type=birth&year_to=1799"

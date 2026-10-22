@@ -3640,7 +3640,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         prefix = "../" if "/" in path else ""
         view, title = routes[path] if path in routes else ("study", study_titles[path]) if path in study_titles else extra_titles[path] if path in extra_titles else ("person", person_titles[path])
         person_attribute = f' data-person-id="{_text(person_ids_by_path[path])}"' if path in person_ids_by_path else ""
-        nav = shell.sidebar_nav(path, prefix, view, routes)
+        nav = shell.sidebar_nav(path, prefix, view, routes, config.catalogue_views)
         # Dossiers need only the menu enhancement. Interactive pages share one
         # data script rather than embedding the whole collection in each page.
         # The paged pages of a large site are plain lists and need no data.

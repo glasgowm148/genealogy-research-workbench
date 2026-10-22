@@ -72,7 +72,14 @@ def groups(routes: dict[str, tuple[str, str]]) -> list[tuple[str, str, list[str]
     return [group for group in built if group[2]]
 
 
-def sidebar_nav(path: str, prefix: str, view: str, routes: dict[str, tuple[str, str]]) -> str:
+def catalogue_views(prefix: str, views: Iterable[tuple[str, str]]) -> str:
+    # Saved searches from [[catalogue.views]], listed after the catalogue. A
+    # static page cannot read its address, so site.js marks the current one.
+    return "".join(f'<li class="nav-view"><a href="{prefix}catalogue.html?{escape(query)}" data-catalogue-view="{escape(query)}">{escape(label)}</a></li>'
+                   for label, query in views)
+
+
+def sidebar_nav(path: str, prefix: str, view: str, routes: dict[str, tuple[str, str]], views: Iterable[tuple[str, str]] = ()) -> str:
     # Only the current section lists its pages, which keeps every page small;
     # each section's link opens its first page, and the site index lists them all.
     current = section_route(path, view, routes)
@@ -84,7 +91,8 @@ def sidebar_nav(path: str, prefix: str, view: str, routes: dict[str, tuple[str, 
             continue
         items = "".join(f'<li><a data-view="{routes[r][0]}" href="{prefix}{r}"'
                         + (' aria-current="page"' if r == path else ' aria-current="true"' if r == current else "")
-                        + f'>{escape(NAV_LABELS.get(r, routes[r][1]))}</a></li>' for r in members)
+                        + f'>{escape(NAV_LABELS.get(r, routes[r][1]))}</a></li>'
+                        + (catalogue_views(prefix, views) if r == "catalogue.html" else "") for r in members)
         parts.append(f'<div class="nav-section"><a class="nav-group" data-group="{key}" href="{prefix}{members[0]}">{icon(key)}{label}</a>'
                      f'<ul>{items}</ul></div>')
     shortcuts = ([f'<a href="{prefix}connections.html">Find a connection <span aria-hidden="true">→</span></a>'] if "connections.html" in routes else []) + [

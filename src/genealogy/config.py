@@ -8,12 +8,22 @@ import tomllib
 import re
 from typing import Any, ClassVar, Mapping
 import unicodedata
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from .models import Confidence
 
 
 DEFAULT_PROJECT_NAME = "Genealogy research project"
+# The catalogue's address parameters (docs/deployment.md, catalogue.html), the
+# ones a saved ``[[catalogue.views]]`` query may use. The older keys the page
+# rewrites on opening (``birth_from``, ``no_parent``) are left out: a view
+# using one could never be marked current.
+CATALOGUE_PARAMETERS = frozenset((
+    "q", "first", "last", "last_scope", "name", "sex", "exact", "spouse", "father", "mother", "child", "sibling",
+    "date_type", "year_from", "year_to", "place_type", "place", "region", "exclude_place", "study", "record_type",
+    "quality", "evidence", "born_surname", "married_surname", "suffix", "missing_father", "missing_mother",
+    "has_children", "no_spouse", "no_external", "needs_update", "change_relationship", "change_action",
+    "change_confidence", "sort", "group_location", "group_branch", "group_surname", "location_detail", "view", "surname"))
 
 
 def exact_bool(value: Any, *, setting: str) -> bool:
@@ -247,6 +257,7 @@ class ProjectConfig:
                 raise ValueError(f"{setting} names the same source type as source_types.{seen[same]}")
             seen[same] = key
 
+        self.catalogue_views  # validates [[catalogue.views]]
         unknown = set(self.names) - {"variants", "surname"}
         if unknown:
             raise ValueError(f"names has unknown settings: {', '.join(sorted(unknown))}")
@@ -276,6 +287,41 @@ class ProjectConfig:
                 if owner != canonical:
                     raise ValueError(f"{setting}: {spelling!r} is already listed under {owner!r}")
         return folded
+
+    @property
+    def catalogue_views(self) -> list[tuple[str, str]]:
+        """``[[catalogue.views]]``: saved catalogue searches as (label, query), the query re-encoded the way the page writes it."""
+        views = self.catalogue.get("views", [])
+        if not isinstance(views, list):
+            raise ValueError("catalogue.views must be a list of tables ([[catalogue.views]])")
+        result: list[tuple[str, str]] = []
+        for number, view in enumerate(views, 1):
+            setting = f"catalogue.views[{number}]"
+            if not isinstance(view, dict):
+                raise ValueError(f"{setting} must be a table with a label and a query")
+            unknown = set(view) - {"label", "query"}
+            if unknown:
+                raise ValueError(f"{setting} has unknown settings: {', '.join(sorted(unknown))}")
+            label, query = view.get("label"), view.get("query")
+            if not isinstance(label, str) or not label.strip() or len(label.strip()) > 60 or _control(label):
+                raise ValueError(f"{setting}.label must be a non-empty string of at most 60 characters")
+            if not isinstance(query, str) or not query or _control(query) or re.search(r"[\s#?]", query):
+                raise ValueError(f"{setting}.query must be a query string such as no_external=1, without '?', '#' or spaces")
+            try:
+                pairs = parse_qsl(query, keep_blank_values=True, strict_parsing=True)
+            except ValueError:
+                raise ValueError(f"{setting}.query must be name=value pairs joined by '&', such as no_external=1&sex=F") from None
+            keys = [key for key, _ in pairs]
+            unknown = sorted(set(keys) - CATALOGUE_PARAMETERS)
+            if unknown:
+                raise ValueError(f"{setting}.query uses parameters the catalogue does not read: {', '.join(unknown)}")
+            if len(keys) != len(set(keys)) or not all(value.strip() for _, value in pairs):
+                raise ValueError(f"{setting}.query must give each parameter once, with a value")
+            # The page marks the view whose query its address carries, in any order; two views with one query would both match.
+            if any(set(pairs) == set(parse_qsl(other)) for _, other in result):
+                raise ValueError(f"{setting}.query repeats an earlier view's query")
+            result.append((label.strip(), urlencode(pairs)))
+        return result
 
     @property
     def catalogue_surname(self) -> str | None:
