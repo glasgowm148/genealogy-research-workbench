@@ -95,8 +95,12 @@ class StatisticsPageTests(unittest.TestCase):
 
     def test_the_page_is_a_route_in_every_menu_and_the_site_index(self):
         self.assertEqual(("statistics", "Statistics"), ROUTES["statistics.html"])
+        # Every menu leads to the Places section, which lists the page; the site index always does.
         for page in ("index.html", "catalogue.html", "sitemap.html"):
+            self.assertIn('data-group="places" href="places.html"', (self.root / page).read_text(), page)
+        for page in ("places.html", "statistics.html", "sitemap.html"):
             self.assertIn('href="statistics.html"', (self.root / page).read_text(), page)
+        self.assertIn('data-view="statistics" href="statistics.html" aria-current="page">Statistics</a>', self.html)
         self.assertIn('<title>Statistics — Fictional statistics</title>', self.html)
         self.assertEqual([], check_site(self.root)["broken"])
 

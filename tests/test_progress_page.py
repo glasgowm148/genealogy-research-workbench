@@ -140,7 +140,7 @@ class ProgressPageTests(unittest.TestCase):
 
     def test_history_grows_only_when_the_newest_finding_date_changes(self):
         html = build(self.out)
-        self.assertNotIn("<svg", html)
+        self.assertNotIn("<svg", html.split("<main", 1)[1])  # no chart; the shell's icons are outside main
         self.assertIn("One snapshot so far", html)
         # A change of grade without a newer finding updates that date's snapshot in place.
         build(self.out, case(gwen=C.PROBABLE))

@@ -14,8 +14,10 @@ from genealogy.site import _owned, build_site
 
 LONG = "Ada Fable and Bram Fable are the couple married at Invented Parish in 1822, " * 3
 FORM = re.compile(r'<form class="site-search" role="search" action="((?:\.\./)?)catalogue\.html" method="get">'
-                  r'<label for="site-search-input">[^<]+</label><input id="site-search-input" type="search" name="q"[^>]*>'
-                  r'<p class="site-search-count" aria-live="polite"></p><ul class="site-search-results" id="site-search-results" hidden></ul></form>')
+                  r'<label class="sr-only" for="site-search-input">Search the site</label><svg [^>]*aria-hidden="true">.*?</svg>'
+                  r'<input id="site-search-input" type="search" name="q"[^>]*>'
+                  r'<div class="site-search-panel"><p class="site-search-count" aria-live="polite"></p>'
+                  r'<ul class="site-search-results" id="site-search-results" hidden></ul></div></form>')
 
 
 def case() -> ResearchCase:
@@ -113,9 +115,11 @@ class SiteSearchTests(unittest.TestCase):
             self.assertIsNotNone(match, route)
             self.assertEqual("../" if "/" in route else "", match[1], route)
             self.assertEqual(1, html.count('id="site-search-input"'), route)
-            # In the sidebar header: after the site name, before the main navigation.
-            self.assertLess(html.index('class="site-brand'), match.start())
-            self.assertLessEqual(match.end(), html.index('<nav aria-label="Main navigation">'))
+            # In the top bar, after the breadcrumb and before the page's content, not in the sidebar.
+            header = html.index('<header class="site-header">')
+            self.assertLess(html.index('</aside>'), header)
+            self.assertLess(html.index('<nav class="site-breadcrumb"', header), match.start())
+            self.assertLessEqual(match.end(), html.index('</header>'))
 
 
 class LargeSiteSearchTests(unittest.TestCase):

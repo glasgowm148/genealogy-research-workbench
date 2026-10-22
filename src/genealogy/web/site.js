@@ -97,7 +97,6 @@ const option=(value,text)=>{const n=el('option',text);n.value=value;return n;};
 const select=(items)=>{const n=el('select');items.forEach(([v,t])=>n.append(option(v,t)));return n;};
 const menu=$('#menu-toggle');if(menu)menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));$('#site-sidebar')?.classList.toggle('menu-open',open);});
 const view=document.body.dataset.view;
-$$('.site-sidebar a[data-view]').forEach(a=>{if(a.dataset.view===view)a.setAttribute('aria-current','page');});
 
 // Catalogue: retain the complete server-rendered table and filter its rows.
 // A large site writes only a placeholder into its person menus; fill them from the data.
@@ -542,13 +541,16 @@ function map(){
 function overview(){}
 function bookmarks(){
  if(view!=='person')return;const id=document.body.dataset.personId;if(!id)return;try{const key='genealogy-workbench-bookmarks',saved=new Set(JSON.parse(localStorage.getItem(key)||'[]'));const button=el('button');const render=()=>{button.textContent=saved.has(id)?'★ Saved on this device':'☆ Save on this device';button.setAttribute('aria-pressed',String(saved.has(id)));};render();button.addEventListener('click',()=>{saved.has(id)?saved.delete(id):saved.add(id);try{localStorage.setItem(key,JSON.stringify([...saved]));render();announce('Saved people updated on this device.');}catch(_){announce('Browser storage is unavailable.');}});($('.page-header')||$('main'))?.append(button);}catch(_){} }
-// Site search in the sidebar: people, places, studies, sources, findings and questions by title.
+// Site search in the top bar: people, places, studies, sources, findings and questions by title.
 // The index (a title and one short line per record) loads on first use as a script, which works from file:// as well.
 const SEARCH_KINDS={person:'People',place:'Places',study:'Studies',source:'Sources',finding:'Findings',question:'Research questions'};
 function siteSearch(){
  const form=$('form.site-search');if(!form)return;const input=$('input[name=q]',form),results=$('.site-search-results',form),count=$('.site-search-count',form);if(!input||!results||!count)return;
  const LIMIT=12;let index=null,loading=false;
  const hint=el('span','Use the down arrow to reach the results and Escape to close them.','sr-only');hint.id='site-search-hint';form.append(hint);input.setAttribute('aria-describedby',hint.id);input.setAttribute('aria-controls',results.id);
+ // ⌘K or Ctrl+K anywhere, or / outside a text field, moves to the box; the hint shows this platform's key.
+ const mac=/Mac|iPhone|iPad/.test(navigator.platform||navigator.userAgent),key=el('kbd',mac?'⌘K':'Ctrl K','site-search-key');key.setAttribute('aria-hidden','true');input.after(key);input.setAttribute('aria-keyshortcuts','Meta+K Control+K /');
+ document.addEventListener('keydown',e=>{const typing=e.target.closest?.('input,textarea,select,[contenteditable]');if(e.altKey)return;if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'||e.key==='/'&&!typing&&!e.metaKey&&!e.ctrlKey){e.preventDefault();input.focus();input.select();}});
  const words=v=>v.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
  function load(){if(index||loading)return;loading=true;
   const ready=()=>{const raw=window.GENEALOGY_SEARCH_INDEX;index=(Array.isArray(raw)?raw:[]).filter(e=>e&&e.t&&e.u).map(e=>{const n=norm(e.t);return{...e,n,w:words(n),h:norm([e.t,e.s].join(' '))};});show();};

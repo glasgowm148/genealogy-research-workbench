@@ -131,8 +131,10 @@ class BrowserSiteTests(unittest.TestCase):
                 self.page.locator('#menu-toggle').click()
                 self.assertEqual('true', self.page.locator('#menu-toggle').get_attribute('aria-expanded'))
                 self.assertTrue(self.page.locator('.site-sidebar').is_visible())
-                self.page.locator('.site-sidebar a[data-view="people"]').click()
+                # A section's link opens its first page, where the section lists its pages.
+                self.page.locator('.site-sidebar a[data-group="people"]').click()
                 self.assertIn('catalogue.html', self.page.url)
+                self.assertEqual('page', self.page.locator('.site-sidebar a[data-view="people"]').get_attribute('aria-current'))
         nojs = self.browser.new_context(java_script_enabled=False)
         try:
             page = nojs.new_page()
@@ -568,7 +570,7 @@ class BrowserSiteTests(unittest.TestCase):
             self.assertIn('Imported 42 people', self.page.locator('#result').inner_text())
             preview.click()
             self.assertIn('Browser synthetic upload', self.page.locator('h1').inner_text())
-            self.page.locator('.site-sidebar a[data-view="people"]').click()
+            self.page.locator('.site-sidebar a[data-group="people"]').click()
             self.page.locator('.pagination').wait_for()
             self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
             self.assertEqual(42, len(self.page.evaluate('window.GENEALOGY_SITE_DATA')['people']))

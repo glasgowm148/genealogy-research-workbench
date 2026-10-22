@@ -13,6 +13,7 @@ from urllib.parse import quote, urlsplit
 from xml.sax.saxutils import escape as xml_escape
 
 from . import exports
+from . import shell
 from .case import ResearchCase
 from .config import ProjectConfig, site_contact
 from .dates import DISPLAY_PRECISIONS, SHORT_MONTHS, date_sort_key, display_date, machine_date, year_of
@@ -2039,11 +2040,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return index
 
     def search_form(prefix: str) -> str:
-        # Without JavaScript the box searches the people catalogue; the script turns it into a site-wide search.
+        # In the top bar. Without JavaScript the box searches the people catalogue; the script turns it
+        # into a site-wide search whose results open over the page in the panel under the box.
         return (f'<form class="site-search" role="search" action="{prefix}catalogue.html" method="get">'
-                '<label for="site-search-input">Search the site</label>'
-                '<input id="site-search-input" type="search" name="q" autocomplete="off" placeholder="People, places, sources…">'
-                '<p class="site-search-count" aria-live="polite"></p><ul class="site-search-results" id="site-search-results" hidden></ul></form>')
+                '<label class="sr-only" for="site-search-input">Search the site</label>' + shell.icon("search")
+                + '<input id="site-search-input" type="search" name="q" autocomplete="off" placeholder="Search the site">'
+                '<div class="site-search-panel"><p class="site-search-count" aria-live="polite"></p><ul class="site-search-results" id="site-search-results" hidden></ul></div></form>')
 
     count_of = lambda n, one, many: f'<strong>{n:,}</strong> {one if n == 1 else many}'
 
@@ -2193,11 +2195,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     person_titles = {url: person_name(pid) for pid, url in people_urls.items()}
     person_ids_by_path = {url: pid for pid, url in people_urls.items()}
     study_titles = {url: studies[sid]["title"] for sid, url in study_urls.items()}
+    stamp = shell.build_stamp(project["findings"], studies.values())
     for path, content in pages.items():
         prefix = "../" if "/" in path else ""
         view, title = routes[path] if path in routes else ("study", study_titles[path]) if path in study_titles else extra_titles[path] if path in extra_titles else ("person", person_titles[path])
         person_attribute = f' data-person-id="{_text(person_ids_by_path[path])}"' if path in person_ids_by_path else ""
-        nav = "".join(f'<a data-view="{v}" href="{prefix}{p}"' + (' aria-current="page"' if path == p else '') + f'>{t}</a>' for p, (v, t) in routes.items())
+        nav = shell.sidebar_nav(path, prefix, view, routes)
         # Dossiers need only the menu enhancement. Interactive pages share one
         # data script rather than embedding the whole collection in each page.
         # The paged pages of a large site are plain lists and need no data.
@@ -2206,7 +2209,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         payload = {"project": project["project"], "site": {"root": prefix}}
         corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
-        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p>{search_form(prefix)}<nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button><span>{_text(config.name)}</span></header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
+        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button>{shell.breadcrumb(path, prefix, view, title, routes)}{stamp}{search_form(prefix)}</header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
     # A moved page is a stub, not a route: it stays out of routes.json and the
     # sitemap, and asks search engines to index the current page instead.
     for old, new in moved.items():

@@ -182,7 +182,8 @@ class ChronologyTests(unittest.TestCase):
 
     def test_a_lane_per_person_with_markers_and_a_text_alternative(self):
         paths, page = self.build()
-        svg = page[page.index("<svg"):page.index("</svg>")]
+        start = page.index("<svg", page.index("<main"))  # after the shell's sidebar and search icons
+        svg = page[start:page.index("</svg>", start)]
         # Ada and Rowan by their first dated event, then the linked fire; Pip has no dated event.
         self.assertEqual(3, svg.count('class="life"'))
         self.assertEqual(6, svg.count("<circle"))
@@ -213,7 +214,8 @@ class ChronologyTests(unittest.TestCase):
 
     def test_a_large_study_draws_thirty_people_and_stays_small(self):
         _, page = self.build(extra=400)
-        svg = page[page.index("<svg"):page.index("</svg>") + 6]
+        start = page.index("<svg", page.index("<main"))
+        svg = page[start:page.index("</svg>", start) + 6]
         self.assertEqual(30, svg.count('class="life"'))
         self.assertLess(len(svg.encode()), 40_000)
         self.assertIn("And 372 more people are not drawn.", page)
