@@ -81,3 +81,25 @@ def file_size(size: int) -> str:
     if size < 1_000_000:
         return f"{size / 1000:.0f} KB"
     return f"{size / 1_000_000:.1f} MB"
+
+
+def priority_map(points: list[tuple[int, str, float, float, bool]], prefix: str = "") -> str:
+    """The places basemap cropped around the numbered study places, as on a study's locator.
+
+    ``points`` are (number, name, latitude, longitude, broadly located); the numbered list
+    beside the map is its text version, so the drawing is one image with a short label."""
+    xy = [((lon + 180) * 960 / 360, (90 - lat) * 480 / 180) for _, _, lat, lon, _ in points]
+    xs, ys = [x for x, _ in xy], [y for _, y in xy]
+    # Padded around the markers, at least 7.5 degrees across, in the 2:1 shape of the basemap.
+    w = min(max((max(xs) - min(xs)) * 1.3, (max(ys) - min(ys)) * 2.6, 20), 960)
+    h = w / 2
+    left = min(max((max(xs) + min(xs)) / 2 - w / 2, 0), 960 - w)
+    top = min(max((max(ys) + min(ys)) / 2 - h / 2, 0), 480 - h)
+    r = w * 0.022
+    # Drawn last-numbered first, so a lower number is never hidden under a higher one.
+    marks = "".join(f'<g class="home-priority-mark{" broad" if broad else ""}"><circle cx="{x:.3f}" cy="{y:.3f}" r="{r:.3f}"/>'
+                    f'<text x="{x:.3f}" y="{y + r * .38:.3f}" text-anchor="middle" font-size="{r * 1.1:.3f}">{n}</text></g>'
+                    for (n, _, _, _, broad), (x, y) in reversed(list(zip(points, xy))))
+    label = f'Map of the {len(points)} {"place" if len(points) == 1 else "places"} with the most research, numbered as in the list'
+    return (f'<svg class="home-priority-map" viewBox="{left:.1f} {top:.1f} {w:.1f} {h:.1f}" role="img" aria-label="{escape(label)}">'
+            f'<rect width="960" height="480" fill="#e8efec"/><image href="{prefix}assets/world.svg" width="960" height="480"/>{marks}</svg>')

@@ -26,6 +26,8 @@ from .labels import (assessment_label, child_role, confidence_label, grade_label
                      status_anchor, status_label)
 from .maps import geojson
 from .home import SUN_SLICES, file_size, rings as sun_rings, sun_svg, sun_tree  # the home page's tree preview
+from .home import priority_map  # the home page's Priority studies map
+from .config import home_settings  # [home]: the featured question, studies and resources
 from .labels import CLAIM_STATUS, guide_basis  # the evidence guide's basis and example lines
 from .labels import plural  # one rule for every printed count
 from .labels import BADGE_GLYPHS, assessment_anchor, badge_family  # one badge system
@@ -56,6 +58,9 @@ PLACE_LIST_LIMIT = 200  # events, sub-places, surnames or studies listed on a pl
 PLACE_PEOPLE_BYTES = 40_000  # a place's event table also stops here, and each of its other lists at a third of it
 STUDY_MAP_NAMED = 30  # places named under a study's locator map; the rest are counted
 STUDY_MAP_DRAWN = 200  # markers on a study's locator map, so a study of a whole region stays small
+HOME_PRIORITY_PLACES = 8  # places numbered under the home page's Priority studies
+HOME_PRIORITY_STUDIES = 4  # studies listed under each of those places; the rest are counted
+HOME_QUESTION_FACTS = 4  # dated events shown under the home page's featured question
 PLACE_LIST_LIMIT = 200  # people, sub-places, surnames or studies listed on a place's page; the rest are counted
 PLACE_PEOPLE_BYTES = 40_000  # a place's people list also stops here, and each of its other lists at a third of it
 STATISTICS_ROWS = 25  # rows per statistics table; the rest are counted, so the page stays small on a large site
@@ -2743,9 +2748,104 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + (f'; the outer {len(rings) - len(drawn)} {"ring is" if len(rings) - len(drawn) == 1 else "rings are"} too crowded to draw here' if len(drawn) < len(rings) else "")
                 + '. Recorded links, including uncertain ones, are not proof.</figcaption></figure>')
 
+    home = home_settings(config.raw.get("home", {}))
+    kind_words = lambda row: str(row["kind"]).replace("-", " ").replace("_", " ").capitalize() if row.get("kind") else "Study"
+
+    def home_priority() -> str:
+        """Priority studies: the places the research concentrates on, by the studies and then the
+        research notes (questions, findings, hypotheses) about the place, its events or its people."""
+        ranked = []
+        for pid in places:
+            subjects = [pid, *(e["id"] for e in events_by_place.get(pid, [])), *sorted(place_people[pid])]
+            here = list(dict.fromkeys(s["id"] for rid in subjects for s in studies_by_subject.get(rid, []) if s["id"] in studies))
+            if here:
+                notes = {r["id"] for rid in subjects for r in research_by_subject.get(rid, [])}
+                ranked.append((-len(here), -len(notes), -len(place_people[pid]), str(places[pid]["name"]).casefold(), pid, here, len(notes)))
+        top = sorted(ranked, key=lambda row: row[:5])[:HOME_PRIORITY_PLACES]
+        if not top:
+            return ""
+        newest = {sid: n for n, sid in enumerate(studies_newest)}
+        items = []
+        for n, (*_, pid, here, notes) in enumerate(top, 1):
+            shown = sorted(here, key=newest.__getitem__)[:HOME_PRIORITY_STUDIES]
+            counts = [plural(len(here), "study", "studies"), *([plural(notes, "research note")] if notes else []), plural(len(place_people[pid]), "person", "people")]
+            items.append(f'<li class="home-priority-place"><span class="home-priority-number">{n}</span><div><h3>{ref(pid)}</h3>'
+                         f'<p class="meta">{" · ".join(counts)}</p><ul class="home-priority-studies">'
+                         + "".join(f'<li><a href="{study_urls[sid]}">{_text(studies[sid]["title"])}</a> <span class="meta">{_text(kind_words(studies[sid]))}</span></li>' for sid in shown)
+                         + (f'<li class="meta">and {plural(len(here) - len(shown), "more study", "more studies")}</li>' if len(here) > len(shown) else "") + '</ul></div></li>')
+        located = [(n, places[pid]["name"], places[pid]["latitude"], places[pid]["longitude"], places[pid].get("precision") in BROAD_PRECISIONS)
+                   for n, (*_, pid, _, _) in enumerate(top, 1) if places[pid].get("latitude") is not None and places[pid].get("longitude") is not None]
+        drawn = (f'<figure class="home-priority-figure">{priority_map(located)}<figcaption>Each number marks a place at its supplied coordinates on a Natural Earth overview'
+                 + (f'; {len(top) - len(located)} of the places have none and are listed only' if len(located) < len(top) else "") + '.</figcaption></figure>' if located else "")
+        return ('<section class="home-priority" aria-labelledby="home-priority-heading"><p class="eyebrow">Priority studies</p><h2 id="home-priority-heading">Where the research is concentrated</h2>'
+                '<p>The places with the most research, numbered by the studies that concern them, then by research notes: the questions, findings and hypotheses '
+                'about the place, its events or the people recorded there. Each lists its studies. A shared place does not prove kinship.</p>'
+                f'<div class="home-priority-body{" with-map" if located else ""}">{drawn}<ol class="home-priority-list" role="list">{"".join(items)}</ol></div></section>')
+
+    def home_question() -> str:
+        """A question we are investigating: ``[home] featured_question``, else the highest-priority open one."""
+        chosen = next((q for q in project["questions"] if q["id"] == home["featured_question"]), None)
+        if not chosen:
+            waiting = [q for q in project["questions"] if str(q.get("status", "open")).casefold() in OUTSTANDING]
+            chosen = min(waiting, key=lambda r: (PRIORITY_ORDER.get(str(r.get("priority") or "normal").casefold(), 1), r["id"]), default=None)
+        if not chosen:
+            return ""
+        still_open = str(chosen.get("status", "open")).casefold() in OUTSTANDING
+        who = [rid for rid in dict.fromkeys(chosen.get("related_ids", [])) if rid in people]
+        facts = sorted((e for e in events_by_person[who[0]] if year_of(e.get("date"))), key=lambda e: (date_sort_key(e.get("date")), e["id"])) if who else []
+        # From the first to the last: a long life keeps its end in view.
+        facts = facts if len(facts) <= HOME_QUESTION_FACTS else facts[:HOME_QUESTION_FACTS - 1] + facts[-1:]
+        steps = [f'<li><span class="home-fact-date">{when(e["date"], e.get("date_precision"))}</span> {_text(kind_words(e))}'
+                 + (f' at {ref(e["place_id"], label=places[e["place_id"]]["name"])}' if e.get("place_id") in places else "") + '</li>' for e in facts]
+        if still_open:
+            steps.append('<li class="home-fact-open"><span class="home-fact-date">Still open</span> '
+                         + _text(chosen.get("next_record") and f'Next record to check: {chosen["next_record"]}' or chosen.get("resolves") and f'What would answer it: {chosen["resolves"]}' or "Not yet answered") + '</li>')
+        read = people_urls[who[0]] + "#research" if who else record_routes[chosen["id"]]
+        return ('<section class="home-featured-question" aria-labelledby="home-question-heading">'
+                f'<p class="eyebrow">{"A question we are investigating" if still_open else "A question we investigated"}</p><h2 id="home-question-heading">{_text(chosen["question"])}</h2>'
+                + (f'<p>Concerns {listed([ref(pid) + (f" ({_text(lifespan(pid))})" if lifespan(pid) else "") for pid in who])}.{metadata(chosen)}</p>' if who else f'<p>{metadata(chosen).strip()}</p>')
+                + (f'<ol class="home-question-facts" role="list" aria-label="{_text("Dated events for " + person_name(who[0]) if who else "What is still open")}">{"".join(steps)}</ol>' if steps else "")
+                + f'<p class="home-question-links"><a href="{_text(read)}">Read the research →</a> <a href="research.html#open-questions">See all open questions →</a></p></section>')
+
+    def home_studies() -> str:
+        """Featured studies: ``[home] studies`` in its order, else the three most recently updated."""
+        chosen = [sid for sid in home["studies"] if sid in studies] if home["studies"] else []
+        newest = home["studies"] is None or bool(home["studies"]) and not chosen  # none public of those named: the newest stand in
+        chosen = studies_newest[:3] if newest else chosen
+        if not chosen:
+            return ""
+        cards = "".join(
+            f'<article class="card home-study"><p class="home-study-kicker"><span class="home-study-number">{n:02d}</span> {_text(kind_words(studies[sid]))}</p>'
+            f'<h3><a href="{study_urls[sid]}">{_text(studies[sid]["title"])}</a></h3>' + (f'<p>{_text(studies[sid]["summary"])}</p>' if studies[sid].get("summary") else "")
+            + f'<p class="meta">{plural(len(study_people(studies[sid])), "person", "people")} · {study_meta(studies[sid])}</p></article>' for n, sid in enumerate(chosen, 1))
+        lead = "The most recently updated written studies" if newest else "Written studies chosen for this page"
+        return (f'<h2>Featured studies</h2><p>{lead}: why a question was investigated and what the records show. '
+                + (f'<a href="studies.html">All {len(studies):,} studies →</a></p>' if len(studies) > len(chosen) else '<a href="studies.html">The studies page →</a></p>')
+                + '<div class="card-grid home-studies">' + cards + '</div>')
+
+    def home_leads() -> str:
+        """Lead-ins to pages the site has; the DNA panel is filled in once every page is written."""
+        resources = "".join(
+            f'<li class="home-resource">' + (f'<p class="eyebrow">{_text(r["label"])}</p>' if r.get("label") else "")
+            + f'<h3><a href="{_text(r["url"])}">{_text(r["title"])}'
+            + ('<span class="external-mark" aria-hidden="true"> ↗</span><span class="sr-only"> (another website)</span>' if urlsplit(r["url"]).scheme else "")
+            + '</a></h3>' + (f'<p>{_text(r["description"])}</p>' if r.get("description") else "") + '</li>' for r in home["resources"])
+        return ('<div class="home-leads"><section class="home-lead" aria-labelledby="home-related-heading"><h2 id="home-related-heading">How are two people related?</h2>'
+                '<p>Follow the recorded family links between two people a step at a time, with the evidence for each link, or set two people side by side.</p>'
+                '<p class="home-lead-links"><a href="connections.html">Find a connection →</a> <a href="compare.html">Compare two people</a></p></section><!--home:dna--></div>'
+                + (f'<section class="home-lead home-continue" aria-labelledby="home-continue-heading"><h2 id="home-continue-heading">Continue the research</h2><ul class="home-resources" role="list">{resources}</ul></section>' if resources else ""))
+
+    def home_dna() -> str:
+        heading = str((config.raw.get("site") or {}).get("dna_heading") or "DNA").strip() or "DNA"
+        return (f'<section class="home-lead" aria-labelledby="home-dna-heading"><h2 id="home-dna-heading">What can {_text(heading)} tell us?</h2>'
+                '<p>How the DNA branches line up with the family lines traced in the records, and where a common ancestor is still unknown. '
+                'Only branch names, dates and notes are published, never test results.</p>'
+                f'<p class="home-lead-links"><a href="dna.html">Read the {_text(heading)} page →</a></p></section>')
+
     def home_page() -> str:
         """The home page, written in full here: a hero with a tree preview, questions to start
-        from with their counts, how to read the site, the newest studies and findings."""
+        from with their counts, how to read the site, then the project's own framing: priority
+        studies, a featured question, featured studies, the newest findings and lead-in panels."""
         branding = config.raw.get("site", {})
         description = branding.get("description") if isinstance(branding, dict) else None
         family_links = sum(1 for r in project["relationships"] if not rejected(r))
@@ -2766,10 +2866,6 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                  "On a person's page, read the summary first: dates, family and the label on each family link. Each fact lists the records behind it.",
                  'A label such as “Documented” or “Possible” says how well the records support a link or claim. <a href="evidence.html">Reading the evidence</a> explains every label; <a href="about-data.html">About the data</a> says where the records came from, and the <a href="changes.html">change log</a> what has changed since.',
                  last_step)
-        featured = studies_newest[:3]
-        study_cards = "".join(
-            f'<article class="card home-study"><h3><a href="{study_urls[sid]}">{_text(studies[sid]["title"])}</a></h3><p>{study_meta(studies[sid])}</p>'
-            + (f'<p>{_text(studies[sid]["summary"])}</p>' if studies[sid].get("summary") else "") + '</article>' for sid in featured)
         newest = sorted(project["findings"], key=lambda f: (str(f.get("recorded_on") or ""), f["id"]), reverse=True)[:10]
         return ('<div class="home-hero"><div class="home-intro"><p class="eyebrow">An evidence-led family history</p><h1>' + _text(config.name) + '</h1>'
                 + f'<p class="lead">{_text(description or "A public collection of people, records and research.")}</p>'
@@ -2778,11 +2874,10 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + home_preview() + '</div>'
                 + '<h2>Start with a question</h2><ul class="home-questions" role="list">' + cards + '</ul>'
                 + '<h2>How to read this site</h2><ol class="home-steps" role="list">' + "".join(f'<li>{s}</li>' for s in steps) + '</ol>'
-                + ('<h2>Featured studies</h2><p>The most recently updated written studies: why a question was investigated and what the records show. '
-                   + (f'<a href="studies.html">All {len(studies):,} studies →</a></p>' if len(studies) > len(featured) else '<a href="studies.html">The studies page →</a></p>')
-                   + '<div class="card-grid home-studies">' + study_cards + '</div>' if featured else "")
+                + home_priority() + home_question() + home_studies()
                 + '<h2>Latest findings</h2>' + empty([f'<li>{ref(f["id"], label=f["conclusion"])}{metadata(f)}</li>' for f in newest])
-                + (f'<p><a href="findings.html">All {len(project["findings"]):,} findings</a></p>' if len(project["findings"]) > 10 else ""))
+                + (f'<p><a href="findings.html">All {len(project["findings"]):,} findings</a></p>' if len(project["findings"]) > 10 else "")
+                + home_leads())
     pages["index.html"] = home_page()
 
     def way_in() -> str:
@@ -3534,6 +3629,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                      for f in dated[:50]])
     # The download sizes, now that the files exist.
     pages["sitemap.html"] = re.sub(r"<!--size:([^>]+)-->", lambda m: file_size(len(outputs[m[1]].encode("utf-8"))) if m[1] in outputs else "", pages["sitemap.html"])
+    pages["index.html"] = pages["index.html"].replace("<!--home:dna-->", home_dna() if "dna.html" in routes else "")  # once every route is known
     branding = config.raw.get("site", {})
     description = branding.get("description", "A public collection of people, records and research.") if isinstance(branding, dict) else "A public collection of people, records and research."
     person_titles = {url: person_name(pid) for pid, url in people_urls.items()}

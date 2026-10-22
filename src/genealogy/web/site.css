@@ -299,3 +299,23 @@ ul.glance-list{list-style:none;padding-left:0}.glance-meaning{color:var(--muted)
 .dna-chain-figure figcaption{margin-top:.6rem;font-size:.78rem}.dna-tree,.dna-tree ul{list-style:none;margin:0;padding:0}.dna-tree ul{margin-left:.45rem;padding-left:1.1rem;border-left:2px solid var(--line)}.dna-branch{margin:.45rem 0 .1rem}.dna-note{margin:0 0 .5rem;color:var(--muted);font-size:.88rem;max-width:46rem}
 .dna-line{margin:.3rem 0}.dna-study .eyebrow{margin:0 0 .4rem}.dna-lines td:first-child{min-width:9rem}
 @media(max-width:860px){.dna-structure{grid-template-columns:minmax(0,1fr)}}
+.home-priority{margin-top:2.6rem}.home-priority h2{margin-top:.3rem}
+.home-priority-body.with-map{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:1.4rem;align-items:start}
+.home-priority-figure{margin:0;padding:.6rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}.home-priority-map{display:block;width:100%;height:auto}
+.home-priority-mark circle{fill:var(--forest);stroke:var(--surface);stroke-width:1.5;vector-effect:non-scaling-stroke}.home-priority-mark.broad circle{fill:#56705f;stroke-dasharray:3 2}
+.home-priority-mark text{fill:#fffef9;font-family:system-ui,sans-serif;font-weight:700}.home-priority-figure figcaption{font-size:.8rem;color:var(--muted);margin-top:.4rem}
+.home-priority-list{list-style:none;margin:0;padding:0;display:grid;gap:.7rem;grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr))}.with-map .home-priority-list{grid-template-columns:1fr}
+.home-priority-place{display:flex;gap:.8rem;padding:.8rem 1rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}.home-priority-place>div{min-width:0}
+.home-priority-number{flex:none;display:grid;place-items:center;width:1.75rem;height:1.75rem;border-radius:50%;background:var(--forest);color:#fffef9;font-weight:700;font-size:.85rem}
+.home-priority-place h3{font-size:1.15rem;margin:0 0 .15rem}.home-priority-place .meta{margin:0;font-size:.85rem}.home-priority-studies{margin:.35rem 0 0;padding:0;list-style:none;font-size:.9rem}.home-priority-studies li{margin:.15rem 0}
+.home-featured-question{margin:2.6rem 0;padding:1.6rem 1.8rem;background:var(--forest);color:#eef0e6;border-radius:calc(var(--radius) + 4px)}.home-featured-question .eyebrow{color:#e2c98a}
+.home-featured-question h2{color:#fffef9;margin:.3rem 0 .6rem}.home-featured-question a:not(.badge){color:#fffef9}.home-featured-question a:not(.badge):hover{color:#e2c98a}
+.home-question-facts{list-style:none;margin:1.3rem 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:1rem;border-top:1px solid rgba(255,254,249,.3)}
+.home-question-facts li{position:relative;padding-top:.8rem;font-size:.92rem}.home-question-facts li::before{content:"";position:absolute;top:-5px;left:0;width:9px;height:9px;border-radius:50%;background:#e2c98a}
+.home-fact-date{display:block;font-family:Georgia,serif;font-size:1.3rem;color:#fffef9}.home-fact-open .home-fact-date{color:#e2c98a}
+.home-question-links,.home-lead-links{display:flex;flex-wrap:wrap;gap:.5rem 1.4rem;margin:0}
+.home-study-kicker{margin:0 0 .3rem;font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-text)}.home-study-number{font-family:Georgia,serif;font-size:1rem;font-weight:normal;letter-spacing:0;color:var(--forest);margin-right:.3rem}
+.home-leads{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:1rem;margin:2.6rem 0 1rem}.home-lead{padding:1.2rem 1.4rem;background:var(--soft);border-radius:var(--radius)}.home-lead h2{margin-top:0;font-size:1.4rem}
+.home-continue{margin:0 0 1rem;background:var(--surface);border:1px solid var(--line)}.home-resources{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr));gap:1rem 1.4rem}
+.home-resource .eyebrow{margin:0 0 .2rem}.home-resource h3{font-size:1.1rem;margin:0 0 .3rem}.home-resource p{margin:0;font-size:.9rem}
+@media(max-width:850px){.home-priority-body.with-map{grid-template-columns:1fr}.home-featured-question{padding:1.3rem 1.2rem}}

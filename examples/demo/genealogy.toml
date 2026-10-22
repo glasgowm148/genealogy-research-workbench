@@ -15,3 +15,18 @@ format = "markdown"
 
 [site]
 description = "A wholly fictional genealogy research workbench demonstration."
+
+[home]
+featured_question = "question:household"
+
+[[home.resources]]
+label = "Name study"
+title = "The Alderwick name study (fictional)"
+description = "An invented one-name study page, standing in for a project's own discussion group or wiki."
+url = "https://example.org/alderwick-name-study"
+
+[[home.resources]]
+label = "On this site"
+title = "About the data"
+description = "Where the demo's invented records came from, and what the site leaves out."
+url = "about-data.html"

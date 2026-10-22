@@ -77,6 +77,62 @@ def site_contact(site: Any) -> dict[str, str]:
     return contact
 
 
+HOME_LIST_LIMIT = 12  # studies or resource cards the home page may be given; more would crowd it
+
+
+def _home_link(value: Any, *, setting: str) -> str:
+    """An absolute http(s) URL without credentials, or a path inside the built site such as "sources.html"."""
+    if not isinstance(value, str) or not value or _control(value) or re.search(r"[\s<>\"'\\]", value):
+        raise ValueError(f"{setting} must be an http(s) URL or a page of the site")
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        parsed = None
+    if parsed and parsed.scheme in ("http", "https") and parsed.hostname and not (parsed.username or parsed.password):
+        return value
+    # A site path stays inside the site wherever it is hosted: no scheme, no host, not rooted, never "..".
+    if parsed and not parsed.scheme and not parsed.netloc and not value.startswith("/") and ".." not in parsed.path.split("/"):
+        return value
+    raise ValueError(f"{setting} must be an http(s) URL or a page of the site")
+
+
+def home_settings(home: Any) -> dict[str, Any]:
+    """The validated ``[home]`` table: ``featured_question`` (a question ID, or None for the
+    highest-priority open one), ``studies`` (study IDs, or None for the newest three) and
+    ``resources`` (``{label, title, description, url}`` cards; title and url required)."""
+    if not isinstance(home, dict):
+        raise ValueError("[home] must be a table")
+    unknown = set(home) - {"featured_question", "studies", "resources"}
+    if unknown:
+        raise ValueError(f"home has unknown settings: {', '.join(sorted(unknown))}")
+    text = lambda value: isinstance(value, str) and bool(value.strip()) and not _control(value)
+    question = home.get("featured_question")
+    if question is not None and not text(question):
+        raise ValueError("home.featured_question must be a research question ID")
+    studies = home.get("studies")
+    if studies is not None and (not isinstance(studies, list) or not all(text(s) for s in studies)
+                                or len({s.strip() for s in studies}) != len(studies) or len(studies) > HOME_LIST_LIMIT):
+        raise ValueError(f"home.studies must be a list of up to {HOME_LIST_LIMIT} different study IDs")
+    resources = home.get("resources", [])
+    if not isinstance(resources, list) or len(resources) > HOME_LIST_LIMIT:
+        raise ValueError(f"home.resources must be a list of up to {HOME_LIST_LIMIT} tables")
+    cards = []
+    for n, card in enumerate(resources, 1):
+        setting = f"home.resources[{n}]"
+        if not isinstance(card, dict):
+            raise ValueError(f"{setting} must be a table")
+        unknown = set(card) - {"label", "title", "description", "url"}
+        if unknown:
+            raise ValueError(f"{setting} has unknown settings: {', '.join(sorted(unknown))}")
+        for name in ("label", "title", "description"):
+            if (name in card or name == "title") and not text(card.get(name)):
+                raise ValueError(f"{setting}.{name} must be a non-empty string")
+        cards.append({**{name: card[name].strip() for name in ("label", "title", "description") if name in card},
+                      "url": _home_link(card.get("url"), setting=f"{setting}.url")})
+    return {"featured_question": question.strip() if question is not None else None,
+            "studies": [s.strip() for s in studies] if studies is not None else None, "resources": cards}
+
+
 @dataclass(slots=True)
 class ProjectConfig:
     DEFAULT_NAME: ClassVar[str] = DEFAULT_PROJECT_NAME
@@ -139,6 +195,7 @@ class ProjectConfig:
         safe_relative_path(self.case_directory, setting="project.case_directory")
         site_contact(self.raw.get("site", {}))
         self.dna_heading  # validates [site] dna_heading
+        home_settings(self.raw.get("home", {}))
         for key in ("allow_living", "allow_licensed", "allow_restricted"):
             if key in self.privacy:
                 exact_bool(self.privacy[key], setting=f"privacy.{key}")
