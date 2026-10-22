@@ -107,14 +107,24 @@ class CatalogueFilterBrowserTests(unittest.TestCase):
         return self.shown(self.page.locator('.result-count').inner_text())
 
     def filter(self, control, page=None):
-        """A filter control, its filter group (a details pill) opened first."""
+        """A filter control, its menu (a details pill) opened first."""
         group = (page or self.page).locator('details.filter-group', has=control)
         if not group.evaluate('d => d.open'):
             group.locator('summary').click()
         return control
 
-    def label(self, text, page=None):
-        return self.filter((page or self.page).get_by_label(text), page)
+    def label(self, text, page=None, exact=False):
+        """A control in the menus, by its label, its menu opened first (the result toolbar also has a Location box)."""
+        page = page or self.page
+        group = page.locator('details.filter-group', has=page.get_by_label(text, exact=exact))
+        if not group.evaluate('d => d.open'):
+            group.locator('summary').click()
+        return group.get_by_label(text, exact=exact)
+
+    def gender(self, label, page=None):
+        """A Gender radio, its menu opened first (a closed menu's radios have no role to find them by)."""
+        self.filter((page or self.page).locator('input[name="sex"]').first, page)
+        return (page or self.page).get_by_role('radio', name=label, exact=True)
 
     def badges(self, page=None):
         """Each filter group's name and the number of its filters on, as its pill shows them."""
@@ -145,139 +155,151 @@ class CatalogueFilterBrowserTests(unittest.TestCase):
         page = self.page
         self.assertEqual('42 of 42', self.count())
         self.assertIn('Browsing all 42 people · 1–42 shown', page.locator('.result-count').inner_text())
-        # The filters are grouped in pills, all closed, none on.
-        self.assertEqual({'Name': '', 'Relatives': '', 'Dates': '', 'Places': '', 'Evidence': '', 'Filters': ''}, self.badges())
+        # The filters are grouped in the seven menus, all closed, none on.
+        self.assertEqual({'Name': '', 'Relatives': '', 'Dates': '', 'Places': '', 'Evidence': '', 'Filters': '', 'Tree': ''}, self.badges())
         self.assertEqual(0, page.locator('details.filter-group[open]').count())
         self.assertFalse(page.get_by_role('button', name='Clear search and filters').is_visible())
-        sex = self.label('Recorded sex')
+        female = self.gender('Female')
         self.axe()
-        # The rejected claim and the private one count as not recorded.
-        self.assertEqual(['Any', 'Female (2)', 'Male (1)', 'U (1)', 'Not recorded (38)'], sex.locator('option').all_inner_texts())
-        for value, expected in (('F', '2'), ('M', '1'), ('U', '1'), ('not-recorded', '38')):
-            sex.select_option(value)
-            self.assertEqual(f'{expected} of 42', self.count(), value)
-        sex.select_option('F')
+        # Gender reads the recorded sex: the rejected claim, the private one and the other value count as neither.
+        for label, expected in (('Female', '2'), ('Male', '1'), ('Any', '42')):
+            self.gender(label).check()
+            self.assertEqual(f'{expected} of 42', self.count(), label)
+        female.check()
         self.assertEqual({'person:01', 'person:03'}, set(page.locator('[data-person-id]:visible').evaluate_all('rows => rows.map(r => r.dataset.personId)')))
         self.assertEqual({'sex': 'F'}, self.query())
-        self.assertEqual('1', self.badges()['Filters'])
-        # Read out with the pill as "Filters (1 on)".
-        self.assertEqual('Filters1 (1 on)', page.locator('details.filter-group > summary', has_text='Filters').text_content())
+        self.assertEqual('1', self.badges()['Name'])
+        # Read out with the pill as "Name (1 on)".
+        self.assertEqual('Name1 (1 on)', page.locator('details.filter-group > summary', has_text='Name').text_content())
         self.reset()
         self.assertEqual('42 of 42', self.count())
         self.assertEqual({}, self.query())
 
-        # Twelve people have no parent recorded (one with only a disproved link), sixteen have children, twenty-two no spouse.
-        for label, expected in (('No parent recorded', '12'), ('Has recorded children', '16'), ('No recorded spouse or partner', '22')):
+        # A father or mother is a parent recorded as male or female: the demo records the sex of six people, two of them mothers.
+        # Sixteen people have children (Bram Alder's only child link is disproved, so not him) and twenty-two no spouse.
+        for label, expected in (('Missing father', '42'), ('Missing mother', '34'), ('Has descendants', '16'), ('No recorded spouse or partner', '22')):
             box = self.label(label)
             box.check()
             self.assertEqual(f'{expected} of 42', self.count(), label)
             box.uncheck()
-        self.label('No parent recorded').check()
+        self.label('Missing mother').check()
         self.assertTrue(page.locator('[data-person-id="person:13"]').is_visible())
-        self.label('Has recorded children').check()
-        self.assertEqual('2', self.badges()['Relatives'])
-        self.assertEqual('2 of 42', self.count())  # Ada Alder and Celia Bell; Bram Alder's only child link is disproved
+        self.label('No recorded spouse or partner').check()
+        self.assertEqual('2', self.badges()['Filters'])
         self.reset()
 
-        self.label('Birth year from').fill('1810')
-        self.label('Birth year to').fill('1816')
+        self.label('Dates apply to').select_option('birth')
+        self.label('From year').fill('1810')
+        self.label('To year').fill('1816')
         self.assertEqual('16 of 42', self.count())
         self.assertIn('16 matches of 42 people · 1–16 shown', page.locator('.result-count').inner_text())
         self.reset()
-        self.label('Death year from').fill('1899')
+        self.label('Dates apply to').select_option('death')
+        self.label('From year').fill('1899')
         self.assertEqual('6 of 42', self.count())
-        self.label('Death year to').fill('1898')
+        # The years are read in order, so a range written backwards still matches.
+        self.label('To year').fill('1898')
+        self.assertEqual('6 of 42', self.count())
+        self.reset()
+        # The place filter matches any recorded place, in part and without regard to case.
+        self.label('Location', exact=True).fill('lantern')
+        self.assertEqual('31 of 42', self.count())
+        self.label('Dates apply to').select_option('birth')
+        self.label('From year').fill('1842')
+        self.label('To year').fill('1847')
+        self.assertEqual('4 of 42', self.count())
+        # Any record: every event year, so no one with a Lanternford event has one in 1700-1750.
+        self.label('Dates apply to').select_option('')
+        self.label('From year').fill('1700')
+        self.label('To year').fill('1750')
         self.assertEqual('0 of 42', self.count())
         self.assertIn('0 matches of 42 people · none shown', page.locator('.result-count').inner_text())
-        self.reset()
-        # The place filter matches any event place, in part and without regard to case.
-        self.label('Event place').fill('lantern')
-        self.assertEqual('31 of 42', self.count())
-        self.label('Birth year from').fill('1842')
-        self.label('Birth year to').fill('1847')
-        self.assertEqual('4 of 42', self.count())
-        # The event-year range stays its own filter: no one born 1842-47 has an event in 1700-1750.
-        self.label('Event year from').fill('1700')
-        self.label('Event year to').fill('1750')
-        self.assertEqual('0 of 42', self.count())
-        self.assertEqual({'Name': '', 'Relatives': '', 'Dates': '4', 'Places': '1', 'Evidence': '', 'Filters': ''}, self.badges())
-        self.assertEqual({'place': 'lantern', 'birth_from': '1842', 'birth_to': '1847', 'year_from': '1700', 'year_to': '1750'}, self.query())
+        self.assertEqual({'Name': '', 'Relatives': '', 'Dates': '2', 'Places': '1', 'Evidence': '', 'Filters': '', 'Tree': ''}, self.badges())
+        self.assertEqual({'place': 'lantern', 'year_from': '1700', 'year_to': '1750'}, self.query())
 
     def test_the_page_address_keeps_every_filter(self):
         self.open('demo')
         page = self.page
         page.get_by_role('searchbox', name='Search people').fill('Cairn')
-        # The menu: the Group row also has a checkbox labelled Surname.
-        self.filter(page.get_by_label('Surname').and_(page.locator('select'))).select_option('Cairn')
-        self.label('Recorded sex').select_option('not-recorded')
-        self.label('Birth year from').fill('1784')
-        self.label('Death year to').fill('1899')
-        self.label('Event place').fill('Willowmere')
+        self.label('Last name', exact=True).fill('cairn')
+        self.label('Dates apply to').select_option('birth')
+        self.label('From year').fill('1784')
+        self.label('Location', exact=True).fill('Willowmere')
         self.label('No recorded spouse or partner').check()
-        self.label('Evidence').select_option('unassessed')
+        self.label('Claims').select_option('unassessed')
         page.get_by_role('button', name='Birth', exact=True).click()
         shown = self.count()
-        self.assertNotEqual('0 of 42', shown)
+        self.assertEqual('3 of 42', shown)
         address = page.url
-        self.assertEqual({'q': 'Cairn', 'surname': 'Cairn', 'sex': 'not-recorded', 'birth_from': '1784', 'death_to': '1899',
-                          'place': 'Willowmere', 'no_spouse': '1', 'evidence': 'unassessed', 'sort': 'birth'}, self.query())
-        # Shared or reloaded, the address restores the same view, each group's pill counting its filters on.
+        self.assertEqual({'q': 'Cairn', 'last': 'cairn', 'date_type': 'birth', 'year_from': '1784', 'place': 'Willowmere', 'no_spouse': '1',
+                          'evidence': 'unassessed', 'sort': 'birth'}, self.query())
+        # Shared or reloaded, the address restores the same view, each menu's pill counting its filters on.
         other = self.context.new_page()
         other.goto(address, wait_until='networkidle')
         other.locator('.pagination').wait_for()
         self.assertEqual(shown, self.shown(other.locator('.result-count').inner_text()))
-        self.assertEqual({'Name': '1', 'Relatives': '1', 'Dates': '2', 'Places': '1', 'Evidence': '1', 'Filters': '1'}, self.badges(other))
+        self.assertEqual({'Name': '1', 'Relatives': '', 'Dates': '2', 'Places': '1', 'Evidence': '1', 'Filters': '1', 'Tree': ''}, self.badges(other))
         self.assertEqual('Cairn', other.get_by_role('searchbox', name='Search people').input_value())
-        self.assertEqual('not-recorded', other.get_by_label('Recorded sex').input_value())
-        self.assertEqual('1784', other.get_by_label('Birth year from').input_value())
-        self.assertEqual('1899', other.get_by_label('Death year to').input_value())
-        self.assertEqual('Willowmere', other.get_by_label('Event place').input_value())
-        self.assertTrue(other.get_by_label('No recorded spouse or partner').is_checked())
-        self.assertFalse(other.get_by_label('No parent recorded').is_checked())
+        self.assertEqual('cairn', self.label('Last name', other, exact=True).input_value())
+        self.assertEqual('birth', self.label('Dates apply to', other).input_value())
+        self.assertEqual('1784', self.label('From year', other).input_value())
+        self.assertEqual('Willowmere', self.label('Location', other, exact=True).input_value())
+        self.assertTrue(self.label('No recorded spouse or partner', other).is_checked())
+        self.assertFalse(self.label('Missing father', other).is_checked())
         self.assertEqual('Birth ↑', other.locator('th[aria-sort="ascending"]').text_content())
+        self.assertEqual('Birth: oldest first', other.get_by_label('Sort results').evaluate('s => s.selectedOptions[0].textContent'))
         self.assertEqual(0, other.locator('th[aria-sort="descending"]').count())
         other.close()
-        # Clearing keeps the sort and any parameter the catalogue does not own.
+        # Clearing keeps the sort and any parameter the catalogue does not own; an older year range is read as a birth range.
         self.open('demo', '?sort=death&from=elsewhere&birth_from=1810')
         self.assertEqual('22 of 42', self.count())
+        self.assertEqual({'sort': 'death', 'from': 'elsewhere', 'date_type': 'birth', 'year_from': '1810'}, self.query())
         self.reset()
         self.assertEqual({'sort': 'death', 'from': 'elsewhere'}, self.query())
-        # An unknown value is ignored rather than filtering everyone out.
+        # An unknown value is ignored rather than filtering everyone out; "no parent recorded" is read as missing both.
         self.open('demo', '?sex=X&surname=Nobody&no_parent=1')
-        self.assertEqual('12 of 42', self.count())
-        self.assertEqual('', self.page.get_by_label('Recorded sex').input_value())
+        self.assertEqual('34 of 42', self.count())
+        self.assertTrue(self.gender('Any').is_checked())
+        self.assertEqual({'missing_father': '1', 'missing_mother': '1'}, self.query())
         self.assertEqual('Individual ↑', self.page.locator('th[aria-sort="ascending"]').text_content())
 
     def test_each_filter_on_the_large_catalogue_built_from_the_data(self):
         self.open('large')
         page = self.page
         self.assertEqual('400 of 400', self.count())
-        sex = self.label('Recorded sex')
+        male = self.gender('Male')
         self.axe()
-        self.assertEqual(['Any', 'Female (100)', 'Male (100)', 'Not recorded (200)'], sex.locator('option').all_inner_texts())
-        sex.select_option('M')
+        male.check()
         self.assertEqual('100 of 400', self.count())
         self.assertIn('Person 0001 Fable', page.locator('[data-person-id]:visible').first.inner_text())
+        self.gender('Female').check()
+        self.assertEqual('100 of 400', self.count())
         self.reset()
-        for label, expected in (('No parent recorded', '1'), ('Has recorded children', '200'), ('No recorded spouse or partner', '392')):
+        # Person n's parent is person (n - 1) / 2, a mother when that number is a multiple of four and a father one more.
+        for label, expected in (('Missing father', '300'), ('Missing mother', '300'), ('Has descendants', '200'), ('No recorded spouse or partner', '392')):
             box = self.label(label)
             box.check()
             self.assertEqual(f'{expected} of 400', self.count(), label)
             box.uncheck()
-        self.label('Birth year from').fill('1700')
-        self.label('Birth year to').fill('1709')
-        self.assertEqual('30 of 400', self.count())
+        self.label('Missing father').check()
+        self.label('Missing mother').check()
+        self.assertEqual('200 of 400', self.count())
         self.reset()
-        self.label('Death year from').fill('1750')
-        self.label('Death year to').fill('1759')
+        self.label('Dates apply to').select_option('birth')
+        self.label('From year').fill('1700')
+        self.label('To year').fill('1709')
+        self.assertEqual('30 of 400', self.count())
+        self.label('Dates apply to').select_option('death')
+        self.label('From year').fill('1750')
+        self.label('To year').fill('1759')
         self.assertEqual('3 of 400', self.count())  # p0000, p0150 and p0300
         self.reset()
-        self.label('Event place').fill('Inventia')
+        self.label('Location', exact=True).fill('Inventia')
         self.assertEqual('131 of 400', self.count())  # every third place, less two hamlets recorded without a country
-        page.get_by_label('Event place').fill('hamlet')
+        self.label('Location', exact=True).fill('hamlet')
         self.assertEqual('8 of 400', self.count())
         # Someone beyond the written-out first page is found and shown like the written rows.
-        page.get_by_label('Event place').fill('Hamlet 0350')
+        self.label('Location', exact=True).fill('Hamlet 0350')
         self.assertEqual('1 of 400', self.count())
         self.assertEqual(['1750', 'Hamlet 0350'], page.locator('[data-person-id="p0350"] td').all_inner_texts()[1:3])
         address = page.url
@@ -290,7 +312,7 @@ class CatalogueFilterBrowserTests(unittest.TestCase):
         self.open('large', '?q=Person+0399&surname=Fable&has_children=1')
         self.assertEqual('1 of 400', self.count())
         self.assertTrue(self.page.locator('[data-person-id="p0199"]').is_visible())
-        self.assertEqual('Fable', self.page.get_by_label('Surname').and_(self.page.locator('select')).input_value())
+        self.assertEqual('Surname: Fable (400) Remove', self.filter(self.page.locator('.catalogue-surname-filter')).text_content())
 
 
 if __name__ == '__main__':

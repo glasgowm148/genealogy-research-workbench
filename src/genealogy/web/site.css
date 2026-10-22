@@ -267,3 +267,23 @@ ul.glance-list{list-style:none;padding-left:0}.glance-meaning{color:var(--muted)
 .catalogue-map-list{columns:2 22rem;column-gap:2rem;font-size:.86rem;padding-left:1.4rem}.catalogue-map-list li{break-inside:avoid;margin-bottom:.35rem}
 @media(max-width:640px){.filter-group>summary,.filter-clear{padding:.4rem .7rem;font-size:.8rem}.catalogue-tools{align-items:flex-start}}
 @media print{.filter-pills,.catalogue-tools{display:none!important}.catalogue-table{min-width:0}}
+/* Find a person: the header, the search box and the seven menus, then the result toolbar. */
+.catalogue-links{margin:0 0 .3rem;font-size:.95rem}.catalogue-held{margin:.1rem 0 1.1rem}
+.catalogue-intro{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1rem;margin:0 0 .8rem}.catalogue-intro .lede{margin:0;color:var(--muted);font-size:1rem}
+.catalogue-total{margin:0;padding:.35rem .95rem;border:1px solid var(--line);border-radius:999px;background:var(--soft);font-size:.88rem}
+.catalogue-finder .catalogue-query{display:flex;gap:.5rem;align-items:stretch;margin:0 0 .8rem;padding:.3rem;border:1px solid #cbd0c3;border-radius:var(--radius);background:var(--surface)}
+.catalogue-finder .catalogue-query input[type=search]{flex:1 1 auto;min-width:0;border:0;padding:.7rem .8rem;font-size:1rem}
+.catalogue-finder .catalogue-query button{flex:0 0 auto;border-color:var(--forest);background:var(--forest);color:var(--surface);font-weight:700;padding:.6rem 1.4rem}
+.filter-panel-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}.filter-panel-head h3{margin:0;font-size:1.05rem}.filter-panel-head button{padding:.35rem .9rem;font-size:.82rem}
+.filter-panel>.filter-panel-head,.filter-panel>h3,.filter-panel>h4,.filter-panel>.hint,.filter-panel>fieldset,.filter-panel>.relative-rows,.filter-panel>.relative-add,.filter-panel>.catalogue-surname-filter{grid-column:1/-1}
+.filter-panel>h4{margin:.3rem 0 -.3rem;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}.filter-panel>.hint{margin:-.3rem 0 0;font-size:.76rem;color:var(--muted)}
+.filter-panel label.check small{display:block;font-size:.75rem;color:var(--muted)}.catalogue-gender span[aria-hidden]{font-size:1.1rem;line-height:1}
+.catalogue-gender{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:0;padding:0;border:0}.catalogue-gender legend{float:left;margin-right:.5rem;padding:0;font-size:.78rem;color:var(--muted)}
+.filter-panel .catalogue-gender label{display:inline-flex;align-items:center;gap:.35rem;padding:.3rem .7rem;border:1px solid #cbd0c3;border-radius:999px;color:var(--ink);font-size:.85rem}
+.relative-rows{display:grid;gap:.6rem}.relative-row{display:grid;grid-template-columns:auto 1fr auto;column-gap:.5rem;row-gap:.25rem;align-items:center}
+.relative-row>label{grid-column:2;grid-row:1;font-size:.78rem;color:var(--muted)}.relative-row>input{grid-column:2;grid-row:2}.filter-panel .relative-row>select{grid-column:1;grid-row:2;width:auto}.relative-row>button{grid-column:3;grid-row:2;padding:.45rem .7rem;font-size:.8rem}
+.relative-add{justify-self:start;padding:.4rem .8rem;font-size:.85rem}.catalogue-surname-filter{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;font-size:.85rem}.catalogue-surname-filter button{padding:.25rem .7rem;font-size:.8rem}
+.catalogue-finder+#site-status:empty{display:none}.catalogue-finder~.result-count{text-align:right}
+.catalogue-result-toolbar .result-total{font-size:1.15rem}.catalogue-result-options{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center}
+.catalogue-detail,.catalogue-sort{display:inline-flex;align-items:center;gap:.5rem;font-size:.85rem;font-weight:600}.catalogue-detail select,.catalogue-sort select{font-size:.87rem;min-width:0;max-width:100%}
+@media(max-width:640px){.catalogue-finder .catalogue-query button{padding:.6rem .9rem}.relative-row{grid-template-columns:1fr auto}.filter-panel .relative-row>select{grid-column:1/-1;grid-row:1}.relative-row>label{grid-column:1/-1;grid-row:2}.relative-row>input{grid-column:1;grid-row:3}.relative-row>button{grid-column:2;grid-row:3}.catalogue-detail,.catalogue-sort{display:grid;width:100%}}

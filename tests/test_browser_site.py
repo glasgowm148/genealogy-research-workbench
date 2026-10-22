@@ -117,8 +117,8 @@ class BrowserSiteTests(unittest.TestCase):
         return control
 
     def surname_filter(self):
-        # The menu: the Group row also has a checkbox labelled Surname.
-        return self.page.get_by_label('Surname').and_(self.page.locator('select'))
+        """The surname a ?surname= link filters on, shown in the Name menu ("Surname: Hale (5, incl. Hayle) Remove")."""
+        return self.filter(self.page.locator('.catalogue-surname-filter'))
 
     def evidence_dossier(self, routes):
         """A dossier whose claims show their records and assessments as a table."""
@@ -158,12 +158,9 @@ class BrowserSiteTests(unittest.TestCase):
 
     def test_offline_file_navigation_surname_filter_and_family_dossier(self):
         site = self.root / 'nested'
-        self.page.goto((site / 'catalogue.html').as_uri())
+        self.page.goto((site / 'catalogue.html').as_uri() + '?surname=Alder')
         self.page.locator('.pagination').wait_for()
-        surname = self.filter(self.surname_filter())
-        options = surname.locator('option').all_inner_texts()
-        self.assertIn('Alder (6)', options)
-        surname.select_option('Alder')
+        self.assertEqual('Surname: Alder (6) Remove', self.surname_filter().text_content())
         self.assertEqual(6, self.page.locator('[data-person-id]:visible').count())
         self.page.locator('[data-person-id]:visible a').first.click()
         self.assertIn('/people/', self.page.url)
@@ -176,7 +173,7 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.goto((site / 'branches.html').as_uri())
         self.page.locator('a[href="catalogue.html?surname=Cairn"]').click()
         self.page.locator('.pagination').wait_for()
-        self.assertEqual('Cairn', self.surname_filter().input_value())
+        self.assertEqual('Surname: Cairn (6) Remove', self.surname_filter().text_content())
         self.assertEqual(6, self.page.locator('[data-person-id]:visible').count())
         self.page.goto((site / 'branches.html').as_uri())
         self.page.locator('a[href^="tree.html?person="]').first.click()
@@ -269,7 +266,7 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.get_by_role('button', name='Birth', exact=True).click()
         self.assertEqual('1700', rows.first.locator('td').nth(1).inner_text())
         # One citation in five is an original record, so a fifth of the people are backed by one.
-        self.filter(self.page.get_by_label('Evidence')).select_option('original')
+        self.filter(self.page.get_by_label('Claims')).select_option('original')
         self.assertIn(f'{people // 5:,} matches of {people:,} people', self.page.locator('.result-count').inner_text())
         self.assertEqual('1702', rows.first.locator('td').nth(1).inner_text())
 
@@ -342,13 +339,13 @@ class BrowserSiteTests(unittest.TestCase):
         # Eight people have supported parent claims; the seven resting on the register's original entry are
         # "backed by an original record", and the one resting on the letters is not.
         self.page.get_by_role('searchbox', name='Search people').fill('')
-        self.filter(self.page.get_by_label('Evidence')).select_option('supported')
+        self.filter(self.page.get_by_label('Claims')).select_option('supported')
         self.assertIn('8 matches of 43 people', self.page.locator('.result-count').inner_text())
-        self.page.get_by_label('Evidence').select_option('original')
+        self.page.get_by_label('Claims').select_option('original')
         self.assertIn('7 matches of 43 people', self.page.locator('.result-count').inner_text())
         self.assertEqual(0, self.page.locator('[data-person-id="person:10"]:visible').count())
         self.assertEqual(1, self.page.locator('[data-person-id="person:05"]:visible').count())
-        self.page.get_by_label('Evidence').select_option('')
+        self.page.get_by_label('Claims').select_option('')
         self.page.goto(self.base + 'tree.html')
         self.assertTrue(self.page.locator('[data-whole-tree]').is_visible())
         self.page.locator('[data-tree-view="family"]').click()
@@ -435,29 +432,31 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual(0, self.page.locator('tr[data-surname="Hayle"]').count())
         row.locator('a[href="catalogue.html?surname=Hale"]').click()
         self.page.locator('.pagination').wait_for()
-        surname = self.filter(self.surname_filter())  # the options are read with the Name group open
-        self.assertEqual('Hale', surname.input_value())
-        self.assertIn('Hale (5, incl. Hayle)', surname.locator('option').all_inner_texts())
+        surname = self.surname_filter()
+        self.assertEqual('Surname: Hale (5, incl. Hayle) Remove', surname.text_content())
         self.assertEqual(5, visible.count())
         iona = self.page.locator('[data-person-id="person:43"]')
         self.assertTrue(iona.is_visible())
         self.assertTrue(iona.locator('td').first.inner_text().startswith('Iona Hayle'))  # shown as recorded, grouped as Hale
         self.assertEqual('Hale', iona.get_attribute('data-surname'))
-        self.filter(surname).select_option('')
+        surname.get_by_role('button', name='Remove the surname filter').click()
+        self.assertEqual(43, visible.count())
+        # The Name menu's Last name box folds the listed spellings too.
+        self.page.get_by_label('Last name', exact=True).fill('hayle')
+        self.assertEqual(5, visible.count())
+        self.page.get_by_label('Last name', exact=True).fill('')
         for query in ('Iona Hale', 'Iona Hail', 'iona hayle'):  # any listed spelling finds her
             self.page.get_by_role('searchbox', name='Search people').fill(query)
             self.assertTrue(iona.is_visible(), query)
         self.page.goto(self.base + 'catalogue.html?surname=Hayle')
         self.page.locator('.pagination').wait_for()
-        self.assertEqual('Hale', self.surname_filter().input_value())
+        self.assertEqual('Surname: Hale (5, incl. Hayle) Remove', self.surname_filter().text_content())
         self.assertEqual(5, visible.count())
 
         large = self.base.replace('/nested/', '/large-variants/')
         everyone = self.large_people + 1
         self.page.goto(large + 'catalogue.html?surname=Fabel', wait_until='networkidle')
-        surname = self.filter(self.surname_filter())
-        self.assertEqual('Fable', surname.input_value())
-        self.assertEqual(['All surnames', f'Fable ({everyone}, incl. Fabel)'], surname.locator('option').all_inner_texts())
+        self.assertEqual(f'Surname: Fable ({everyone}, incl. Fabel) Remove', self.surname_filter().text_content())
         self.assertIn(f'{everyone:,} matches of {everyone:,} people', self.page.locator('.result-count').inner_text())
         self.page.get_by_role('searchbox', name='Search people').fill('Odo Fable')
         self.assertEqual(1, visible.count())

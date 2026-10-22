@@ -175,9 +175,29 @@ Records spell the same family name in different ways: Fable, Fabel, Faible. Keep
 Fable = ["Fabel", "Faible"]
 ```
 
-On the site, **Families & branches** then has one Fable row covering everyone recorded under any of the three, with a line such as "Recorded as Fabel (3), Fable (1), Faible (1)"; its link opens the catalogue filtered to the whole group, and the catalogue's surname menu lists "Fable (5, incl. Fabel, Faible)". A catalogue search for any one spelling finds people recorded under the others. Dossiers, the catalogue's Surname column and the downloads keep each spelling as recorded.
+On the site, **Families & branches** then has one Fable row covering everyone recorded under any of the three, with a line such as "Recorded as Fabel (3), Fable (1), Faible (1)"; its link opens the catalogue filtered to the whole group, shown in its Name menu as "Surname: Fable (5, incl. Fabel, Faible)". A catalogue search, or its Last name box, for any one spelling finds people recorded under the others, unless **Exact name spelling** is ticked. Dossiers, the catalogue's Surname column and the downloads keep each spelling as recorded.
 
 Case does not matter, and a spelling can belong to one surname only: `genealogy.toml` is rejected if a spelling is listed under two surnames, or if a surname you group under is also listed as another one's variant. The list is published with the site in `data/site-data.js`, except for a surname that no public person is recorded under, so list spellings, not people.
+
+## Name the surname and the online tree
+
+A one-surname study can say so on the catalogue's **Find a person** page, and a project that keeps its people on an online tree can name it:
+
+```toml
+[names]
+surname = "Fable"
+
+[site]
+tree_name = "WikiTree"
+```
+
+With `surname` set the page reads "Search 42 historical people connected with the Fable surname." and its **Filters** menu gains "Fable at birth", "Women who married a Fable" and "Has suffix". Without it, the first surname listed under `[names.variants]` is used when a public person is recorded under it; with neither, the page reads "Search 42 people in this collection." and those three checks are left out. `tree_name` names the search box's example ID ("Name, WikiTree ID or any detail") and titles the **WikiTree** menu ("No confirmed WikiTree link", "Needs updated on WikiTree"); without it the menu is **Tree**. Both are public and must be non-empty strings.
+
+The catalogue reads these from the case, so record them as usual:
+
+- **At birth and married names**: give each `Name` its `kind` (`birth`, `married`) and, where you have them, its `given` names and `surname`. "Surname at birth" reads the birth names (every name when none is marked as one), and "Current/last surname" the last name not marked as a birth name.
+- **The online tree**: a person's `external_ids` are their tree profiles; someone with none is listed under "No confirmed … link".
+- **Changes still to make on the tree**: a finding's `changes` on a relationship stay pending, and the person at each end of the link "Needs updated", until the finding's `status` is `reviewed` or `applied`. A change with no `before` is a new relationship; say "replaces" in its `note`, or move the old link to `disproved` in the same finding, and it is a replaced one; a change with both values is a confidence change. See [the catalogue](deployment.md#build-and-inspect).
 
 ## Record a merge or a changed ID
 

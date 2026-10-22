@@ -110,30 +110,48 @@ const view=document.body.dataset.view;
 function fillPeople(menu){if(menu.options.length>1)return;const sorted=[...people].sort((x,y)=>name(x).localeCompare(name(y))||x.id.localeCompare(y.id));const fragment=document.createDocumentFragment();sorted.forEach(p=>fragment.append(option(p.id,name(p))));menu.append(fragment);}
 // ?a= and ?b= (a dossier's explore links) preselect people once the menus are filled; with only one chosen, the other menu takes focus.
 function preselect(a,b){const params=new URLSearchParams(location.search);for(const [menu,key] of [[a,'a'],[b,'b']]){const id=params.get(key);if(id&&personBy.has(id))menu.value=id;}if(!a.value!==!b.value)(a.value?b:a).focus();}
-// The catalogue's research filters, on public data only: recorded sex, recorded family links, birth and death years, and event places.
-// A disproved link is set apart on the dossier and counts for nothing here (validation keeps a grade counted as disproved at that confidence).
-const PARENT_KINDS=['parent','father','mother','biological_parent','adoptive_parent','parent_child'],PARTNER_KINDS=['spouse','partner','husband','wife','marriage'],SEX_LABEL={F:'Female',M:'Male'};
-function researchFilters(records){
- const parents=new Set,children=new Set,partners=new Set;
- for(const r of relationships){if(r.confidence==='disproved')continue;const k=String(r.kind||'').toLowerCase();if(PARENT_KINDS.includes(k)){parents.add(r.subject_id);children.add(r.object_id);}else if(PARTNER_KINDS.includes(k)){partners.add(r.subject_id);partners.add(r.object_id);}}
- const first=(ev,kind)=>{const e=ev.find(x=>x.kind===kind&&year(x.date)!==null);return e?year(e.date):null;};
- records.forEach(r=>{const id=r.p?.id,ev=r.p?pe(r.p).sort(byDate):[];Object.assign(r,{sex:r.p?.sex||'',birth:first(ev,'birth'),death:first(ev,'death'),places:[...new Set(ev.map(e=>norm(placeBy.get(e.place_id)?.name)).filter(Boolean))],parent:parents.has(id),children:children.has(id),partner:partners.has(id)});});
- const sexCounts=new Map;records.forEach(r=>sexCounts.set(r.sex,(sexCounts.get(r.sex)||0)+1));
- const recorded=[...sexCounts.keys()].filter(Boolean).sort((a,b)=>(a in SEX_LABEL?0:1)-(b in SEX_LABEL?0:1)||a.localeCompare(b));
- const sex=select([['','Any'],...recorded.map(v=>[v,`${SEX_LABEL[v]||v} (${sexCounts.get(v).toLocaleString()})`]),['not-recorded',`Not recorded (${(sexCounts.get('')||0).toLocaleString()})`]]);
- const number=placeholder=>{const n=el('input');n.type='number';n.min='1';n.max='9999';n.placeholder=placeholder;return n;};
- const controls={...(recorded.length?{sex}:{}),birth_from:number('e.g. 1750'),birth_to:number('e.g. 1850'),death_from:number('e.g. 1800'),death_to:number('e.g. 1900'),place:el('input')};
- controls.place.type='search';controls.place.placeholder='Parish, town or county';
- // Each control's labelled field, placed by the catalogue in its filter groups.
- const fields={};if(controls.sex)fields.sex=field('Recorded sex',sex);
- for(const [key,label] of [['birth_from','Birth year from'],['birth_to','Birth year to'],['death_from','Death year from'],['death_to','Death year to'],['place','Event place']])fields[key]=field(label,controls[key]);
- for(const [key,label] of [['no_parent','No parent recorded'],['has_children','Has recorded children'],['no_spouse','No recorded spouse or partner']]){const box=el('input'),l=el('label',undefined,'check');box.type='checkbox';box.value='1';l.append(box,label);fields[key]=l;controls[key]=box;}
- const on=n=>n.type==='checkbox'?n.checked:n.value.trim()!=='';
- const num=n=>n.value?Number(n.value):null,within=(y,lo,hi)=>lo===null&&hi===null||y!==null&&(lo===null||y>=lo)&&(hi===null||y<=hi);
- // Built once per render: the place words and year bounds, then a test for each record.
- const test=()=>{const words=norm(controls.place.value).trim().split(/\s+/).filter(Boolean),b=[num(controls.birth_from),num(controls.birth_to)],d=[num(controls.death_from),num(controls.death_to)],c=controls;const s=controls.sex?.value||'';
-  return r=>(!s||(s==='not-recorded'?!r.sex:r.sex===s))&&within(r.birth,...b)&&within(r.death,...d)&&(!words.length||r.places.some(p=>words.every(w=>p.includes(w))))&&(!c.no_parent.checked||!r.parent)&&(!c.has_children.checked||r.children)&&(!c.no_spouse.checked||!r.partner);};
- return {controls,fields,on,test};
+// Family link kinds, as site.py groups them.
+const PARENT_KINDS=['parent','father','mother','biological_parent','adoptive_parent','parent_child'],PARTNER_KINDS=['spouse','partner','husband','wife','marriage'];
+// What each catalogue record is filtered on, from the shared data in one pass: name parts, relatives' names by
+// relationship, years, places by event, regions, the studies, record types and qualities the build listed, family
+// flags, the surname tests and pending tree changes. A disproved link counts for nothing here.
+const SUFFIX=/(?:^|[\s,])(?:jr|jnr|junior|sr|snr|senior|ii|iii|iv|esq)\.?$/i,CHANGE_RANK={documented:4,probable:3,possible:2,disproved:1,unknown:0};
+function catalogueFacets(records,surname){
+ const kind=r=>String(r.kind||'').toLowerCase(),add=(m,k,v)=>{if(!m.has(k))m.set(k,[]);m.get(k).push(v);};
+ const parentsOf=new Map,childrenOf=new Map,partnersOf=new Map,siblingsOf=new Map;
+ for(const r of relationships){if(r.confidence==='disproved'||r.subject_id===r.object_id||!personBy.has(r.subject_id)||!personBy.has(r.object_id))continue;const k=kind(r);
+  if(PARENT_KINDS.includes(k)){add(parentsOf,r.subject_id,r);add(childrenOf,r.object_id,r.subject_id);}
+  else if(PARTNER_KINDS.includes(k)){add(partnersOf,r.subject_id,r.object_id);add(partnersOf,r.object_id,r.subject_id);}
+  else if(SIBLING_KINDS.includes(k)){add(siblingsOf,r.subject_id,r.object_id);add(siblingsOf,r.object_id,r.subject_id);}}
+ // A parent is a father by the link's kind or the parent's recorded sex, as site.py's catalogue_facets reads it.
+ const role=r=>{const k=kind(r),s=personBy.get(r.object_id)?.sex;return k==='father'||k!=='mother'&&s==='M'?'father':k==='mother'||s==='F'?'mother':'parent';};
+ const names=id=>fold((personBy.get(id)?.names||[]).map(n=>n.value).join(' '));
+ const surnames=list=>list.map(n=>n.surname||'').filter(Boolean);
+ // At birth: the names recorded as birth names, else every name; current: the last name not recorded as a birth name.
+ const atBirth=p=>{const n=p?.names||[],b=n.filter(x=>x.kind==='birth');return surnames(b.length?b:n);};
+ const current=p=>{const n=p?.names||[],o=n.filter(x=>x.kind!=='birth');return surnames((o.length?o:n).slice(-1));};
+ const target=surname?norm(canonical(surname)):'',isTarget=s=>!!target&&norm(canonical(s))===target;
+ // Family branch: the earliest-born ancestor up the parent links (the person themselves when none is recorded).
+ const roots=new Map,born=id=>{const e=pe(personBy.get(id)).find(x=>x.kind==='birth'&&year(x.date)!==null);return e?year(e.date):Infinity;};
+ const root=(id,seen=new Set)=>{if(roots.has(id))return roots.get(id);seen.add(id);const up=(parentsOf.get(id)||[]).map(r=>r.object_id).filter(x=>!seen.has(x)).map(x=>root(x,seen));
+  const best=up.length?up.sort((a,b)=>born(a)-born(b)||codeOrder(name(personBy.get(a)),name(personBy.get(b)))||codeOrder(a,b))[0]:id;roots.set(id,best);return best;};
+ const confidence=v=>data.site?.grade_confidence?.[v]||v;
+ for(const r of records){const p=r.p;if(!p)continue;const id=p.id,ev=pe(p).sort(byDate),nm=p.names||[],placeOf=e=>placeBy.get(e.place_id)?.name||'';
+  const at=test=>[...new Set(ev.filter(test).map(placeOf).filter(Boolean))],recorded=at(()=>true),parents=parentsOf.get(id)||[];
+  const sibling=new Set([...parents.flatMap(x=>childrenOf.get(x.object_id)||[]),...(siblingsOf.get(id)||[])]);sibling.delete(id);
+  const rel={spouse:[...new Set(partnersOf.get(id)||[])],father:parents.filter(x=>role(x)==='father').map(x=>x.object_id),mother:parents.filter(x=>role(x)==='mother').map(x=>x.object_id),child:[...new Set(childrenOf.get(id)||[])],sibling:[...sibling]};
+  const birthNames=atBirth(p),firstYear=k=>{const e=ev.find(x=>x.kind===k&&year(x.date)!==null);return e?year(e.date):null;};
+  Object.assign(r,{sex:p.sex||'',birth:firstYear('birth'),death:firstYear('death'),
+   first:fold(nm.map(n=>n.given||String(n.value||'').replace(n.surname||'\0','')).join(' ')),last:fold(surnames(nm).join(' ')),lastBirth:fold(birthNames.join(' ')),lastCurrent:fold(current(p).join(' ')),full:fold(nm.map(n=>n.value).join(' ')),
+   relatives:Object.fromEntries(Object.entries(rel).map(([k,ids])=>[k,ids.map(names)])),
+   where:{record:recorded.map(norm),birth:at(e=>e.kind==='birth').map(norm),death:at(e=>e.kind==='death').map(norm),marriage:at(e=>/^marriage/.test(e.kind||'')).map(norm),bio:p.notes?[norm(p.notes)]:[]},
+   regions:new Set([...recorded.map(n=>n.split(',').map(s=>s.trim()).filter(Boolean).pop()),...(ev.length&&!recorded.length?['Location unknown']:[])]),
+   studies:new Set(p.study_ids||[]),types:new Set(p.record_types||[]),qualities:new Set(p.qualities||[]),
+   missingFather:!rel.father.length,missingMother:!rel.mother.length,children:rel.child.length>0,partner:rel.spouse.length>0,
+   bornSurname:birthNames.some(isTarget),
+   marriedSurname:p.sex==='F'&&!birthNames.some(isTarget)&&(nm.some(n=>n.kind==='married'&&isTarget(n.surname))||rel.spouse.some(s=>atBirth(personBy.get(s)).some(isTarget))),
+   suffix:nm.some(n=>SUFFIX.test(String(n.value||'').trim())),external:!!p.external_id,
+   changes:(p.changes||[]).map(([relation,action,after])=>({relation,action,after,rank:CHANGE_RANK[confidence(after)]??0})),branch:root(id)});}
 }
 // Type-to-find over a person menu (combobox and listbox). The menu stays the real control: a choice sets it and fires change.
 // Past 300 people (site.py's INLINE_LIMIT) a full menu is a long scroll, so it folds away under a details.
@@ -207,59 +225,89 @@ function catalogueRow(p){
  return tr;
 }
 function catalogue(){
- const host=$('[data-catalogue]');if(!host)return;
+ const host=$('[data-catalogue]'),form=$('[data-catalogue-form]');if(!host||!form)return;
  let rows=$$('tbody tr',host);if(!rows.length)rows=$$('[data-person-id]',host);
  // A large site writes out the first page only; everyone else comes from the shared data.
  const compact=rows.length>0&&Number(host.dataset.total||0)>rows.length&&people.length>rows.length;
  if(!rows.length)return;
  if(compact)$('[data-catalogue-pages]')?.setAttribute('hidden','');
- const search=$('[data-search]')||el('input');search.type='search';search.placeholder='Name, place, relative or record…';search.setAttribute('aria-label','Search people');
- const bar=el('div',undefined,'toolbar catalogue-query');const oldLabel=search.closest('label');if(oldLabel&&oldLabel.childElementCount===1)oldLabel.remove();const queryLabel=field('Search the catalogue',search);queryLabel.className='grow';bar.append(queryLabel);
- const from=el('input');from.type='number';from.placeholder='e.g. 1750';from.min='1';from.max='9999';const to=el('input');to.type='number';to.placeholder='e.g. 1900';to.min='1';to.max='9999';
- // Offered only when some citation is recorded as an original record.
- const originals=[...citationBy.values()].some(c=>c.quality==='original');
- const evidence=select([['','Any evidence'],['supported','Supported claim'],...(originals?[['original','Backed by an original record']]:[]),['unassessed','Unassessed / imported']]);
+ const search=$('[data-search]',form),F=n=>form.elements.namedItem(n);
  const tbody=rows[0].parentElement;let page=0;const size=50;
  const imported=new Set(list('imports').concat(list('import_provenance')).flatMap(i=>i.entity_ids||[]));
  const summary=p=>pe(p).sort(byDate).map(e=>`${e.kind}: ${eventDate(e,'date unknown')}`).join('; ');
- // A record filters and groups under its canonical surname; the row keeps the spelling as recorded.
- const record=(p,id,row,text)=>{const ev=p?pe(p):[];const related=p?relativeIds(p.id).map(id=>name(personBy.get(id))).join(' '):'';const cs=claimsByPerson.get(id)||[];const recorded=p?surnameOf(p):row?.dataset.surname||'';return{row,p,recorded,surname:canonical(row?row.dataset.surname||'':recorded),norm:fold([text,p?.notes,related,...ev.map(e=>[e.date,placeBy.get(e.place_id)?.name,e.description].join(' ')),...cs.map(c=>`${c.predicate} ${c.value}`)].join(' ')),years:ev.map(e=>year(e.date)).filter(n=>n!==null),supported:cs.some(c=>c.status==='supported'),original:cs.some(c=>c.status==='supported'&&(c.citation_ids||[]).some(id=>citationBy.get(id)?.quality==='original')),imported:imported.has(id)};};
- const records=compact?people.map(p=>{const r=record(p,p.id,null,[name(p),...(p.names||[]).map(n=>n.value),p.id,p.external_id,summary(p)].join(' '));Object.defineProperty(r,'row',{get(){return this._row||(this._row=catalogueRow(p));}});return r;})
-  :rows.map((row,i)=>{const id=row.dataset.personId||row.dataset.id||people[i]?.id;return record(personBy.get(id),id,row,[row.dataset.searchText,row.textContent].join(' '));});
- // One option per canonical surname, naming the other spellings recorded under it.
+ // A record filters and groups under its canonical surname; the row keeps the spelling as recorded. The search text is kept
+ // folded ([names.variants] spellings as one) and as typed, for Exact name spelling.
+ const record=(p,id,row,text)=>{const ev=p?pe(p):[];const related=p?relativeIds(p.id).map(id=>name(personBy.get(id))).join(' '):'';const cs=claimsByPerson.get(id)||[];const recorded=p?surnameOf(p):row?.dataset.surname||'';
+  const all=[text,p?.notes,related,...ev.map(e=>[e.date,placeBy.get(e.place_id)?.name,e.description].join(' ')),...cs.map(c=>`${c.predicate} ${c.value}`)].join(' ');
+  return{row,p,recorded,surname:canonical(row?row.dataset.surname||'':recorded),norm:fold(all),raw:norm(all),years:ev.map(e=>year(e.date)).filter(n=>n!==null),supported:cs.some(c=>c.status==='supported'),original:cs.some(c=>c.status==='supported'&&(c.citation_ids||[]).some(id=>citationBy.get(id)?.quality==='original')),imported:imported.has(id)};};
+ const records=(compact?people.map(p=>{const r=record(p,p.id,null,[name(p),...(p.names||[]).map(n=>n.value),p.id,p.external_id,summary(p)].join(' '));Object.defineProperty(r,'row',{get(){return this._row||(this._row=catalogueRow(p));}});return r;})
+  :rows.map((row,i)=>{const id=row.dataset.personId||row.dataset.id||people[i]?.id;return record(personBy.get(id),id,row,[row.dataset.searchText,row.textContent].join(' '));})).filter(r=>r.p);
+ catalogueFacets(records,form.dataset.surname||'');
+ // The menus that grow with the case, filled from the data: regions, the studies naming someone listed, record types.
+ const fill=(menu,items)=>{if(menu)menu.append(...items.map(([v,t])=>option(v,t)));};
+ const regions=new Set(records.flatMap(r=>[...r.regions]));fill(F('region'),[...regions].sort((a,b)=>a.localeCompare(b)).map(v=>[v,v]));
+ const naming=new Set(records.flatMap(r=>[...r.studies]));fill(F('study'),list('studies').filter(s=>naming.has(s.id)).sort((a,b)=>String(a.title).localeCompare(String(b.title))||codeOrder(a.id,b.id)).map(s=>[s.id,s.title||s.id]));
+ const typeLabels=data.site?.source_type_labels||{},types=new Set(records.flatMap(r=>[...r.types]));fill(F('record_type'),[...types].map(v=>[v,typeLabels[v]||v]).sort((a,b)=>a[1].localeCompare(b[1])));
+ // ?surname= (the surname links across the site): everyone grouped under one canonical surname, shown in the Name menu with a Remove button.
  const surnameCounts=new Map,spellings=new Map;records.forEach(r=>{if(!r.surname)return;surnameCounts.set(r.surname,(surnameCounts.get(r.surname)||0)+1);if(r.recorded&&r.recorded!==r.surname){if(!spellings.has(r.surname))spellings.set(r.surname,new Set);spellings.get(r.surname).add(r.recorded);}});
- const surname=select([['','All surnames'],...[...surnameCounts].sort((a,b)=>a[0].localeCompare(b[0])).map(([s,n])=>{const other=[...(spellings.get(s)||[])].sort((a,b)=>a.localeCompare(b));return[s,other.length?`${s} (${n}, incl. ${other.join(', ')})`:`${s} (${n})`];})]);
- // Sorting: each column heading is a button; ?sort= keeps name, name-desc, birth, death and the other columns, with -desc for descending.
- const heads=$$('thead th[data-sort]',host),sort=select(heads.flatMap(th=>[[th.dataset.sort,th.textContent],[`${th.dataset.sort}-desc`,th.textContent]]));
+ const surnameLink={value:'',put(v){this.value=surnameCounts.has(canonical(v))?canonical(v):'';}},namePanel=$('#catalogue-filter-name',form),nameNote=el('p',undefined,'catalogue-surname-filter'),dropName=el('button','Remove');
+ dropName.type='button';dropName.setAttribute('aria-label','Remove the surname filter');dropName.addEventListener('click',()=>{surnameLink.value='';changed();F('first')?.focus();});
+ const showName=()=>{nameNote.hidden=!surnameLink.value;if(!surnameLink.value)return;const other=[...(spellings.get(surnameLink.value)||[])].sort((a,b)=>a.localeCompare(b)),n=surnameCounts.get(surnameLink.value);nameNote.replaceChildren(el('span',`Surname: ${surnameLink.value} (${n.toLocaleString()}${other.length?`, incl. ${other.join(', ')}`:''})`),' ',dropName);};
+ // Gender is one radio group: a control with a value, like the others.
+ const radios=$$('input[name="sex"]',form),gender={radios,get value(){return radios.find(b=>b.checked)?.value||'';},set value(v){const b=radios.find(x=>x.value===v);if(b)b.checked=true;}};
+ // Relatives: one row per relationship, chosen in its menu; the page starts with one empty Spouse row. Without the script all five inputs show.
+ const RELATIONS=['spouse','father','mother','child','sibling'],LABELS={spouse:'Spouse',father:'Father',mother:'Mother',child:'Child',sibling:'Sibling'};
+ const holder=$('[data-relatives]',form),rowOf=k=>$(`.relative-row[data-relation="${k}"]`,holder),input=k=>F(k);
+ const addRelative=el('button','+ Add relative','relative-add');addRelative.type='button';addRelative.id='catalogue-add-relative';holder?.after(addRelative);
+ const shown=()=>$$('.relative-row',holder).filter(r=>!r.hidden).map(r=>r.dataset.relation);
+ for(const k of RELATIONS){const row=rowOf(k);if(!row)continue;const pick=select(RELATIONS.map(v=>[v,LABELS[v]])),remove=el('button','Remove','relative-remove');pick.dataset.relativeSelect='';pick.setAttribute('aria-label',`Relationship (${LABELS[k].toLowerCase()} row)`);pick.value=k;
+  remove.type='button';remove.dataset.relativeRemove='';remove.setAttribute('aria-label',`Remove ${LABELS[k].toLowerCase()}`);row.prepend(pick);row.append(remove);
+  pick.addEventListener('change',()=>{const to=pick.value,target=rowOf(to);if(to===k||!target)return;
+   // Changing the relationship moves the typed name to that relationship's own box.
+   input(to).value=input(k).value;input(k).value='';holder.insertBefore(target,row);target.hidden=false;row.hidden=true;refresh();changed();$('[data-relative-select]',target).focus();});
+  remove.addEventListener('click',()=>{const at=shown().indexOf(k),had=!!input(k).value;input(k).value='';row.hidden=true;sync();if(had)changed();const left=$$('.relative-row',holder).filter(r=>!r.hidden);($('input',left[Math.min(at,left.length-1)])||F('spouse')).focus();});}
+ const refresh=()=>{const on=shown();for(const k of RELATIONS){const pick=$('[data-relative-select]',rowOf(k));if(!pick)continue;pick.value=k;[...pick.options].forEach(o=>{o.disabled=o.value!==k&&on.includes(o.value);});}addRelative.disabled=on.length>=RELATIONS.length;};
+ // Rows with a name are always shown; reset also hides the empty ones, and an empty menu keeps one Spouse row.
+ const sync=(reset=false)=>{if(!holder)return;for(const k of RELATIONS){const row=rowOf(k),has=!!input(k)?.value.trim();if(!row)continue;if(reset){row.hidden=!has;holder.append(row);}else if(has&&row.hidden){row.hidden=false;holder.append(row);}}
+  if(!shown().length){const row=rowOf('spouse');row.hidden=false;holder.prepend(row);}refresh();};
+ addRelative.addEventListener('click',()=>{const k=RELATIONS.find(v=>rowOf(v).hidden);if(!k)return;const row=rowOf(k);holder.append(row);row.hidden=false;refresh();$('[data-relative-select]',row).focus();});
+ // Sorting: the Sort results menu and each column heading (a button); ?sort= keeps the choice, with -desc for descending.
+ const heads=$$('thead th[data-sort]',host);
+ const SORTS=[['relevance','Best match'],['name','Name A–Z'],['birth','Birth: oldest first'],['birth-desc','Birth: newest first'],['death','Death: oldest first'],['death-desc','Death: newest first'],['changes-desc','Relationship changes: highest confidence'],['changes','Relationship changes: lowest confidence']];
+ const sort=select(SORTS),listed=new Set(SORTS.map(([v])=>v)),best=sort.options[0];sort.value='name';
+ // A heading's other orders are offered while chosen, so the menu always names the order shown.
+ for(const th of heads)for(const [v,t] of [[th.dataset.sort,`${th.textContent}: ascending`],[`${th.dataset.sort}-desc`,`${th.textContent}: descending`]])if(!listed.has(v)){const o=option(v,t);o.hidden=true;o.dataset.column='';sort.append(o);}
  const facts=r=>catalogueFacts(r.p),surnameAt=x=>x?surnameOf(personBy.get(x.id))||name(personBy.get(x.id)):'';
  const KEYS={name:r=>name(r.p),birth:r=>year(facts(r).birth.date),death:r=>year(facts(r).death.date),'birth-place':r=>facts(r).birth.place,'death-place':r=>facts(r).death.place,
-  spouse:r=>surnameAt(facts(r).spouses[0]),father:r=>surnameAt(facts(r).fathers[0]),mother:r=>surnameAt(facts(r).mothers[0])};
+  spouse:r=>surnameAt(facts(r).spouses[0]),father:r=>surnameAt(facts(r).fathers[0]),mother:r=>surnameAt(facts(r).mothers[0]),changes:r=>r.changes.length?Math.max(...r.changes.map(c=>c.rank)):null};
  // A missing value sorts last either way; equal values fall back to name order.
  const compare=(a,b)=>typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b));
  const missing=v=>v===null||v===undefined||v==='';
  heads.forEach(th=>{const b=el('button',undefined,'sort-button'),mark=el('span','','sort-mark');b.type='button';mark.setAttribute('aria-hidden','true');b.append(th.textContent,mark);th.replaceChildren(b);
   b.addEventListener('click',()=>{const k=th.dataset.sort;sort.value=sort.value===k?`${k}-desc`:k;changed();});});
- // Filter groups: each a details whose summary is a pill, counting the filters on in it. The controls and their ?keys are researchFilters' and the toolbar's.
- const research=researchFilters(records),c=research.controls,f=research.fields;
- const pill=(title,items)=>{items=items.filter(([n])=>n);if(!items.length)return null;const d=el('details',undefined,'filter-group'),s=el('summary'),badge=el('span','','pill-count'),sr=el('span','','sr-only'),body=el('div',undefined,'filter-panel');badge.setAttribute('aria-hidden','true');s.append(title,badge,sr);items.forEach(([n])=>body.append(n));d.append(s,body);return{d,badge,sr,controls:items.map(([,n])=>n)};};
- const pills=[pill('Name',[[surnameCounts.size?field('Surname',surname):null,surname]]),pill('Relatives',['no_parent','has_children','no_spouse'].map(k=>[f[k],c[k]])),
-  pill('Dates',[...['birth_from','birth_to','death_from','death_to'].map(k=>[f[k],c[k]]),[field('Event year from',from),from],[field('Event year to',to),to]]),
-  pill('Places',[[f.place,c.place]]),pill('Evidence',[[field('Evidence',evidence),evidence]]),pill('Filters',[[f.sex,c.sex]])].filter(Boolean);
- const pillRow=el('div',undefined,'filter-pills');pillRow.setAttribute('role','group');pillRow.setAttribute('aria-label','Filter people');pills.forEach(g=>pillRow.append(g.d));
- // One open at a time; Escape closes it, and so does a click elsewhere where the panel covers the results (site.css lays it out beneath the pills where it can).
+ // The seven menus: each a details whose summary is a pill counting the filters on in it, with a Done button; one open at a time.
+ const pillRow=$('.filter-pills',form);
+ const pills=$$('details.filter-group',form).map(d=>{const s=$('summary',d),badge=el('span','','pill-count'),sr=el('span','','sr-only'),body=$('.filter-panel',d),head=el('div',undefined,'filter-panel-head'),done=el('button','Done');
+  badge.setAttribute('aria-hidden','true');s.append(badge,sr);done.type='button';done.dataset.filterClose='';const h=$('h3',body);h.before(head);head.append(h,done);
+  done.addEventListener('click',()=>{d.open=false;s.focus();});return{d,badge,sr};});
+ namePanel?.querySelector('.filter-panel-head')?.after(nameNote);
  pills.forEach(g=>g.d.addEventListener('toggle',()=>{if(g.d.open)pills.forEach(o=>{if(o!==g)o.d.open=false;});}));
+ // Escape closes the open menu, and so does a click elsewhere where the panel covers the results (site.css lays it out beneath the pills where it can).
  document.addEventListener('click',e=>pills.forEach(g=>{if(g.d.open&&!g.d.contains(e.target)&&getComputedStyle(g.d.lastChild).position==='absolute')g.d.open=false;}));
  document.addEventListener('keydown',e=>{const g=e.key==='Escape'&&pills.find(g=>g.d.open);if(g){g.d.open=false;g.d.querySelector('summary').focus();}});
- // Grouping and the table or map view.
+ // The result toolbar: the total, Table / Map, Group (location, family branch, surname), the location detail and Sort results.
  const check=label=>{const box=el('input'),l=el('label',undefined,'check');box.type='checkbox';box.value='1';l.append(box,label);return[l,box];};
- const [locationLabel,byLocation]=check('Location'),[surnameLabel,bySurname]=check('Surname'),grouping=el('fieldset',undefined,'catalogue-group');grouping.append(el('legend','Group'),locationLabel,surnameLabel);
- const region=r=>{const parts=facts(r).birth.place.split(',').map(s=>s.trim()).filter(Boolean);return parts.length?parts[parts.length-1]:'';};
- const groupKeys=r=>[...(byLocation.checked?[region(r)]:[]),...(bySurname.checked?[r.surname]:[])];
- const groupName=r=>{const k=groupKeys(r);return[...(byLocation.checked?[k[0]||'No birth place recorded']:[]),...(bySurname.checked?[k[k.length-1]||'No surname recorded']:[])].join(' · ');};
- const groupOrder=(a,b)=>{const x=groupKeys(a),y=groupKeys(b);for(let i=0;i<x.length;i++){const d=(x[i]?0:1)-(y[i]?0:1)||x[i].localeCompare(y[i]);if(d)return d;}return 0;};
- const view=select([['table','Table'],['map','Map']]),tools=el('div',undefined,'catalogue-tools'),toggle=el('div',undefined,'view-toggle'),asTable=el('button','Table'),asMap=el('button','Map');
+ const [locationLabel,byLocation]=check('Location'),[branchLabel,byBranch]=check('Family branch'),[surnameLabel,bySurname]=check('Surname'),grouping=el('fieldset',undefined,'catalogue-group');grouping.append(el('legend','Group'),locationLabel,branchLabel,surnameLabel);
+ const detail=select([['1','Country'],['2','County / area'],['3','Townland / locality']]),detailLabel=field('Location detail',detail),sortLabel=field('Sort results',sort);detailLabel.className='catalogue-detail';sortLabel.className='catalogue-sort';
+ const placeAt=(r,level)=>{const parts=facts(r).birth.place.split(',').map(s=>s.trim()).filter(Boolean);return parts.slice(-level).join(', ');};
+ const branchName=id=>{const p=personBy.get(id),span=lifespan(p);return `Descendants of ${name(p)}${span?` (${span})`:''}`;};
+ // Each grouping on gives a [key, heading] pair; the people are ordered by them in turn, a missing one last.
+ const groupParts=r=>[...(byLocation.checked?[[placeAt(r,Number(detail.value)||1),'No birth place recorded']]:[]),...(byBranch.checked?[[r.branch,'']]:[]),...(bySurname.checked?[[r.surname,'No surname recorded']]:[])];
+ const groupName=r=>groupParts(r).map(([k,none],i)=>byBranch.checked&&i===(byLocation.checked?1:0)?branchName(k):k||none).join(' · ');
+ const groupOrder=(a,b)=>{const x=groupParts(a),y=groupParts(b);for(let i=0;i<x.length;i++){const branch=byBranch.checked&&i===(byLocation.checked?1:0),p=branch?branchName(x[i][0]):x[i][0],q=branch?branchName(y[i][0]):y[i][0];const d=(p?0:1)-(q?0:1)||p.localeCompare(q)||codeOrder(x[i][0],y[i][0]);if(d)return d;}return 0;};
+ const view=select([['table','Table'],['map','Map']]),tools=el('div',undefined,'catalogue-tools catalogue-result-toolbar'),toggle=el('div',undefined,'view-toggle'),asTable=el('button','Table'),asMap=el('button','Map'),total=el('strong',undefined,'result-total'),options=el('div',undefined,'catalogue-result-options');
  toggle.setAttribute('role','group');toggle.setAttribute('aria-label','Show the people as');[asTable,asMap].forEach(b=>{b.type='button';toggle.append(b);});
- tools.append(grouping);if(places.some(locatedPlace))tools.append(toggle);
+ options.append(grouping,detailLabel,sortLabel);tools.append(total);if(places.some(locatedPlace))tools.append(toggle);tools.append(options);
  const mapBox=el('section',undefined,'catalogue-map');mapBox.hidden=true;mapBox.setAttribute('aria-labelledby','catalogue-map-heading');
  const placeUrls=Object.fromEntries(Object.entries(data.site?.place_urls||{}).map(([id,url])=>[id,window.GENEALOGY_SITE_DATA?root+url:url]));
  // One marker per birth place with supplied coordinates, counting the matching people born there; the list below says the same in text.
@@ -283,36 +331,78 @@ function catalogue(){
   mapBox.replaceChildren(heading,panel,note,spots.length?items:empty('No matching person has a birth place with supplied coordinates.'));}
  const count=el('p',undefined,'result-count');count.setAttribute('role','status');
  const clear=el('button','Clear');clear.type='button';clear.className='filter-clear';clear.setAttribute('aria-label','Clear search and filters');pillRow.append(clear);
- host.before(bar,pillRow,count,tools);
+ host.before(count,tools);
  const pager=el('div',undefined,'pagination'),info=el('span'),buttons=el('div'),prev=el('button','← Previous'),next=el('button','Next →');buttons.append(prev,next);pager.append(info,buttons);host.after(mapBox,pager);
- function render(){const q=fold(search.value).trim().split(/\s+/).filter(Boolean),lo=from.value?Number(from.value):null,hi=to.value?Number(to.value):null,matches=research.test();const filtered=records.filter(r=>q.every(v=>r.norm.includes(v))&&matches(r)&&(lo===null&&hi===null||r.years.some(y=>(lo===null||y>=lo)&&(hi===null||y<=hi)))&&(!surname.value||r.surname===surname.value)&&(!evidence.value||(evidence.value==='supported'?r.supported:evidence.value==='original'?r.original:!r.supported)));
-  const desc=sort.value.endsWith('-desc'),column=desc?sort.value.slice(0,-5):sort.value,key=KEYS[column]||KEYS.name,grouped=byLocation.checked||bySurname.checked;
-  const byName=(a,b)=>name(a.p).localeCompare(name(b.p));
-  filtered.sort((a,b)=>{if(grouped){const g=groupOrder(a,b);if(g)return g;}const x=key(a),y=key(b);if(missing(x)!==missing(y))return missing(x)?1:-1;const d=missing(x)?0:compare(x,y)*(desc?-1:1);return d||(column==='name'?0:byName(a,b));});
+ const words=v=>fold(v||'').trim().split(/\s+/).filter(Boolean),val=k=>F(k)?.value||'',on=k=>!!F(k)?.checked;
+ const num=k=>{const v=val(k).trim();return v&&Number.isFinite(Number(v))?Number(v):null;};
+ // Built once per render from the controls: one test for each record, every filter set having to match.
+ function tester(q){const c={first:words(val('first')),last:words(val('last')),scope:val('last_scope'),full:words(val('name')),sex:gender.value,
+   relatives:RELATIONS.map(k=>[k,words(val(k))]).filter(([,w])=>w.length),type:val('date_type'),place:norm(val('place')).trim().split(/\s+/).filter(Boolean),at:val('place_type'),
+   exclude:val('exclude_place').split(/[,;]+/).map(t=>norm(t).trim()).filter(Boolean),region:val('region'),study:val('study'),kind:val('record_type'),quality:val('quality'),evidence:val('evidence'),
+   change:[val('change_relationship'),val('change_action'),val('change_confidence')]};
+  let lo=num('year_from'),hi=num('year_to');if(lo!==null&&hi!==null&&lo>hi)[lo,hi]=[hi,lo];
+  const exact=on('exact'),flags=['born_surname','married_surname','suffix','missing_father','missing_mother','has_children','no_spouse','no_external','needs_update'].filter(on);
+  const FLAG={born_surname:r=>r.bornSurname,married_surname:r=>r.marriedSurname,suffix:r=>r.suffix,missing_father:r=>r.missingFather,missing_mother:r=>r.missingMother,has_children:r=>r.children,no_spouse:r=>!r.partner,no_external:r=>!r.external,needs_update:r=>r.changes.length>0};
+  const [cr,ca,cc]=c.change;
+  return r=>{if(!(exact?q.every(v=>r.raw.includes(v)):q.every(v=>r.norm.includes(v))))return false;
+   if(!c.first.every(w=>r.first.includes(w)))return false;
+   if(c.last.length){const s=c.scope==='birth'?r.lastBirth:c.scope==='current'?r.lastCurrent:r.last;if(!c.last.every(w=>s.includes(w)))return false;}
+   if(!c.full.every(w=>r.full.includes(w))||c.sex&&r.sex!==c.sex)return false;
+   if(!c.relatives.every(([k,w])=>r.relatives[k].some(n=>w.every(x=>n.includes(x)))))return false;
+   if(lo!==null||hi!==null){const ys=c.type==='birth'?[r.birth]:c.type==='death'?[r.death]:r.years;if(!ys.some(y=>y!==null&&(lo===null||y>=lo)&&(hi===null||y<=hi)))return false;}
+   const text=c.at?r.where[c.at]:[...r.where.record,...r.where.bio];
+   if(c.place.length&&!text.some(t=>c.place.every(w=>t.includes(w))))return false;
+   if(c.exclude.some(x=>text.some(t=>t.includes(x))))return false;
+   if(c.region&&!r.regions.has(c.region)||c.study&&!r.studies.has(c.study)||c.kind&&!r.types.has(c.kind))return false;
+   if(c.quality&&!(c.quality==='tree_only'?!r.qualities.size:r.qualities.has(c.quality)))return false;
+   if(c.evidence&&!(c.evidence==='supported'?r.supported:c.evidence==='original'?r.original:!r.supported))return false;
+   if(surnameLink.value&&r.surname!==surnameLink.value||!flags.every(k=>FLAG[k](r)))return false;
+   return !(cr||ca||cc)||r.changes.some(x=>(!cr||x.relation===cr)&&(!ca||(ca==='topology'?x.action==='add'||x.action==='replace':x.action===ca))&&(!cc||(cc==='unrated'?x.after==='unknown':x.after===cc)));};}
+ // Best match: the name, then a record or external ID, then each word in a name, an ID or the birth year.
+ const relevance=(r,q)=>{const phrase=q.join(' '),nm=fold(name(r.p)),ids=fold([r.p.id,r.p.external_id].filter(Boolean).join(' '));let s=nm===phrase?120:nm.includes(phrase)?70:0;if(ids.split(' ').includes(phrase))s+=180;
+  for(const t of q){if(r.full.includes(t))s+=10;if(ids.includes(t))s+=24;if(/^\d{3,4}$/.test(t)&&String(r.birth)===t)s+=48;}return s;};
+ function render(){const q=(on('exact')?v=>norm(v).trim().split(/\s+/).filter(Boolean):words)(search.value),matches=tester(q),filtered=records.filter(matches);
+  // Best match is offered only while there is a query; without one the order falls back to name.
+  best.hidden=!q.length;if(!q.length&&sort.value==='relevance')sort.value='name';
+  [...sort.options].forEach(o=>{if('column' in o.dataset)o.hidden=o.value!==sort.value;});
+  const desc=sort.value.endsWith('-desc'),column=desc?sort.value.slice(0,-5):sort.value,key=KEYS[column]||KEYS.name,grouped=byLocation.checked||byBranch.checked||bySurname.checked;
+  const byName=(a,b)=>name(a.p).localeCompare(name(b.p)),scores=column==='relevance'?new Map(filtered.map(r=>[r,relevance(r,q)])):null;
+  filtered.sort((a,b)=>{if(grouped){const g=groupOrder(a,b);if(g)return g;}if(scores)return scores.get(b)-scores.get(a)||byName(a,b);const x=key(a),y=key(b);if(missing(x)!==missing(y))return missing(x)?1:-1;const d=missing(x)?0:compare(x,y)*(desc?-1:1);return d||(column==='name'?0:byName(a,b));});
   heads.forEach(th=>{const on=th.dataset.sort===column;if(on)th.setAttribute('aria-sort',desc?'descending':'ascending');else th.removeAttribute('aria-sort');th.querySelector('.sort-mark').textContent=on?(desc?' ↓':' ↑'):' ↕';});
   const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,pages-1);const current=filtered.slice(page*size,(page+1)*size);
   // Grouped, a heading row starts each group on the page, counting everyone in it.
   const out=[],sizes=new Map;let last=null;if(grouped)filtered.forEach(r=>{const k=groupName(r);sizes.set(k,(sizes.get(k)||0)+1);});
   for(const r of current){if(grouped){const k=groupName(r);if(k!==last){last=k;const tr=el('tr',undefined,'group'),th=el('th',k),n=sizes.get(k);th.colSpan=heads.length||8;th.scope='colgroup';th.append(el('span',` · ${n.toLocaleString()} ${n===1?'person':'people'}`,'meta'));tr.append(th);out.push(tr);}}out.push(r.row);}
   if(compact)tbody.replaceChildren(...out);else{const shown=new Set(current);records.forEach(r=>r.row.hidden=!shown.has(r));tbody.replaceChildren(...out,...records.filter(r=>!shown.has(r)).map(r=>r.row));}
-  const total=records.length.toLocaleString(),n=filtered.length,range=view.value==='map'?'shown on the map':n?`${(page*size+1).toLocaleString()}–${(page*size+current.length).toLocaleString()} shown`:'none shown';
-  count.textContent=idle()?`Browsing all ${total} people · ${range}`:`${n.toLocaleString()} ${n===1?'match':'matches'} of ${total} people · ${range}`;
+  const everyone=records.length.toLocaleString(),n=filtered.length,range=view.value==='map'?'shown on the map':n?`${(page*size+1).toLocaleString()}–${(page*size+current.length).toLocaleString()} shown`:'none shown';
+  count.textContent=idle()?`Browsing all ${everyone} people · ${range}`:`${n.toLocaleString()} ${n===1?'match':'matches'} of ${everyone} people · ${range}`;
+  total.textContent=idle()?`All ${everyone} people`:`${n.toLocaleString()} result${n===1?'':'s'}`;
   info.textContent=`Page ${page+1} of ${pages}`;prev.disabled=page===0;next.disabled=page===pages-1;
-  pills.forEach(g=>{const on=g.controls.filter(research.on).length;g.badge.textContent=on?String(on):'';g.sr.textContent=on?` (${on} on)`:'';g.d.classList.toggle('active',on>0);});
-  const map=view.value==='map';host.hidden=map;pager.hidden=map;mapBox.hidden=!map;grouping.hidden=map;asTable.setAttribute('aria-pressed',String(!map));asMap.setAttribute('aria-pressed',String(map));if(map)drawMap(filtered);}
- // Every filter lives in the page address (?q=&surname=&sex=&birth_from=…), so a filtered view can be shared; other parameters are kept.
- const state=[['q',search],['surname',surname],...Object.entries(research.controls),['year_from',from],['year_to',to],['evidence',evidence],['sort',sort],['group_location',byLocation],['group_surname',bySurname],['view',view]];
- // How the people are shown, not which: kept by Clear.
- const KEEP=new Set(['sort','group_location','group_surname','view']);
+  pills.forEach(g=>{const n=state.filter(([key,c])=>!KEEP.has(key)&&key!=='q'&&inside(c,g.d)&&value(c).trim()!==defaults.get(c)).length;g.badge.textContent=n?String(n):'';g.sr.textContent=n?` (${n} on)`:'';g.d.classList.toggle('active',n>0);});
+  showName();detailLabel.hidden=!byLocation.checked;
+  const map=view.value==='map';host.hidden=map;pager.hidden=map;mapBox.hidden=!map;grouping.hidden=map;detailLabel.hidden||=map;asTable.setAttribute('aria-pressed',String(!map));asMap.setAttribute('aria-pressed',String(map));if(map)drawMap(filtered);}
+ // Every control lives in the page address under its form name (?q=&first=&sex=&year_from=…), so a filtered view can be shared; other parameters are kept.
+ const named=['q','first','last','last_scope','name','exact',...RELATIONS,'date_type','year_from','year_to','place_type','place','region','exclude_place','study','record_type','quality','evidence',
+  'born_surname','married_surname','suffix','missing_father','missing_mother','has_children','no_spouse','no_external','needs_update','change_relationship','change_action','change_confidence'];
+ const state=[...named.filter(F).map(k=>[k,F(k)]),['sex',gender],['surname',surnameLink],['sort',sort],['group_location',byLocation],['group_branch',byBranch],['group_surname',bySurname],['location_detail',detail],['view',view]];
+ // How the people are shown, not which: kept by Clear. Older addresses' keys are read once and rewritten.
+ const KEEP=new Set(['sort','group_location','group_branch','group_surname','location_detail','view']),LEGACY=['birth_from','birth_to','death_from','death_to','no_parent'];
+ const inside=(c,d)=>c===surnameLink?d.contains(namePanel):c===gender?d.contains(radios[0]):c.nodeType===1&&d.contains(c);
  const value=n=>n.type==='checkbox'?(n.checked?'1':''):n.value,defaults=new Map(state.map(([,n])=>[n,value(n)]));
- const put=(n,v)=>{if(n.type==='checkbox')n.checked=v==='1';else if(n.tagName!=='SELECT'||[...n.options].some(o=>o.value===v))n.value=v;};
- const params=new URLSearchParams(location.search);for(const [key,n] of state){const v=params.get(key);if(v!==null)put(n,key==='surname'?canonical(v):v);}
+ const put=(n,v)=>{if(n===surnameLink)n.put(v);else if(n.type==='checkbox')n.checked=v==='1';else if(n.tagName!=='SELECT'||[...n.options].some(o=>o.value===v))n.value=v;};
+ const params=new URLSearchParams(location.search);
+ for(const kind of ['death','birth'])if(!params.has('year_from')&&!params.has('year_to')&&(params.get(`${kind}_from`)||params.get(`${kind}_to`))){params.set('date_type',kind);params.set('year_from',params.get(`${kind}_from`)||'');params.set('year_to',params.get(`${kind}_to`)||'');}
+ if(params.get('no_parent')==='1')for(const k of ['missing_father','missing_mother'])params.set(k,'1');
+ for(const [key,n] of state){const v=params.get(key);if(v!==null)put(n,v);}
  const idle=()=>state.every(([key,n])=>KEEP.has(key)||value(n).trim()===defaults.get(n));
- const keep=()=>{clear.hidden=idle();try{const u=new URL(location.href);state.forEach(([key])=>u.searchParams.delete(key));for(const [key,n] of state){const v=value(n);if(v.trim()!==''&&v!==defaults.get(n))u.searchParams.append(key,v);}if(u.href!==location.href)history.replaceState(history.state,'',u.href);}catch(_){/* file:// pages may refuse a new address; the filters still work */}};
+ const keep=()=>{clear.hidden=idle();try{const u=new URL(location.href);[...state.map(([key])=>key),...LEGACY].forEach(key=>u.searchParams.delete(key));for(const [key,n] of state){const v=value(n);if(v.trim()!==''&&v!==defaults.get(n))u.searchParams.append(key,v);}if(u.href!==location.href)history.replaceState(history.state,'',u.href);}catch(_){/* file:// pages may refuse a new address; the filters still work */}};
  const changed=()=>{page=0;render();keep();};
- state.forEach(([,n])=>n.addEventListener(n.tagName==='INPUT'?'input':'change',changed));clear.addEventListener('click',()=>{state.forEach(([key,n])=>{if(!KEEP.has(key))put(n,defaults.get(n));});changed();search.focus();});
+ for(const [,n] of state){if(n===surnameLink)continue;for(const c of n.radios||[n])c.addEventListener(c.tagName==='INPUT'&&!['checkbox','radio'].includes(c.type)?'input':'change',changed);}
+ // Search (or Enter) closes the menus and, with a query, orders by best match; without the script the form is submitted.
+ form.addEventListener('submit',e=>{e.preventDefault();pills.forEach(g=>{g.d.open=false;});if(search.value.trim())sort.value='relevance';changed();});
+ clear.addEventListener('click',()=>{state.forEach(([key,n])=>{if(!KEEP.has(key))put(n,defaults.get(n));});sync(true);changed();search.focus();});
  for(const [b,v] of [[asTable,'table'],[asMap,'map']])b.addEventListener('click',()=>{view.value=v;render();keep();});
- clear.hidden=idle();prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});render();
+ sync(true);prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});render();keep();
 }
 function tree(){
  const output=$('#tree-output'),root=$('#tree-root');if(!output||!root)return;

@@ -189,10 +189,14 @@ class ProjectConfig:
                 raise ValueError(f"{setting} names the same source type as source_types.{seen[same]}")
             seen[same] = key
 
-        unknown = set(self.names) - {"variants"}
+        unknown = set(self.names) - {"variants", "surname"}
         if unknown:
             raise ValueError(f"names has unknown settings: {', '.join(sorted(unknown))}")
         self.name_variants  # validates [names.variants]
+        # The catalogue's wording: "connected with the Fable surname", "No confirmed WikiTree link".
+        for setting, value in (("names.surname", self.names.get("surname")), ("site.tree_name", (self.raw.get("site") or {}).get("tree_name"))):
+            if value is not None and (not isinstance(value, str) or not value.strip() or _control(value)):
+                raise ValueError(f"{setting} must be a non-empty string")
 
     @property
     def name_variants(self) -> dict[str, str]:
@@ -214,6 +218,18 @@ class ProjectConfig:
                 if owner != canonical:
                     raise ValueError(f"{setting}: {spelling!r} is already listed under {owner!r}")
         return folded
+
+    @property
+    def catalogue_surname(self) -> str | None:
+        """``[names] surname``, else the first surname grouped under ``[names.variants]``; None when neither is set."""
+        surname = self.names.get("surname")
+        return surname.strip() if isinstance(surname, str) and surname.strip() else next(iter(self.names.get("variants") or {}), None)
+
+    @property
+    def tree_name(self) -> str | None:
+        """``[site] tree_name``: the online tree the people's external identifiers belong to, e.g. "WikiTree"."""
+        value = (self.raw.get("site") or {}).get("tree_name")
+        return value.strip() if isinstance(value, str) and value.strip() else None
 
     def to_dict(self) -> dict[str, Any]:
         # Preserve project-defined extension sections so a toolkit upgrade does

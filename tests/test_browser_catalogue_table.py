@@ -230,7 +230,8 @@ class CatalogueTableBrowserTests(unittest.TestCase):
                     self.page.set_viewport_size({'width': width, 'height': 900})
                     self.open(site, '?group_location=1&birth_from=1700')
                     self.page.locator('details.filter-group > summary', has_text='Dates').click()
-                    self.assertTrue(self.page.get_by_label('Birth year to').is_visible())
+                    self.assertTrue(self.page.get_by_label('To year').is_visible())
+                    self.assertEqual('birth', self.page.get_by_label('Dates apply to').input_value())  # ?birth_from= read as a birth range
                     self.axe()
                     self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
                     if width == 390:

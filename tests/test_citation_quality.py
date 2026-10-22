@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -110,6 +111,10 @@ class CitationQualityTests(unittest.TestCase):
                 self.assertNotIn("SECRET-", text, path)
                 self.assertNotIn('data-quality="authored"', text, path)
                 self.assertNotIn('data-information="secondary"', text, path)
+                if path.name == "catalogue.html":  # the Source quality menu offers every term, whatever is recorded
+                    menu = re.search(r'<select id="catalogue-source-quality".*?</select>', text, re.S)[0]
+                    self.assertEqual(['original', 'derivative', 'authored', 'tree_only', 'unknown'], re.findall(r'<option value="([a-z_]+)"', menu))
+                    text = text.replace(menu, "")
                 if path.name != "evidence.html":  # the guide explains every term
                     self.assertNotIn("authored", text.casefold(), path)
                     self.assertNotIn("secondary", text.casefold(), path)

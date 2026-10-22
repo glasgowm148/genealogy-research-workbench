@@ -175,7 +175,7 @@ class SiteIndexTests(unittest.TestCase):
                 self.assertTrue(form and holds, path)
                 self.assertEqual(file_size((root / path).stat().st_size), size, path)
             self.assertIn("GEDCOM 5.5.1", dict((p, f) for p, f, _, _ in rows)["data/public-tree.ged"])
-            self.assertLess(html.index('<h2 id="downloads">Machine-readable data</h2>'), html.index("<h2>People</h2>"))
+            self.assertLess(html.index('<h2 id="downloads">Machine-readable data</h2>'), html.index('<h2 id="people">People</h2>'))  # the catalogue's "Browse the name index" lands here
             self.assertNotIn("<!--size:", html)
             self.assertEqual([], check_site(root)["broken"])
 

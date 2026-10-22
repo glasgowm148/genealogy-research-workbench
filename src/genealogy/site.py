@@ -29,6 +29,7 @@ from .labels import CLAIM_STATUS, guide_basis  # the evidence guide's basis and 
 from .labels import plural  # one rule for every printed count
 from .labels import BADGE_GLYPHS, assessment_anchor, badge_family  # one badge system
 from .labels import RESEARCH_MEANINGS  # the findings legend
+from .labels import SOURCE_QUALITY  # the catalogue's Source quality menu
 
 # Lists longer than this are not written out in full: the interactive views
 # load them from the shared data script, and readers without JavaScript
@@ -109,6 +110,9 @@ BROWSER_FIELDS = {
     # Never a study's body or reasoning: long prose, read on the study's own page.
     "studies": ("id", "title", "summary", "status", "updated_on", "related_ids"),
 }
+# Added per person by the build: the catalogue's recorded sex and external id, and the facets its
+# Evidence and tree menus filter on (studies naming them, cited record types and qualities, pending changes).
+BROWSER_FIELDS["people"] += ("sex", "external_id", "study_ids", "record_types", "qualities", "changes")
 OUTSTANDING = ("open", "draft")  # research statuses the notebook lists first as work still to do
 BROAD_PRECISIONS = {"parish", "district", "county", "region", "country", "approximate"}
 ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
@@ -156,7 +160,8 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
     def slim(row: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
         out = {key: row[key] for key in fields if row.get(key) is not None and row.get(key) != [] and row.get(key) != ""}
         if "names" in out:
-            out["names"] = [{key: n[key] for key in ("value", "surname") if n.get(key)} for n in out["names"]]
+            # Given names and a name's kind (birth, married…) for the catalogue's name menu; "unknown" says nothing.
+            out["names"] = [{key: n[key] for key in ("value", "surname", "given", "kind") if n.get(key) and (key != "kind" or n[key] != "unknown")} for n in out["names"]]
         return out
     data: dict[str, Any] = {key: [slim(row, fields) for row in project.get(key, [])] for key, fields in BROWSER_FIELDS.items()}
     # A citation stating neither term tells the script nothing; an imported tree
@@ -3084,6 +3089,162 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         '<label class="check"><input type="checkbox" name="partners" value="1" checked data-connection-partners> Allow connections through partnership</label>'
         '<label class="check"><input type="checkbox" name="uncertain" value="1" data-connection-uncertain> Include uncertain relationships</label></div>'
         '<p class="hint">A route follows recorded links; it is not a claim that the whole path is proved. Disproved links are never used, and possible links or links the source tree marks uncertain are left out until you include them.</p>')
+    # The catalogue's "Find a person" header and its seven filter menus, written as a GET form whose parameters are
+    # the ones site.js reads, so a reader without JavaScript has real controls. A static page cannot filter itself:
+    # without the script the submitted address shows the same first page. Lists that grow with the case (regions,
+    # studies, record types) are filled by the script from the shared data, keeping a large site's page small.
+    catalogue_surname = config.catalogue_surname
+    if not config.names.get("surname") and catalogue_surname not in set(name_variants.values()):
+        catalogue_surname = None  # a variants group no public person is recorded under stays unpublished
+    tree_name = config.tree_name
+    RELATIVES = (("spouse", "Full name, including married name"), ("father", "Full name"), ("mother", "Full name, including married name"),
+                 ("child", "Full name"), ("sibling", "Full name, including married name"))
+
+    def catalogue_finder() -> str:
+        attr = lambda name, value: f' {name}="{_text(value)}"' if value else ""
+        def text_field(label: str, ident: str, name: str, placeholder: str = "", kind: str = "search", extra: str = "") -> str:
+            return f'<label><span>{label}</span><input id="{ident}" name="{name}" type="{kind}"{attr("placeholder", placeholder)}{extra}></label>'
+        def menu(label: str, ident: str, name: str, options: list[tuple[str, str]]) -> str:
+            return (f'<label><span>{label}</span><select id="{ident}" name="{name}">'
+                    + "".join(f'<option value="{_text(v)}">{_text(t)}</option>' for v, t in options) + "</select></label>")
+        def tick(ident: str, name: str, label: str, note: str = "") -> str:
+            return (f'<label class="check"><input id="{ident}" name="{name}" type="checkbox" value="1"><span>{_text(label)}'
+                    + (f'<small>{_text(note)}</small>' if note else "") + "</span></label>")
+        def panel(key: str, title: str, body: str) -> str:
+            return (f'<details class="filter-group" data-filter-panel="{key}"><summary>{_text(title)}</summary>'
+                    f'<div class="filter-panel" id="catalogue-filter-{key}"><h3>{_text(title)}</h3>{body}</div></details>')
+        # The examples come from the first public person, so a withheld record never appears in them.
+        first = next(iter(people), None)
+        examples: list[str] = []
+        given = family = ""
+        if first:
+            person = people[first]
+            name0 = next((n for n in person.get("names", []) if n.get("value")), {})
+            given = next(iter((name0.get("given") or str(name0.get("value") or "").replace(str(name0.get("surname") or "\0"), "")).split()), "")
+            family = surname(first)
+            examples += [person_name(first), next((i["value"] for i in person.get("external_ids", []) if i.get("value")), first)]
+            place = next((places[e["place_id"]]["name"] for e in [*events_by_person[first], *events_sorted] if e.get("place_id") in places), "")
+            if place:
+                examples.append(place.split(",")[0].strip())
+            when = next((y for e in [*events_by_person[first], *events_sorted] if (y := year_of(e.get("date")))), None)
+            if when:
+                examples.append(str(when))
+        placeholder = f"Name, {tree_name or 'record'} ID or any detail" + (f" (e.g. {', '.join(examples)})" if examples else "")
+        held = sum(str(r.get("status", "open")).casefold() in OUTSTANDING for key in ("questions", "hypotheses", "findings") for r in project[key])
+        lede = (f"Search {len(people):,} historical {'person' if len(people) == 1 else 'people'} connected with the {catalogue_surname} surname."
+                if catalogue_surname else f"Search {len(people):,} {'person' if len(people) == 1 else 'people'} in this collection.")
+        # Exact spelling: the first spelling grouped under a published [names.variants] surname.
+        pair = next(((spelling, canonical) for canonical, spellings in (config.names.get("variants") or {}).items()
+                     if canonical in set(name_variants.values()) for spelling in spellings[:1]), None)
+        exact_note = (f"Applies to the main search box: {pair[0]} will not also match {pair[1]}." if pair
+                      else "Applies to the main search box: other spellings will not also match.")
+        name_panel = (text_field("First name(s)", "catalogue-first-name", "first", f"e.g. {given}" if given else "")
+                      + text_field("Last name", "catalogue-last-name", "last", f"e.g. {catalogue_surname or family}" if catalogue_surname or family else "")
+                      + menu("Last name matches", "catalogue-last-scope", "last_scope", [("", "Any recorded surname"), ("birth", "Surname at birth"), ("current", "Current/last surname")])
+                      + text_field("Full name", "catalogue-name", "name", "First, last, or both")
+                      + '<fieldset class="catalogue-gender"><legend>Gender</legend><label><input name="sex" type="radio" value="" checked><span>Any</span></label>'
+                      '<label><input name="sex" type="radio" value="M"><span aria-hidden="true">♂</span><span class="sr-only">Male</span></label>'
+                      '<label><input name="sex" type="radio" value="F"><span aria-hidden="true">♀</span><span class="sr-only">Female</span></label></fieldset>'
+                      '<p class="hint">Male or Female excludes people with no recorded gender.</p>'
+                      + tick("catalogue-exact-name", "exact", "Exact name spelling", exact_note))
+        relatives_panel = ('<div class="relative-rows" data-relatives>' + "".join(
+            f'<div class="relative-row" data-relation="{key}"><label for="catalogue-{key}-name">{key.capitalize()} name</label>'
+            f'<input id="catalogue-{key}-name" name="{key}" type="search" placeholder="{hint}"></div>' for key, hint in RELATIVES)
+            + '</div><p class="hint">Each relationship can be used once. People must match every relative entered.</p>')
+        year = ' min="1000" max="2100"'
+        dates_panel = (menu("Dates apply to", "catalogue-date-type", "date_type", [("", "Any record"), ("birth", "Birth"), ("death", "Death")])
+                       + text_field("From year", "catalogue-date-from", "year_from", "From", "number", year)
+                       + text_field("To year", "catalogue-date-to", "year_to", "To", "number", year)
+                       + '<p class="hint">Either year may be left open. People without a year for the chosen event are excluded.</p>')
+        places_panel = (menu("Location applies to", "catalogue-location-type", "place_type",
+                             [("", "Any"), ("record", "Any record"), ("birth", "Birth"), ("marriage", "Marriage"), ("death", "Death"), ("bio", "Bio")])
+                        + text_field("Location", "catalogue-location", "place", "Place name")
+                        + menu("Country or region", "catalogue-region", "region", [("", "Any region")])
+                        + text_field("Exclude location", "catalogue-exclude-location", "exclude_place", "e.g. USA")
+                        + '<p class="hint">Any searches all recorded places and public biography text. Exclude location uses the same selection; separate places with commas.</p>')
+        originals = any(c.get("quality") == "original" for c in project["citations"])
+        evidence_panel = (menu("Possible group", "catalogue-cluster", "study", [("", "Any group")])
+                          + menu("Record type", "catalogue-record-type", "record_type", [("", "Any record type")])
+                          + menu("Source quality", "catalogue-source-quality", "quality",
+                                 [("", "Any quality"), *((key, label) for key, (label, _) in SOURCE_QUALITY.items()), ("tree_only", "Tree/profile only"), ("unknown", "Unclassified")])
+                          + menu("Claims", "catalogue-claims", "evidence", [("", "Any evidence"), ("supported", "Supported claim"),
+                                                                            *([("original", "Backed by an original record")] if originals else []), ("unassessed", "Unassessed or imported")]))
+        filters_panel = (("<h4>Surname and marriage</h4>" + tick("catalogue-surname-at-birth", "born_surname", f"{catalogue_surname} at birth")
+                          + tick("catalogue-married-surname", "married_surname", f"Women who married a {catalogue_surname}")
+                          + tick("catalogue-has-suffix", "suffix", "Has suffix")) if catalogue_surname else "") + (
+            "<h4>Family</h4>" + tick("catalogue-missing-father", "missing_father", "Missing father") + tick("catalogue-missing-mother", "missing_mother", "Missing mother")
+            + tick("catalogue-has-descendants", "has_children", "Has descendants") + tick("catalogue-no-spouse", "no_spouse", "No recorded spouse or partner"))
+        tree = tree_name or "the tree"
+        confidences = [(key, str(grade["label"])) for key, grade in config.grades.items()] + [
+            (key, confidence_label(key)) for key in ("documented", "probable", "possible", "disproved") if key not in config.grades]
+        tree_panel = (tick("catalogue-missing-profile", "no_external", f"No confirmed {tree_name or 'tree'} link")
+                      + tick("catalogue-needs-update", "needs_update", f"Needs updated on {tree}")
+                      + '<p class="hint">Filter pending relationship amendments by their relationship, action or proposed confidence.</p>'
+                      + menu("Changed relationship", "catalogue-change-relationship", "change_relationship",
+                             [("", "Any relationship change"), ("father", "Father"), ("mother", "Mother"), ("spouse", "Spouse"), ("child", "Child"), ("sibling", "Sibling")])
+                      + menu("Relationship change", "catalogue-change-action", "change_action",
+                             [("", "Any change"), ("topology", "New / replaced relative"), ("add", "New relationship"), ("replace", "Replaced relationship"), ("regrade", "Confidence changed")])
+                      + menu("New confidence", "catalogue-change-confidence", "change_confidence", [("", "Any confidence"), *confidences, ("unrated", "Unrated")]))
+        panels = [("name", "Name", name_panel), ("relatives", "Relatives", relatives_panel), ("dates", "Dates", dates_panel), ("places", "Places", places_panel),
+                  ("evidence", "Evidence", evidence_panel), ("filters", "Filters", filters_panel), ("tree", tree_name or "Tree", tree_panel)]
+        return ('<p class="catalogue-links"><a href="sitemap.html#people">Browse the name index</a> · <a href="sitemap.html#downloads">Download research data</a></p>'
+                '<h1>Find a person</h1>'
+                + (f'<p class="catalogue-held"><a href="research.html">Held and pending research · {held:,} {"item" if held == 1 else "items"} →</a></p>' if held else "")
+                + f'<div class="catalogue-intro"><p class="lede">{_text(lede)}</p><p class="catalogue-total"><strong>{len(people):,}</strong> {"person" if len(people) == 1 else "people"} in catalogue</p></div>'
+                + f'<form class="catalogue-finder" action="catalogue.html" method="get" role="search" aria-label="Find a person" data-catalogue-form{attr("data-surname", catalogue_surname)}>'
+                + f'<div class="catalogue-query"><label class="sr-only" for="catalogue-query">Search people</label><input id="catalogue-query" name="q" type="search" data-search placeholder="{_text(placeholder)}"><button type="submit">Search</button></div>'
+                + '<div class="filter-pills" role="group" aria-label="Filter people">' + "".join(panel(*p) for p in panels) + "</div>"
+                + '<noscript><p class="note">Searching and filtering happen in the browser: without JavaScript this page lists the people in name order, and the menus only record what you choose.</p></noscript>'
+                + '</form><p id="site-status" role="status"></p>')
+
+    # A large site's page carried the plain search line until now; the header replaces it here, once the case is read.
+    pages["catalogue.html"] = catalogue_finder() + pages["catalogue.html"].removeprefix(catalogue_search)
+
+    def catalogue_facets(shared: dict[str, Any]) -> None:
+        """Per person in the shared data, what the catalogue's Evidence and tree menus filter on.
+
+        ``study_ids``: the studies that name them (related, grouped or referenced, as on the dossier). ``record_types``
+        and ``qualities``: the source types and record qualities ("unknown" when unstated) of the citations their claims
+        cite, directly or through an assessment. ``changes``: their pending relationship changes, each
+        [relationship, action, new value] from this person's side of the link. A change is pending while its finding's
+        status is neither "reviewed" nor "applied". Its action is "regrade" when it has a before value; with none it is
+        "replace" when its note says the link replaces another ("replaces", "replaced") or the same finding moves a link
+        of the same relationship for the same person to disproved, and "add" otherwise.
+        """
+        sexes = {pid: {"f": "F", "female": "F", "m": "M", "male": "M"}.get(value.casefold(), value) for pid, value in sex.items()}
+        def side(row: dict[str, Any], pid: str) -> str:
+            kind = str(row["kind"]).casefold()
+            if kind in PARENT_KINDS:
+                if row["object_id"] == pid:
+                    return "child"
+                other = sexes.get(row["object_id"])
+                return "father" if kind == "father" or (kind != "mother" and other == "M") else "mother" if kind == "mother" or other == "F" else "parent"
+            return "spouse" if kind in PARTNER_KINDS else "sibling" if kind in SIBLING_KINDS else kind
+        disproved = lambda value: value == "disproved" or config.grades.get(str(value), {}).get("confidence") == "disproved"
+        pending: dict[str, list[list[str]]] = defaultdict(list)
+        for finding in project["findings"]:
+            if str(finding.get("status") or "").casefold() in ("reviewed", "applied"):
+                continue
+            links = [(change, relationships_by_id[change["record_id"]]) for change in finding.get("changes", []) if change.get("record_id") in relationships_by_id]
+            dropped = {(row["subject_id"], side(row, row["subject_id"])) for change, row in links if change.get("before") and disproved(change.get("after"))}
+            for change, row in links:
+                action = "regrade" if change.get("before") else "replace" if (
+                    re.search(r"\breplac", str(change.get("note") or ""), re.I) or (row["subject_id"], side(row, row["subject_id"])) in dropped) else "add"
+                for pid in dict.fromkeys((row["subject_id"], row["object_id"])):
+                    if pid in people:
+                        pending[pid].append([side(row, pid), action, str(change["after"])])
+        used: set[str] = set()
+        for row in shared["people"]:
+            pid = row["id"]
+            cited = {cid: citations[cid] for c in claims_by_subject.get(pid, []) for cid in [*c.get("citation_ids", []), *(e["citation_id"] for e in evidence_by_claim.get(c["id"], []))] if cid in citations}
+            kinds = sorted({_slug(str(sources.get(c["source_id"], {}).get("source_type") or "")) or "unknown" for c in cited.values() if c["source_id"] in sources})
+            used.update(kinds)
+            facets = {"study_ids": [s["id"] for s in studies_by_subject.get(pid, [])], "record_types": kinds,
+                      "qualities": sorted({c["quality"] if c.get("quality") in SOURCE_QUALITY else "unknown" for c in cited.values()}), "changes": pending.get(pid, [])}
+            row.update({key: value for key, value in facets.items() if value})
+        if used:
+            shared["site"]["source_type_labels"] = {slug: type_label(slug) for slug in sorted(used)}
+
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
@@ -3091,11 +3252,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     if progress_history:
         downloads.append(("data/progress-history.json", "Research progress history"))
     pages["sitemap.html"] = '<h1>Site index and downloads</h1>' + way_in() + '<h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in routes.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
-                                                  if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2 id="downloads">Machine-readable data</h2>' + download_table(downloads) + '<p>Downloads contain only the public records shown on this site.</p>' + '<h2>People</h2>' + browse_people
+                                                  if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2 id="downloads">Machine-readable data</h2>' + download_table(downloads) + '<p>Downloads contain only the public records shown on this site.</p>' + '<h2 id="people">People</h2>' + browse_people
     pages["about-data.html"] = about_data(downloads)
     pages["changes.html"] = change_log()
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
                           config.grades, study_urls if compact_studies else None, name_variants)
+    catalogue_facets(shared)
     # The map lists the places in a cluster with links to where each one is shown.
     shared["site"]["place_urls"] = {p["id"]: record_routes[p["id"]] for p in project["places"] if p.get("latitude") is not None and p.get("longitude") is not None}
     # The places filter links every place it draws; the located ones are already listed for the map.
