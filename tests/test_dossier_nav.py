@@ -72,7 +72,8 @@ class DossierNavTests(unittest.TestCase):
 
     def test_explore_links_quote_the_id_and_canonical_surname(self):
         explore = re.search(r'<p class="explore">(.*?)</p>', self.dossier("ada:fable 1")).group(1)
-        self.assertEqual([("../tree.html#view=branches&amp;person=ada%3Afable%201", "Family tree"), ("../connections.html?a=ada%3Afable%201", "Find a connection"),
+        self.assertEqual([("../tree.html#view=branches&amp;person=ada%3Afable%201", "Family tree"), ("../tree.html#view=atlas&amp;person=ada%3Afable%201", "Atlas"),
+                          ("../connections.html?a=ada%3Afable%201", "Find a connection"),
                           ("../compare.html?a=ada%3Afable%201", "Compare"), ("../catalogue.html?surname=Van%20Fable", "Everyone surnamed Van Fable")],
                          re.findall(r'<a href="([^"]+)">([^<]+)</a>', explore))
         # No surname recorded: no catalogue filter link.

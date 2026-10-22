@@ -76,7 +76,7 @@ class BrowserDossierHeroTests(unittest.TestCase):
 
     def test_connected_groups_open_without_javascript(self):
         page = self.open(1280, javascript=False)
-        self.assertEqual(['Family tree', 'Find a connection', 'Compare', 'Everyone surnamed Fable'],
+        self.assertEqual(['Family tree', 'Atlas', 'Find a connection', 'Compare', 'Everyone surnamed Fable'],
                          page.locator('.dossier-hero p.explore a').all_inner_texts())
         group = page.locator('details.connected-group', has_text='Places')
         link = group.get_by_role('link', name='Invented Parish')

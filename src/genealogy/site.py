@@ -128,6 +128,9 @@ BROAD_PRECISIONS = {"parish", "district", "county", "region", "country", "approx
 ASSETS = ("site.css", "site.js", "favicon.svg", "world.svg")
 # The tree page's reading room (the Branch cards view), loaded by tree.html alone; the tree page adds its script tag.
 ASSETS += ("reading_room.js",)
+ASSETS += ("atlas.js",)  # the tree page's atlas view, loaded on that page only
+ATLAS_LIST_LIMIT = 250  # people the atlas's readable family list writes out; the rest are counted
+ATLAS_GENERATIONS = 3  # on a large site, the generations of each group that list writes out
 MANIFEST = ".genealogy-site-manifest.json"
 PARENT_KINDS = {"parent", "father", "mother", "biological_parent", "adoptive_parent", "parent_child"}
 PARTNER_KINDS = {"spouse", "partner", "husband", "wife", "marriage"}
@@ -2305,6 +2308,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         jumps.insert([key for key, _, _ in jumps].index("relationships"), ("updates", f'Pending {config.tree_name or "tree"} updates', updates))
         explore = [(f"tree.html?person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
         explore = [(f"tree.html#view=branches&person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
+        explore.insert(1, (f"tree.html#view=atlas&person={quote(pid)}", "Atlas"))  # the whole-tree atlas, this person selected
         if canonical_surname(pid):
             explore.append((f"catalogue.html?surname={quote(canonical_surname(pid))}", f"Everyone surnamed {canonical_surname(pid)}"))
         if updates:
@@ -3633,6 +3637,106 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     # The reading room registers itself with site.js, so it is a plain (not deferred) script: it runs while the page
     # is read, before the deferred site.js, and only the tree page carries it.
     pages["tree.html"] += '<script src="assets/reading_room.js"></script>'
+    def atlas_forest() -> tuple[list[tuple[str, list[str], int]], dict[str, list[str]], dict[str, list[str]]]:
+        """The atlas's families, as atlas.js lays them out and its readable list writes them: each connected
+        group of branches.html, largest first, then the people with no recorded relatives. Within a group a
+        person sits under one parent (a documented or probable link first, then the earliest-born), and a
+        person without recorded parents sits beside a partner who has them, or an older one; that person's
+        children are listed under the partner. Returns each group's title, roots and size, the children under each
+        person and the partners beside each person."""
+        born = lambda pid: (date_sort_key(next((e.get("date") for e in events_by_person[pid] if e["kind"] == "birth"), None)), person_name(pid), pid)
+        live = lambda r: r.get("confidence") != "disproved" and r["subject_id"] != r["object_id"] and r["subject_id"] in people and r["object_id"] in people
+        primary = {pid: min(links, key=lambda r: (r.get("confidence") not in ("documented", "probable"), born(r["object_id"])))["object_id"]
+                   for pid in people if (links := [r for r in parents_of[pid] if live(r)])}
+        host: dict[str, str] = {}
+        for pid in sorted(people, key=born):
+            if pid not in primary:
+                mates = sorted({other for r, other in partners_of[pid] if live(r)}, key=born)
+                mate = next((m for m in mates if m in primary or (born(m) < born(pid) and m not in host)), None)
+                if mate:
+                    host[pid] = mate
+        kids: dict[str, list[str]] = defaultdict(list)
+        beside: dict[str, list[str]] = defaultdict(list)
+        for pid in sorted(people, key=born):
+            if pid in primary:
+                kids[host.get(primary[pid], primary[pid])].append(pid)
+            elif pid in host:
+                beside[host[pid]].append(pid)
+        groups = [(group_name(members), sorted(members, key=born)) for members in connected]
+        if singles:
+            groups.append((f"No recorded relatives ({plural(singles, 'person')})", sorted((m[0] for m in components.values() if len(m) == 1), key=born)))
+        out = []
+        for title, members in groups:
+            roots, seen = [], set()
+            while rest := [pid for pid in members if pid not in seen and pid not in host]:
+                # The people without a recorded parent; then, for a loop of parent links, its earliest-born person.
+                start = [pid for pid in rest if pid not in primary] or rest[:1]
+                roots += start
+                stack = list(reversed(start))
+                while stack:
+                    pid = stack.pop()
+                    seen.add(pid)
+                    stack.extend(k for k in reversed(kids[pid]) if k not in seen)
+            out.append((title, roots, len(members)))
+        return out, kids, beside
+
+    def atlas_families(groups: list[tuple[str, list[str], int]], kids: dict[str, list[str]], beside: dict[str, list[str]]) -> str:
+        """The atlas's text version and its no-JavaScript fallback: the branches as nested lists, each person
+        under their parent with partners named beside them. Nearer generations come first across every group,
+        ATLAS_LIST_LIMIT people in all, and on a large site only each group's first ATLAS_GENERATIONS, so the
+        page lists no more than its people menus do; a line with more below it says how many."""
+        size: dict[str, int] = {}
+
+        def count(pid: str, trail: frozenset[str]) -> int:
+            if pid not in size:
+                size[pid] = 1 + sum(count(k, trail | {pid}) for k in kids[pid] if k not in trail)
+            return size[pid]
+        shown: set[str] = set()
+        depth = ATLAS_GENERATIONS if compact_people else len(people)
+        queue = [(pid, 1) for _, roots, _ in groups for pid in roots]
+        for pid, generation in queue:  # breadth first: the queue grows as it is read
+            if len(shown) >= ATLAS_LIST_LIMIT:
+                break
+            if pid not in shown:
+                shown.add(pid)
+                queue.extend((k, generation + 1) for k in kids[pid] if generation < depth)
+        years = lambda pid: f' <span class="meta">{_text(lifespan(pid))}</span>' if lifespan(pid) else ""
+
+        def item(pid: str, trail: frozenset[str]) -> str:
+            line = f'<li data-person-id="{_text(pid)}">{ref(pid)}{years(pid)}'
+            if beside[pid]:
+                line += ' <span class="meta">with</span> ' + ", ".join(ref(m) + years(m) for m in beside[pid])
+            inner = [item(k, trail | {pid}) for k in kids[pid] if k in shown and k not in trail]
+            hidden = sum(count(k, trail | {pid}) for k in kids[pid] if k not in shown and k not in trail)
+            if hidden:
+                inner.append(f'<li class="meta">{plural(hidden, "more descendant")} not listed here</li>')
+            return line + (f'<ul>{"".join(inner)}</ul>' if inner else "") + "</li>"
+        body = "".join(f'<li><h3>{_text(title)}</h3><ul class="atlas-tree">' + "".join(item(pid, frozenset()) for pid in roots if pid in shown) + "</ul></li>"
+                       for title, roots, _ in groups if any(pid in shown for pid in roots))
+        total = len(shown) + sum(len(beside[pid]) for pid in shown)
+        note = (f' This list names {total:,} of the {len(people):,} people, the nearer generations of each group first; '
+                'everyone is in the <a href="catalogue.html">people catalogue</a>.' if total < len(people) else "")
+        return ('<section class="atlas-families" id="atlas-families" aria-labelledby="atlas-families-heading" data-atlas-families>'
+                '<h2 id="atlas-families-heading">Readable family list</h2><p>The families of the atlas, as on <a href="branches.html">Families &amp; branches</a>: '
+                'each connected group of recorded relatives, its people under a parent, and a spouse or partner without recorded parents beside them.'
+                + note + '</p>' + (f'<ol class="atlas-groups">{body}</ol>' if body else '<p class="empty-state">No public people are available.</p>') + '</section>')
+
+    def atlas_data(shared: dict[str, Any], groups: list[tuple[str, list[str], int]], kids: dict[str, list[str]], beside: dict[str, list[str]]) -> None:
+        """What atlas.js adds to the shared data: the layout of atlas_forest (each group's title, roots and size,
+        the children under each person and the partners beside them), the tree's name, and each person's first
+        external identifier with a web address, for the person panel's profile button."""
+        profile = {}
+        for pid, p in people.items():
+            found = next((i for i in p.get("external_ids", []) if str(i.get("url") or "").startswith(("https://", "http://"))), None)
+            if found:
+                profile[pid] = [config.tree_name or str(found.get("system") or "Profile"), found["url"]]
+        # Each connected group also carries its earliest-born person, whom the atlas names on the rim.
+        shared["site"]["atlas"] = {"groups": [[*group, earliest_of(members)] for group, members in zip(groups, connected)] + [list(group) for group in groups[len(connected):]],
+                                   "kids": {pid: row for pid, row in kids.items() if row}, "beside": {pid: row for pid, row in beside.items() if row},
+                                   "profiles": profile, **({"tree_name": config.tree_name} if config.tree_name else {})}
+
+    atlas_layout = atlas_forest()
+    pages["tree.html"] = pages["tree.html"].replace('<div id="tree-output"></div>', '<div id="tree-output"></div>' + atlas_families(*atlas_layout), 1)
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
@@ -3646,6 +3750,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
                           config.grades, study_urls if compact_studies else None, name_variants)
     catalogue_facets(shared)
+    atlas_data(shared, *atlas_layout)
     # The map lists the places in a cluster with links to where each one is shown.
     shared["site"]["place_urls"] = {p["id"]: record_routes[p["id"]] for p in project["places"] if p.get("latitude") is not None and p.get("longitude") is not None}
     # The places filter links every place it draws; the located ones are already listed for the map.
@@ -3702,6 +3807,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
         outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button>{shell.breadcrumb(path, prefix, view, title, routes)}{stamp}{search_form(prefix)}</header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
+    # The atlas draws only on the tree page, and before site.js, which offers it as the first tree view.
+    outputs["tree.html"] = outputs["tree.html"].replace('<script defer src="assets/site.js"></script>', '<script defer src="assets/atlas.js"></script><script defer src="assets/site.js"></script>', 1)
     # A moved page is a stub, not a route: it stays out of routes.json and the
     # sitemap, and asks search engines to index the current page instead.
     for old, new in moved.items():

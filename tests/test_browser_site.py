@@ -347,6 +347,10 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual(1, self.page.locator('[data-person-id="person:05"]:visible').count())
         self.page.get_by_label('Claims').select_option('')
         self.page.goto(self.base + 'tree.html')
+        # The atlas is the first view and opens by default; the whole tree is one press away.
+        self.assertTrue(self.page.locator('[data-atlas-canvas]').is_visible())
+        self.assertEqual('true', self.page.locator('[data-tree-view="atlas"]').get_attribute('aria-pressed'))
+        self.page.locator('[data-tree-view="whole"]').click()
         self.assertTrue(self.page.locator('[data-whole-tree]').is_visible())
         self.page.locator('[data-tree-view="family"]').click()
         self.assertGreater(self.page.locator('#tree-output svg').count(), 0)
@@ -1024,7 +1028,8 @@ class BrowserSiteTests(unittest.TestCase):
         tree_box.fill('person 0007')
         page.keyboard.press('Enter')
         self.assertEqual('p0007', page.locator('#tree-root').input_value())
-        self.assertIn('Person 0007 Fable', page.locator('.whole-tree-detail').inner_text())
+        # The atlas, the default view, selects the person chosen in the box.
+        self.assertIn('Person 0007 Fable', page.locator('[data-atlas-panel]').inner_text())
         if axe:
             self.assertEqual([], self.axe_violations(), 'large tree')
         # Any listed spelling of a surname finds the group's people.

@@ -221,11 +221,12 @@ class ReadingRoomBrowserTests(unittest.TestCase):
         self.page.get_by_role('button', name='Zoom in').click()
         self.assertEqual('125%', self.room.locator('.rr-zoom').inner_text())
         self.assertIn('scale(1.25)', self.room.locator('.rr-stage').get_attribute('style'))
-        # Back to canopy opens the first view; leaving the room clears its address.
+        # Back to canopy opens the first view (the atlas), which then writes its own address in place of the room's.
         self.room.get_by_role('button', name='← Back to canopy').click()
         self.assertEqual('true', self.page.locator('.tree-modes button').first.get_attribute('aria-pressed'))
         self.assertEqual(0, self.room.count())
-        self.assertNotIn('#', self.page.url)
+        self.assertNotIn('view=branches', self.page.url)
+        self.assertIn('view=atlas', self.page.url)
         # The query form of the address still works.
         self.page.goto(f'{self.base}room/tree.html?person=p0020&view=branches', wait_until='networkidle')
         self.assertEqual('Iris & family', self.room.locator('h2').inner_text())

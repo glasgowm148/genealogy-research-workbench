@@ -31,7 +31,7 @@ Imports and builds run on your computer with **no runtime dependencies or networ
 | ![The people catalogue: a research table with birth, death, places, spouse, father and mother, and seven filter menus](docs/images/people.webp) | ![A person dossier opening with a hero card of vitals, actions and the latest finding](docs/images/dossier.webp) |
 | A research table of everyone — dates, places, spouse, father and mother, each link with its evidence badge — behind seven menus: Name, Relatives, Dates, Places, Evidence, Filters and your tree. | Vitals, the latest finding and what to do next, then names, family with the reason for every link, events, studies and research. |
 | ![Interactive family tree, here the hourglass view around one person](docs/images/tree.webp) | ![The research notebook: open questions as cards, then hypotheses, findings, claims and the research log](docs/images/research.webp) |
-| Whole tree, family focus, branch cards, hourglass, family sun and lanes. Uncertain links stay visible. | Open questions first, with what would answer them; then hypotheses, findings, claims and every search made, including the ones that found nothing. |
+| A whole-tree atlas, whole tree, family focus, branch cards, hourglass, family sun and lanes. Uncertain links stay visible. | Open questions first, with what would answer them; then hypotheses, findings, claims and every search made, including the ones that found nothing. |
 
 <details>
 <summary><b>More views: studies, findings, records, branches, places, evidence, statistics and the data</b></summary>
@@ -131,7 +131,7 @@ The demo has 42 invented people, four generations, sources, uncertainty, and res
 | From a GEDCOM or OneTree export | With additional research |
 | --- | --- |
 | People, recorded names, supported event fields, and family links | Evidence-based identity and relationship assessments, each with its reason and limits |
-| Find a person, dossiers, six tree views, branch cards, surname groups and statistics | Written studies, a dated findings log with what each finding changed, and a research log of searches made |
+| Find a person, dossiers, seven tree views, branch cards, surname groups and statistics | Written studies, a dated findings log with what each finding changed, and a research log of searches made |
 | Timelines, place cards and pages; maps when coordinates are supplied | Reviewed coordinates with their precision, the regions you file places under, and archive research |
 | Comparison and shortest recorded connection paths, with an evidence threshold | Resolution of namesakes and competing hypotheses, with the points for and against |
 | GEDCOM bibliography and citation locators after explicit review | Record quality, abstracts, source transcriptions and record-by-record analysis |

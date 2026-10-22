@@ -76,7 +76,7 @@ class BrowserDossierUpdatesTests(unittest.TestCase):
         page = self.open(390, javascript=False)
         self.assertTrue(page.locator('h2#updates').is_visible())
         self.assertIn('Significance 55 of 100', page.locator('.pending-updates').inner_text())
-        self.assertEqual(['Family tree', 'Find a connection', 'Compare', 'Everyone surnamed Fable', 'Pending updates'],
+        self.assertEqual(['Family tree', 'Atlas', 'Find a connection', 'Compare', 'Everyone surnamed Fable', 'Pending updates'],
                          page.locator('.dossier-hero p.explore a').all_inner_texts())
 
 
