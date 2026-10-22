@@ -55,10 +55,16 @@ UNPLACED_REGION = "Places without a broader jurisdiction"
 PLACE_CARDS = 100  # places drawn as cards on places.html and by its filter; past this a site pages its places by region
 PLACE_CARD_BYTES = 50_000  # a large site's places page stops its busiest-places cards here
 PLACE_CARD_SURNAMES = 5  # surnames named on a place's card, most people first; the place page lists them all
+RECORDS_PER_PAGE = 100  # citations per records page; past this the records table is paged by year
+RECORDS_PEOPLE = 3  # people named in a records row; the rest are counted
+RECORDS_ABSTRACT = 160  # characters of a citation's abstract shown in a records row
+# A year written in a citation's locator or abstract ("1841 return", "baptised 3 May 1802").
+RECORD_YEAR = re.compile(r"(?<![0-9])(1[0-9]{3}|20[0-9]{2})(?![0-9])")
 ROUTES = {
     "index.html": ("overview", "Overview"), "catalogue.html": ("people", "People"),
     "tree.html": ("tree", "Family tree"), "branches.html": ("branches", "Families & branches"),
     "timeline.html": ("timeline", "Timeline"), "places.html": ("map", "Places"), "sources.html": ("sources", "Sources"),
+    "records.html": ("records", "Records"),
     "studies.html": ("studies", "Studies"), "research.html": ("research", "Research"),
     "progress.html": ("progress", "Research progress"),
     "findings.html": ("findings", "Latest findings"), "compare.html": ("compare", "Compare"),
@@ -79,6 +85,7 @@ DATA_FILES.add("data/progress-history.json")  # kept between builds: the progres
 PROGRESS_COUNTS = ("people", "with_assessed_parent", "parent_links", "assessed_parent_links", "connected_groups", "family_heads",
                    "open_questions", "draft_findings")
 DATA_FILES |= {"data/search-index.json", "data/search-index.js"}  # the sidebar search: titles and one short line per record
+DATA_FILES.add("data/records-index.js")  # the records table: one compact row per public citation
 # The fields the browser script reads. ``data/site.json`` keeps every public
 # field; the shared script carries only these, so it stays small to download
 # and parse on a large site.
@@ -180,6 +187,7 @@ def _owned(name: str) -> bool:
     return (name in ROUTES or name in OPTIONAL_ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
             or bool(re.fullmatch(r"(?:people/p|studies/s|places/pl)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources|studies)/page-[1-9][0-9]*\.html"
                                  r"|duplicates/page-[1-9][0-9]*\.html"
+                                 r"|records/page-[1-9][0-9]*\.html"
                                  r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html|sources/type-[a-z0-9-]+\.html", name)))
 
 
@@ -2541,6 +2549,151 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + ('<ol class="change-grid">' + "".join(html for _, _, html in entries) + "</ol>" if entries
                    else '<p class="empty-state">No public finding is dated yet; the change log starts with the first.</p>'))
 
+    def records_pages() -> dict[str, Any]:
+        """records.html: one row per public citation, with the year, people, record type, place and strongest assessment.
+
+        Past RECORDS_PER_PAGE citations the table is paged in year order (records/page-<n>.html);
+        the returned compact index lets the script search, filter and sort every row.
+        """
+        evidence_by_citation: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for e in project["evidence"]:
+            evidence_by_citation[e["citation_id"]].append(e)
+        # Strongest first: the standard grade a record counts as, then a supporting reading before a challenge.
+        strength = lambda e: (progress_rank.get(assessed_as(e), len(progress_rank)), not e.get("supports", True), e["id"])
+        kind_of = lambda text: re.sub(r"[\s_-]+", " ", str(text or "")).strip().casefold()
+
+        def clip(text: Any) -> str:
+            text = " ".join(str(text or "").split())
+            if len(text) <= RECORDS_ABSTRACT:
+                return text
+            cut = text[:RECORDS_ABSTRACT - 1]
+            cut = cut[:cut.rindex(" ")] if " " in cut[RECORDS_ABSTRACT // 2:] else cut
+            return cut.rstrip(" ,;:") + "…"
+
+        rows = []
+        for c in project["citations"]:
+            if c["source_id"] not in sources:
+                continue
+            who: dict[str, None] = {}
+            supported: dict[str, dict[str, Any]] = {}
+            for claim_row in claims_by_citation[c["id"]].values():
+                if claim_row.get("predicate") == "sex":  # never shown as a claim on the site
+                    continue
+                subject = claim_row["subject_id"]
+                if subject in events_by_id:  # a claim about an event concerns its people, as on the sources page
+                    supported[subject] = events_by_id[subject]
+                    subjects = set(events_by_id[subject].get("participant_ids", [])) | event_owners[subject]
+                elif subject in relationships_by_id:
+                    subjects = {relationships_by_id[subject]["subject_id"], relationships_by_id[subject]["object_id"]}
+                else:
+                    subjects = {subject}
+                    # A claim about a person's birth, say, supports their birth event.
+                    supported.update((e["id"], e) for e in events_by_person.get(subject, []) if kind_of(e["kind"]) == kind_of(claim_row["predicate"]))
+                who.update((pid, None) for pid in subjects & people.keys())
+            named = sorted(who, key=lambda pid: (person_name(pid).casefold(), pid))
+            dated = sorted(supported.values(), key=lambda e: (date_sort_key(e.get("date")), e["id"]))
+            written = RECORD_YEAR.search(str(c.get("locator") or "")) or RECORD_YEAR.search(str(c.get("abstract") or ""))
+            year = int(written[1]) if written else next((year_of(e.get("date")) for e in dated if year_of(e.get("date"))), None)
+            place = next((places[e["place_id"]] for e in dated if e.get("place_id") in places), None)
+            assessed = sorted(evidence_by_citation[c["id"]], key=strength)
+            rows.append({"c": c, "year": year, "people": named, "place": place, "best": assessed[0] if assessed else None,
+                         "type": _slug(str(sources[c["source_id"]].get("source_type") or "")) or "unknown"})
+        rows.sort(key=lambda r: (r["year"] is None, r["year"] or 0, person_name(r["people"][0]).casefold() if r["people"] else "￿",
+                                 str(sources[r["c"]["source_id"]]["title"]).casefold(), r["c"]["id"]))
+
+        def badge(e: dict[str, Any]) -> tuple[str, str]:
+            graded = grade_label(e, config.grades)
+            confidence = str(e.get("confidence") or "unknown")
+            return (graded or confidence_label(confidence), f'grade-{e["grade"]}' if graded else f"confidence-{confidence}")
+
+        def row_html(r: dict[str, Any], prefix: str) -> str:
+            c, more = r["c"], len(r["people"]) - RECORDS_PEOPLE
+            who = ", ".join(ref(pid, prefix) for pid in r["people"][:RECORDS_PEOPLE]) + (f' <span class="meta">+{more:,} more</span>' if more > 0 else "")
+            if r["best"]:
+                words, anchor = badge(r["best"])
+                evidence = (f'<a class="badge evidence-badge" href="{prefix}evidence.html#{_text(anchor)}">{_text(words)}</a>'
+                            + ("" if r["best"].get("supports", True) else ' <span class="meta">challenges the claim</span>'))
+            else:
+                evidence = '<span class="meta">Not yet assessed</span>'
+            details = record_link(c["id"], prefix) + (f'<p class="records-abstract">{_text(clip(c["abstract"]))}</p>' if c.get("abstract") else "")
+            return (f'<tr><td data-label="Year">{r["year"] or "Undated"}</td><td data-label="People">{who or "—"}</td>'
+                    f'<td data-label="Record type">{_text(type_label(r["type"]))}</td>'
+                    f'<td data-label="Place">{ref(r["place"]["id"], prefix, r["place"]["name"]) if r["place"] else "—"}</td>'
+                    f'<td data-label="Evidence">{evidence}</td><td data-label="Details">{details}</td></tr>')
+
+        def table(chunk: list[dict[str, Any]], prefix: str) -> str:
+            return ('<div class="table-wrap"><table class="records-table"><caption class="sr-only">Cited records</caption><thead><tr>'
+                    + "".join(f'<th scope="col">{h}</th>' for h in ("Year", "People", "Record type", "Place", "Evidence", "Details"))
+                    + "</tr></thead><tbody>" + "".join(row_html(r, prefix) for r in chunk) + "</tbody></table></div>")
+
+        total = len(rows)
+        counts = [(sum(1 for r in rows if r["best"]), "assessed", "assessed"), (sum(1 for r in rows if not r["best"]), "not yet assessed", "unassessed"),
+                  (sum(1 for r in rows if r["c"].get("abstract")), "with an abstract", "abstract"),
+                  (sum(1 for r in rows if r["c"].get("quality")), "with record quality stated", "quality")]
+        strip = '<ul class="records-status">' + "".join(f'<li data-status="{key}"><strong>{n:,}</strong> {words}</li>' for n, words, key in counts) + "</ul>"
+        type_counts = Counter(r["type"] for r in rows)
+        types = sorted(type_counts, key=lambda t: type_label(t).casefold())
+        number = lambda name, label: f'<label>{label} <input type="number" name="{name}" min="1" max="9999" placeholder="Any" inputmode="numeric"></label>'
+        filters = ('<form class="records-filters" data-records-filters role="search" aria-label="Search and filter the records" hidden>'
+                   '<label class="records-query">Search records <input type="search" name="q" autocomplete="off" placeholder="Name, place, source or locator"></label>'
+                   '<p class="meta">Results update as you type.</p><div class="toolbar">'
+                   '<label>Record type <select name="type"><option value="">All record types</option>'
+                   + "".join(f'<option value="{_text(t)}">{_text(type_label(t))} ({type_counts[t]:,})</option>' for t in types) + '</select></label>'
+                   + number("year_from", "From year") + number("year_to", "To year")
+                   + '<label>Evidence <select name="evidence"><option value="">Assessed or not</option><option value="assessed">Assessed</option>'
+                   '<option value="unassessed">Not yet assessed</option></select></label></div>'
+                   '<div class="records-filters-foot"><p class="meta">A year is the one written in the locator or abstract, else the earliest event the record\'s claims concern; the place is that event\'s.</p>'
+                   '<button type="button" data-records-clear>Clear filters</button></div></form>'
+                   '<div class="records-bar" data-records-bar hidden><p class="result-count" role="status" data-records-count></p>'
+                   '<label>Sort by <select name="sort" data-records-sort><option value="year">Oldest first</option><option value="year-desc">Newest first</option>'
+                   '<option value="person">Person · A–Z</option><option value="type">Record type · A–Z</option></select></label></div>')
+        intro = ('<div class="records-head"><div><p class="eyebrow">Citations and evidence</p><h1>Records</h1>'
+                 '<p>Every public citation: the record behind a person, a place or a family story, with the people whose claims cite it and the strongest assessment of it. '
+                 '<a href="evidence.html">Reading the evidence</a> explains each label.</p></div>'
+                 f'<p class="records-total"><strong>{total:,}</strong> cited record{"" if total == 1 else "s"}</p></div>' + strip)
+        if not rows:
+            pages["records.html"] = intro + '<p class="empty-state">No public citations recorded.</p>'
+            return {"types": {}, "rows": []}
+        chunks = [rows[i:i + RECORDS_PER_PAGE] for i in range(0, total, RECORDS_PER_PAGE)]
+        page_url = lambda n: "records.html" if n == 1 else f"records/page-{n}.html"
+        span = lambda chunk: " – ".join(dict.fromkeys(str(r["year"] or "Undated") for r in (chunk[0], chunk[-1])))
+
+        def page_nav(prefix: str, current: int) -> str:
+            if len(chunks) < 2:
+                return ""
+            return ('<nav class="catalogue-pages" aria-label="Records pages" data-records-pages><h2>Browse by year</h2><ol>' + "".join(
+                f'<li><a href="{prefix}{page_url(n)}"' + (' aria-current="page"' if n == current else "")
+                + f'>Records {(n - 1) * RECORDS_PER_PAGE + 1:,}–{(n - 1) * RECORDS_PER_PAGE + len(chunk):,} · {_text(span(chunk))}</a></li>'
+                for n, chunk in enumerate(chunks, 1)) + "</ol></nav>")
+
+        shown = f'the first {len(chunks[0]):,} ' if len(chunks) > 1 else ""
+        pages["records.html"] = (intro + filters + f'<p class="result-count" data-records-static>{total:,} cited record{"" if total == 1 else "s"}, {shown}oldest first; undated records last.</p>'
+                                 + f'<div data-records data-total="{total}">' + table(chunks[0], "") + "</div>" + page_nav("", 1))
+        for n, chunk in enumerate(chunks[1:], 2):
+            pages[page_url(n)] = (f'<h1>Records, page {n} of {len(chunks)}</h1><p>{total:,} cited records, oldest first. '
+                                  '<a href="../records.html">Search and filter the records</a>.</p>' + table(chunk, "../") + page_nav("../", n))
+            extra_titles[page_url(n)] = ("records", f"Records, page {n}")
+
+        def entry(r: dict[str, Any]) -> dict[str, Any]:
+            c, out = r["c"], {}
+            if r["year"]:
+                out["y"] = r["year"]
+            if r["people"]:
+                out["p"] = [[person_name(pid), people_urls[pid]] for pid in r["people"][:RECORDS_PEOPLE]]
+                if len(r["people"]) > RECORDS_PEOPLE:
+                    out["n"] = len(r["people"])
+            out["k"] = r["type"]
+            if r["place"]:
+                out["l"] = [r["place"]["name"], record_routes[r["place"]["id"]]]
+            if r["best"]:
+                out["e"] = [*badge(r["best"]), *([] if r["best"].get("supports", True) else [1])]
+            out["s"] = sources[c["source_id"]]["title"]
+            out["u"] = record_routes[c["id"]]
+            out.update({key: value for key, value in (("c", c.get("locator")), ("a", clip(c.get("abstract")))) if value})
+            return out
+        return {"types": {t: type_label(t) for t in types}, "rows": [entry(r) for r in rows]}
+
+    records_index = records_pages()
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
@@ -2568,6 +2721,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     searchable = search_index()
     outputs["data/search-index.json"] = json.dumps(searchable, ensure_ascii=False, separators=(",", ":")) + "\n"
     outputs["data/search-index.js"] = "window.GENEALOGY_SEARCH_INDEX=" + outputs["data/search-index.json"].rstrip() + ";\n"
+    outputs["data/records-index.js"] = "window.GENEALOGY_RECORDS_INDEX=" + json.dumps(records_index, ensure_ascii=False, separators=(",", ":")) + ";\n"
     outputs["data/routes.json"] = json.dumps(sorted(pages), indent=2) + "\n"
     if progress_history:
         outputs["data/progress-history.json"] = progress_history

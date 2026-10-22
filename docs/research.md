@@ -234,6 +234,8 @@ An evidence assessment can carry a `limitation`: what this record cannot show fo
 
 Each claim on a person's page shows its records as one table: **Record** (the source and locator, linked to the citation), **What it says** (the abstract, or else the quotation or transcription), **Assessment** ("Supports" or "Challenges", your assessment and its grade) and **Limitation**. A record has one row per assessment of it; a record the claim cites that no assessment covers yet shows "Not yet assessed". Evidence is private by default, so give an assessment `"sensitivity": "public"` to publish it and its limitation.
 
+The **Records** page (`records.html`) lists every public citation in one table, with its year, the people whose claims cite it, its record type, place and strongest assessment, so the records still waiting for an assessment or an abstract are easy to find (filter **Evidence** to **Not yet assessed**). Its year is the first four-digit year in the citation's `locator` or `abstract` ("1841 return, folio 3"), else the earliest event the claims concern, so a locator that puts the year first is the clearest way to date a record.
+
 ### Explain a record type
 
 Give each source a `source_type` that names the kind of record, such as `parish_register`, `banns` or `census_transcription`. The sources page groups sources by type, and each source lists the people, findings and family links that cite it. When a kind of record is easily over-read, add a caution under `[source_types]` in `genealogy.toml`; it is printed at the top of that type's sources:

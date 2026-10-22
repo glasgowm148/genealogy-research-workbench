@@ -637,6 +637,48 @@ function placeEvents(){
   button.addEventListener('click',()=>{const asc=th.getAttribute('aria-sort')!=='ascending';th.setAttribute('aria-sort',asc?'ascending':'descending');arrow.textContent=asc?' ↑':' ↓';
    body.append(...[...rows].sort((a,b)=>{const ya=y(a),yb=y(b);return (ya===null)-(yb===null)||(ya===null?0:asc?ya-yb:yb-ya)||index.get(a)-index.get(b);}));});}
 }
+// Records: one row per public citation. The compact index loads as a script on the records page (so file:// works too);
+// search, filters, sort and pages then cover every record, and the page address keeps them (?q=&type=&year_from=&year_to=&evidence=&sort=).
+function records(){
+ const host=$('[data-records]'),form=$('[data-records-filters]'),bar=$('[data-records-bar]'),tbody=host&&$('tbody',host);if(!tbody||!form||!bar)return;
+ const ready=()=>{const index=window.GENEALOGY_RECORDS_INDEX;if(index&&Array.isArray(index.rows))start(index);};
+ if(window.GENEALOGY_RECORDS_INDEX){ready();return;}
+ const script=document.createElement('script');script.src=root+'data/records-index.js';script.async=true;script.addEventListener('load',ready);document.head.append(script);
+ function start(index){
+  const types=index.types||{},size=50,shown=3;let page=0;
+  const rows=index.rows.map((r,i)=>({...r,i,who:norm(r.p?.[0]?.[0]||''),kind:types[r.k]||r.k||'',h:fold([r.y,...(r.p||[]).map(p=>p[0]),types[r.k],r.l?.[0],r.s,r.c,r.a].filter(v=>v!=null).join(' '))}));
+  const f=form.elements,controls=[['q',f.q],['type',f.type],['year_from',f.year_from],['year_to',f.year_to],['evidence',f.evidence],['sort',$('[data-records-sort]',bar)]];
+  const c=Object.fromEntries(controls),count=$('[data-records-count]',bar),clear=$('[data-records-clear]',form);
+  const link=(label,url)=>{const a=el('a',label);a.href=root+url;return a;};
+  const cell=(label,...nodes)=>{const td=el('td');td.dataset.label=label;td.append(...nodes);return td;};
+  const rowFor=r=>{const tr=el('tr'),who=[];(r.p||[]).forEach(([n,u],j)=>{if(j)who.push(', ');who.push(link(n,u));});if(r.n>shown)who.push(' ',el('span',`+${(r.n-shown).toLocaleString()} more`,'meta'));
+   let evidence;if(r.e){const a=link(r.e[0],'evidence.html#'+r.e[1]);a.className='badge evidence-badge';evidence=[a];if(r.e[2])evidence.push(' ',el('span','challenges the claim','meta'));}else evidence=[el('span','Not yet assessed','meta')];
+   const details=[link(r.s+(r.c?` (${r.c})`:''),r.u)];if(r.a)details.push(el('p',r.a,'records-abstract'));
+   tr.append(cell('Year',String(r.y||'Undated')),cell('People',...(who.length?who:['—'])),cell('Record type',r.kind),cell('Place',r.l?link(r.l[0],r.l[1]):'—'),cell('Evidence',...evidence),cell('Details',...details));return tr;};
+  // Undated records stay last whichever way the years run; ties keep the page's own order.
+  const by={year:(a,b)=>(a.y??Infinity)-(b.y??Infinity),'year-desc':(a,b)=>(a.y==null)-(b.y==null)||(b.y??0)-(a.y??0),person:(a,b)=>(!a.who)-(!b.who)||a.who.localeCompare(b.who),type:(a,b)=>a.kind.localeCompare(b.kind)};
+  const pager=el('div',undefined,'pagination'),info=el('span'),buttons=el('div'),prev=el('button','← Previous'),next=el('button','Next →');prev.type=next.type='button';buttons.append(prev,next);pager.append(info,buttons);host.after(pager);
+  function render(){const words=fold(c.q.value).trim().split(/\s+/).filter(Boolean),lo=c.year_from.value?Number(c.year_from.value):null,hi=c.year_to.value?Number(c.year_to.value):null,e=c.evidence.value;
+   const found=rows.filter(r=>words.every(w=>r.h.includes(w))&&(!c.type.value||r.k===c.type.value)&&(lo===null&&hi===null||r.y!=null&&(lo===null||r.y>=lo)&&(hi===null||r.y<=hi))&&(!e||(e==='assessed')===!!r.e));
+   const order=by[c.sort.value]||by.year;found.sort((a,b)=>order(a,b)||a.i-b.i);
+   const pages=Math.max(1,Math.ceil(found.length/size));page=Math.min(page,pages-1);const first=page*size,current=found.slice(first,first+size);
+   tbody.replaceChildren(...current.map(rowFor));host.hidden=!found.length;
+   count.textContent=!found.length?`No records match these filters (of ${rows.length.toLocaleString()} cited records).`:`${(first+1).toLocaleString()}–${(first+current.length).toLocaleString()} of ${found.length.toLocaleString()} ${found.length===rows.length?'cited records':`matching records (of ${rows.length.toLocaleString()})`}`;
+   pager.hidden=pages<2;info.textContent=`Page ${page+1} of ${pages}`;prev.disabled=page===0;next.disabled=page===pages-1;}
+  const defaults=new Map(controls.map(([,n])=>[n,n.value]));
+  const put=(n,v)=>{if(n.tagName!=='SELECT'||[...n.options].some(o=>o.value===v))n.value=v;};
+  const params=new URLSearchParams(location.search);for(const [key,n] of controls){const v=params.get(key);if(v!==null)put(n,v);}
+  const idle=()=>controls.every(([key,n])=>key==='sort'||n.value.trim()===defaults.get(n));
+  const keep=()=>{clear.hidden=idle();try{const u=new URL(location.href);controls.forEach(([key])=>u.searchParams.delete(key));for(const [key,n] of controls){if(n.value.trim()!==''&&n.value!==defaults.get(n))u.searchParams.append(key,n.value);}if(u.href!==location.href)history.replaceState(history.state,'',u.href);}catch(_){/* file:// pages may refuse a new address; the filters still work */}};
+  const changed=()=>{page=0;render();keep();};
+  controls.forEach(([,n])=>n.addEventListener(n.tagName==='INPUT'?'input':'change',changed));
+  form.addEventListener('submit',ev=>ev.preventDefault());
+  clear.addEventListener('click',()=>{controls.forEach(([key,n])=>{if(key!=='sort')n.value=defaults.get(n);});changed();c.q.focus();});
+  prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});
+  form.hidden=bar.hidden=false;$('[data-records-static]')?.setAttribute('hidden','');$('[data-records-pages]')?.setAttribute('hidden','');
+  clear.hidden=idle();render();
+ }
+}
 // After tree, comparison and connections, which fill and preselect these menus.
 function personPickers(){for(const [menu,label] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person'],['[data-compare-b]','Find the second person'],['[data-connection-a]','Find the first person'],['[data-connection-b]','Find the second person']])picker($(menu),label);}
 // A link into a closed <details> (a claim row on research.html) opens it; browsers that do not do so themselves still show the target.
@@ -644,4 +686,5 @@ function openTargets(){const open=()=>{const target=location.hash.length>1&&docu
 const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers,openTargets];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
 for(const task of [mapFit,placeCards,placeEvents]){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
+try{records();}catch(error){console.warn('Optional genealogy enhancement unavailable: records',error);}
 })();

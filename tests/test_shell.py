@@ -93,7 +93,7 @@ class ShellTests(unittest.TestCase):
         nav = parts(self.pages["index.html"]).nav
         groups = [(a["data-group"], a["href"], text) for a, text in nav if "data-group" in a]
         self.assertEqual([("people", "catalogue.html", "People"), ("family", "tree.html", "Family"), ("places", "places.html", "Places"),
-                          ("records", "sources.html", "Records"), ("research", "research.html", "Research"),
+                          ("records", "records.html", "Records"), ("research", "research.html", "Research"),
                           ("about", "sitemap.html", "About")], groups)
         sidebar = self.pages["index.html"].split('<nav aria-label="Main navigation">', 1)[1].split("</nav>", 1)[0]
         self.assertEqual(7, len(re.findall(r'<svg class="nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="[^"]+"/></svg>', sidebar)))
