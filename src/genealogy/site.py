@@ -1733,7 +1733,13 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         statuses = sorted({str(f["status"]) for f in project["findings"] if f.get("status")}, key=str.casefold)
         kinds = sorted({str(f["kind"]) for f in project["findings"] if f.get("kind")}, key=str.casefold)
         meaning = lambda s: RESEARCH_MEANINGS.get(s.casefold()) or CLAIM_STATUS.get(s.casefold(), ("", "Recorded in this project's own wording."))[1]
-        items = [f'<li>{badge(status_label(s), status_anchor(s), prefix, f' data-status="{_text(s)}"')} {_text(meaning(s))}</li>' for s in statuses]
+        items = []
+        for status in statuses:
+            attributes = f' data-status="{_text(status)}"'
+            items.append(
+                f'<li>{badge(status_label(status), status_anchor(status), prefix, attributes)} '
+                f'{_text(meaning(status))}</li>'
+            )
         if kinds:
             items.append('<li>' + "".join(finding_kind({"kind": k}, prefix) for k in kinds[:FINDING_GROUPS]) + (f' and {len(kinds) - FINDING_GROUPS:,} more' if len(kinds) > FINDING_GROUPS else "")
                          + " The finding's type, in this project's own grouping.</li>")
