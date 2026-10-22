@@ -430,8 +430,9 @@ def _validate_record_fields(record: Record) -> list[str]:
                 for key in ("before", "note"):
                     if not _string(change.get(key), optional=True):
                         errors.append(f"{record.id}.changes[{index}].{key} must be a string or null")
+                # How much the change matters to the project, as a whole number out of 100; the catalogue sorts by it.
                 significance = change.get("significance")
-                if significance is not None and not (type(significance) is int and 0 <= significance <= 100):
+                if significance is not None and (type(significance) is not int or not 0 <= significance <= 100):
                     errors.append(f"{record.id}.changes[{index}].significance must be a whole number from 0 to 100, or null")
     if type(record).__name__ == "Study":
         errors.extend(_study_group_errors(record))

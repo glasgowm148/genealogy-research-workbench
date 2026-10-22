@@ -316,7 +316,7 @@ class FindAPersonBrowserTests(unittest.TestCase):
         self.assertEqual('All 10 people', total.inner_text())
         sort = page.get_by_label('Sort results')
         options = lambda: sort.locator('option').evaluate_all('o => o.filter(n => !n.hidden).map(n => n.textContent)')
-        self.assertEqual(['Name A–Z', 'Birth: oldest first', 'Birth: newest first', 'Death: oldest first', 'Death: newest first',
+        self.assertEqual(['Update priority: new fathers first', 'Update significance', 'Father changes: highest confidence', 'Name A–Z', 'Birth: oldest first', 'Birth: newest first', 'Death: oldest first', 'Death: newest first',
                           'Relationship changes: highest confidence', 'Relationship changes: lowest confidence'], options())
         sort.select_option('changes-desc')
         self.assertEqual(['f01', 'f02', 'f04', 'f06', 'f10', 'f08', 'f03', 'f05', 'f07', 'f09'], self.ids())
@@ -361,7 +361,7 @@ class FindAPersonBrowserTests(unittest.TestCase):
         self.assertIn('Lanternby, North Shire, Fableland · Descendants of Bram Fabel (b. 1775) · 3 people', groups.all_text_contents())
         # Grouping and the order are how the people are shown, so Clear keeps them.
         self.assertTrue(page.get_by_role('button', name='Clear search and filters').is_hidden())
-        page.get_by_role('button', name='Map', exact=True).click()
+        page.get_by_role('tab', name='Map', exact=True).click()
         self.assertFalse(detail.is_visible())
         self.assertEqual('All 10 people', total.inner_text())
 

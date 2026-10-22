@@ -305,6 +305,7 @@ class Finding(Record):
     # The relationships and claims this finding reassessed, each
     # {"record_id", "before", "after", "note"}: before and after are confidence
     # values or project grade keys; before is None for a newly recorded link.
+    # A change may also carry "significance", 0-100: how much it matters to the project.
     changes: list[dict[str, Any]] = field(default_factory=list)
 
 

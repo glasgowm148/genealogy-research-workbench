@@ -153,7 +153,7 @@ function catalogueFacets(records,surname){
    bornSurname:birthNames.some(isTarget),
    marriedSurname:p.sex==='F'&&!birthNames.some(isTarget)&&(nm.some(n=>n.kind==='married'&&isTarget(n.surname))||rel.spouse.some(s=>atBirth(personBy.get(s)).some(isTarget))),
    suffix:nm.some(n=>SUFFIX.test(String(n.value||'').trim())),external:!!p.external_id,
-   changes:(p.changes||[]).map(([relation,action,after])=>({relation,action,after,rank:CHANGE_RANK[confidence(after)]??0})),branch:root(id)});}
+   changes:(p.changes||[]).map(([relation,action,after,significance,estimate])=>({relation,action,after,significance:significance??null,estimate:estimate??null,rank:CHANGE_RANK[confidence(after)]??0})),branch:root(id)});}
 }
 // Type-to-find over a person menu (combobox and listbox). The menu stays the real control: a choice sets it and fires change.
 // Past 300 people (site.py's INLINE_LIMIT) a full menu is a long scroll, so it folds away under a details.
@@ -218,9 +218,19 @@ function catalogueFacts(p){
 }
 // The dossier's relationship badge: grade or confidence, estimate and tree mark, linked to its guide entry.
 const kinBadge=r=>{const nodes=relBadges(r);for(const k of ['confidence','grade','tree_status'])if(r[k])nodes[0].setAttribute(`data-${k.replace('_','-')}`,r[k]);return nodes;};
+// Under the name, as site.py's update_note writes it: "Needs updated on WikiTree · significance 55" and a chip per pending change.
+const CHANGE_FAMILY={documented:'documented',probable:'probable',possible:'possible',disproved:'conflict'};
+function updateNote(p){
+ const changes=p.changes||[];if(!changes.length)return[];const top=Math.max(-1,...changes.map(c=>Number.isInteger(c[3])?c[3]:-1));
+ const chips=el('span',undefined,'update-chips');
+ for(const [relation,action,after,,estimate] of changes){const graded=Object.hasOwn(GRADES,after),anchor=graded?`grade-${after}`:`confidence-${String(after||'unknown').toLowerCase()}`;
+  const words=action!=='regrade'?`${relation} ${action==='add'?'added':'replaced'}`:`${relation} now ${graded?GRADES[after]:({...CONFIDENCE,unknown:'Unassessed'})[after]||after}${Number.isInteger(estimate)?` ${estimate}%`:''}`;
+  const chip=badgeEl(words,anchor,CHANGE_FAMILY[graded?data.site?.grade_confidence?.[after]:anchor.slice(11)]||'unassessed');chip.classList.add('update-chip');chips.append(chip);}
+ return[el('span',`Needs updated on ${data.site?.tree_name||'the tree'}${top>=0?` · significance ${top}`:''}`,'update-line'),chips];
+}
 function catalogueRow(p){
  const f=catalogueFacts(p),tr=el('tr'),who=el('td');tr.dataset.personId=p.id;tr.dataset.surname=canonical(surnameOf(p));
- who.append(linkTo(p.id,name(p)),el('span',p.external_id||p.id,'record-id'));tr.append(who);
+ who.append(linkTo(p.id,name(p)),el('span',p.external_id||p.id,'record-id'),...updateNote(p));tr.append(who);
  for(const v of [f.birth,f.death]){const d=el('td',showDate(v.date)||'—'),shade=dateShade(v.date);if(shade)d.className=shade;tr.append(d,el('td',v.place||'—'));}
  for(const list of [f.spouses,f.fathers,f.mothers]){const td=el('td');if(!list.length)td.textContent='—';else if(list.every(x=>firm(x.r)))td.className='kin-firm';
   for(const x of list){const s=el('span',undefined,'kin');s.append(linkTo(x.id,name(personBy.get(x.id))));if(x.role)s.append(el('span',x.role,'kin-role'));s.append(' ',...kinBadge(x.r));td.append(s);}tr.append(td);}
@@ -275,13 +285,18 @@ function catalogue(){
  addRelative.addEventListener('click',()=>{const k=RELATIONS.find(v=>rowOf(v).hidden);if(!k)return;const row=rowOf(k);holder.append(row);row.hidden=false;refresh();$('[data-relative-select]',row).focus();});
  // Sorting: the Sort results menu and each column heading (a button); ?sort= keeps the choice, with -desc for descending.
  const heads=$$('thead th[data-sort]',host);
- const SORTS=[['relevance','Best match'],['name','Name A–Z'],['birth','Birth: oldest first'],['birth-desc','Birth: newest first'],['death','Death: oldest first'],['death-desc','Death: newest first'],['changes-desc','Relationship changes: highest confidence'],['changes','Relationship changes: lowest confidence']];
+ const SORTS=[['relevance','Best match'],['priority','Update priority: new fathers first'],['significance','Update significance'],['father-changes','Father changes: highest confidence'],['name','Name A–Z'],['birth','Birth: oldest first'],['birth-desc','Birth: newest first'],['death','Death: oldest first'],['death-desc','Death: newest first'],['changes-desc','Relationship changes: highest confidence'],['changes','Relationship changes: lowest confidence']];
  const sort=select(SORTS),listed=new Set(SORTS.map(([v])=>v)),best=sort.options[0];sort.value='name';
  // A heading's other orders are offered while chosen, so the menu always names the order shown.
  for(const th of heads)for(const [v,t] of [[th.dataset.sort,`${th.textContent}: ascending`],[`${th.dataset.sort}-desc`,`${th.textContent}: descending`]])if(!listed.has(v)){const o=option(v,t);o.hidden=true;o.dataset.column='';sort.append(o);}
  const facts=r=>catalogueFacts(r.p),surnameAt=x=>x?surnameOf(personBy.get(x.id))||name(personBy.get(x.id)):'';
+ // The update orders, each ascending with people lacking a pending change (or a pending father change) last: a pending father change
+ // before any other, then the highest significance; the highest significance; the father change's new confidence, then its estimate.
+ const top=(list,f)=>list.length?Math.max(-1,...list.map(f)):null,fathers=r=>r.changes.filter(c=>c.relation==='father'),sig=c=>c.significance??-1;
+ const UPDATE_KEYS={priority:r=>r.changes.length?(fathers(r).length?0:1000)+100-top(r.changes,sig):null,significance:r=>{const s=top(r.changes,sig);return s===null||s<0?null:-s;},
+  'father-changes':r=>{const s=top(fathers(r),c=>c.rank*1000+(c.estimate??-1));return s===null?null:-s;}};
  const KEYS={name:r=>name(r.p),birth:r=>year(facts(r).birth.date),death:r=>year(facts(r).death.date),'birth-place':r=>facts(r).birth.place,'death-place':r=>facts(r).death.place,
-  spouse:r=>surnameAt(facts(r).spouses[0]),father:r=>surnameAt(facts(r).fathers[0]),mother:r=>surnameAt(facts(r).mothers[0]),changes:r=>r.changes.length?Math.max(...r.changes.map(c=>c.rank)):null};
+  spouse:r=>surnameAt(facts(r).spouses[0]),father:r=>surnameAt(facts(r).fathers[0]),mother:r=>surnameAt(facts(r).mothers[0]),changes:r=>r.changes.length?Math.max(...r.changes.map(c=>c.rank)):null,...UPDATE_KEYS};
  // A missing value sorts last either way; equal values fall back to name order.
  const compare=(a,b)=>typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b));
  const missing=v=>v===null||v===undefined||v==='';
@@ -308,9 +323,11 @@ function catalogue(){
  const groupName=r=>groupParts(r).map(([k,none],i)=>byBranch.checked&&i===(byLocation.checked?1:0)?branchName(k):k||none).join(' · ');
  const groupOrder=(a,b)=>{const x=groupParts(a),y=groupParts(b);for(let i=0;i<x.length;i++){const branch=byBranch.checked&&i===(byLocation.checked?1:0),p=branch?branchName(x[i][0]):x[i][0],q=branch?branchName(y[i][0]):y[i][0];const d=(p?0:1)-(q?0:1)||p.localeCompare(q)||codeOrder(x[i][0],y[i][0]);if(d)return d;}return 0;};
  const view=select([['table','Table'],['map','Map']]),tools=el('div',undefined,'catalogue-tools catalogue-result-toolbar'),toggle=el('div',undefined,'view-toggle'),asTable=el('button','Table'),asMap=el('button','Map'),total=el('strong',undefined,'result-total'),options=el('div',undefined,'catalogue-result-options');
- toggle.setAttribute('role','group');toggle.setAttribute('aria-label','Show the people as');[asTable,asMap].forEach(b=>{b.type='button';toggle.append(b);});
+ // Table / Map is a tab list: one tab in the tab order, the arrow keys (and Home, End) moving between them and choosing.
+ toggle.setAttribute('role','tablist');toggle.setAttribute('aria-label','Show the people as');[asTable,asMap].forEach(b=>{b.type='button';b.setAttribute('role','tab');b.id=`catalogue-tab-${b.textContent.toLowerCase()}`;toggle.append(b);});
  options.append(grouping,detailLabel,sortLabel);tools.append(total);if(places.some(locatedPlace))tools.append(toggle);tools.append(options);
- const mapBox=el('section',undefined,'catalogue-map');mapBox.hidden=true;mapBox.setAttribute('aria-labelledby','catalogue-map-heading');
+ const mapBox=el('section',undefined,'catalogue-map');mapBox.hidden=true;mapBox.setAttribute('aria-labelledby','catalogue-map-heading');mapBox.id='catalogue-map';
+ if(places.some(locatedPlace)){host.id||=`catalogue-table`;for(const [tab,panel] of [[asTable,host],[asMap,mapBox]]){tab.setAttribute('aria-controls',panel.id);panel.setAttribute('role','tabpanel');}host.setAttribute('aria-labelledby',asTable.id);}
  const placeUrls=Object.fromEntries(Object.entries(data.site?.place_urls||{}).map(([id,url])=>[id,window.GENEALOGY_SITE_DATA?root+url:url]));
  // One marker per birth place with supplied coordinates, counting the matching people born there; the list below says the same in text.
  function drawMap(matching){const at=new Map;for(const r of matching){const pl=placeBy.get(facts(r).birth.placeId);if(!locatedPlace(pl))continue;if(!at.has(pl.id))at.set(pl.id,{pl,people:[]});at.get(pl.id).people.push(r.p);}
@@ -382,7 +399,7 @@ function catalogue(){
   info.textContent=`Page ${page+1} of ${pages}`;prev.disabled=page===0;next.disabled=page===pages-1;
   pills.forEach(g=>{const n=state.filter(([key,c])=>!KEEP.has(key)&&key!=='q'&&inside(c,g.d)&&value(c).trim()!==defaults.get(c)).length;g.badge.textContent=n?String(n):'';g.sr.textContent=n?` (${n} on)`:'';g.d.classList.toggle('active',n>0);});
   showName();detailLabel.hidden=!byLocation.checked;
-  const map=view.value==='map';host.hidden=map;pager.hidden=map;mapBox.hidden=!map;grouping.hidden=map;detailLabel.hidden||=map;asTable.setAttribute('aria-pressed',String(!map));asMap.setAttribute('aria-pressed',String(map));if(map)drawMap(filtered);}
+  const map=view.value==='map';host.hidden=map;pager.hidden=map;mapBox.hidden=!map;grouping.hidden=map;detailLabel.hidden||=map;for(const [tab,on] of [[asTable,!map],[asMap,map]]){tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;}if(map)drawMap(filtered);}
  // Every control lives in the page address under its form name (?q=&first=&sex=&year_from=…), so a filtered view can be shared; other parameters are kept.
  const named=['q','first','last','last_scope','name','exact',...RELATIONS,'date_type','year_from','year_to','place_type','place','region','exclude_place','study','record_type','quality','evidence',
   'born_surname','married_surname','suffix','missing_father','missing_mother','has_children','no_spouse','no_external','needs_update','change_relationship','change_action','change_confidence'];
@@ -404,6 +421,8 @@ function catalogue(){
  form.addEventListener('submit',e=>{e.preventDefault();pills.forEach(g=>{g.d.open=false;});if(search.value.trim())sort.value='relevance';changed();});
  clear.addEventListener('click',()=>{state.forEach(([key,n])=>{if(!KEEP.has(key))put(n,defaults.get(n));});sync(true);changed();search.focus();});
  for(const [b,v] of [[asTable,'table'],[asMap,'map']])b.addEventListener('click',()=>{view.value=v;render();keep();});
+ toggle.addEventListener('keydown',e=>{const tabs=[asTable,asMap],at=tabs.indexOf(document.activeElement),to={ArrowRight:at+1,ArrowDown:at+1,ArrowLeft:at-1,ArrowUp:at-1,Home:0,End:tabs.length-1}[e.key];
+  if(at<0||to===undefined)return;e.preventDefault();const tab=tabs[(to+tabs.length)%tabs.length];tab.focus();tab.click();});
  sync(true);prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});render();keep();
 }
 function tree(){

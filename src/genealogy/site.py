@@ -863,12 +863,64 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         placed = next((places[e["place_id"]]["name"] for e in found if e.get("place_id") in places), "")
         return dated, placed
 
+    pending_cache: list[dict[str, list[dict[str, Any]]]] = []  # worked out once, on first use
+
+    def pending_updates() -> dict[str, list[dict[str, Any]]]:
+        """Per public person, their pending relationship changes (see catalogue_facets for what is pending and each action),
+        in case order, as {"relation", "action", "after", "significance", "estimate"} from that person's side of the link.
+        ``estimate`` is the link's recorded percentage while the change leaves the link where it now stands."""
+        if pending_cache:
+            return pending_cache[0]
+        pending: dict[str, list[dict[str, Any]]] = {}
+        pending_cache.append(pending)
+        sexes = {pid: {"f": "F", "female": "F", "m": "M", "male": "M"}.get(value.casefold(), value) for pid, value in sex.items()}
+        def side(row: dict[str, Any], pid: str) -> str:
+            kind = str(row["kind"]).casefold()
+            if kind in PARENT_KINDS:
+                if row["object_id"] == pid:
+                    return "child"
+                other = sexes.get(row["object_id"])
+                return "father" if kind == "father" or (kind != "mother" and other == "M") else "mother" if kind == "mother" or other == "F" else "parent"
+            return "spouse" if kind in PARTNER_KINDS else "sibling" if kind in SIBLING_KINDS else kind
+        disproved = lambda value: value == "disproved" or config.grades.get(str(value), {}).get("confidence") == "disproved"
+        for finding in project["findings"]:
+            if str(finding.get("status") or "").casefold() in ("reviewed", "applied"):
+                continue
+            links = [(change, relationships_by_id[change["record_id"]]) for change in finding.get("changes", []) if change.get("record_id") in relationships_by_id]
+            dropped = {(row["subject_id"], side(row, row["subject_id"])) for change, row in links if change.get("before") and disproved(change.get("after"))}
+            for change, row in links:
+                action = "regrade" if change.get("before") else "replace" if (
+                    re.search(r"\breplac", str(change.get("note") or ""), re.I) or (row["subject_id"], side(row, row["subject_id"])) in dropped) else "add"
+                current = row.get("grade") or str(row.get("confidence") or "unknown")
+                estimate = row["estimate"] if isinstance(row.get("estimate"), int) and change["after"] == current else None
+                significance = change.get("significance") if isinstance(change.get("significance"), int) else None
+                for pid in dict.fromkeys((row["subject_id"], row["object_id"])):
+                    if pid in people:
+                        pending.setdefault(pid, []).append({"relation": side(row, pid), "action": action, "after": str(change["after"]),
+                                                             "significance": significance, "estimate": estimate})
+        return pending
+
+    def update_note(pid: str, prefix: str = "") -> str:
+        """Under a catalogue name: "Needs updated on WikiTree · significance 55" (the highest recorded) and a chip per pending change,
+        "father now Documented 98%" for a new confidence, "father added" or "father replaced" for a new link; site.js's updateNote agrees."""
+        changes = pending_updates().get(pid)
+        if not changes:
+            return ""
+        top = max((c["significance"] for c in changes if c["significance"] is not None), default=None)
+        line = f"Needs updated on {config.tree_name or 'the tree'}" + (f" · significance {top}" if top is not None else "")
+        def words(c: dict[str, Any]) -> str:
+            if c["action"] != "regrade":
+                return f'{c["relation"]} {"added" if c["action"] == "add" else "replaced"}'
+            return f'{c["relation"]} now {assessment_label(c["after"], config.grades)}' + (f' {c["estimate"]}%' if c["estimate"] is not None else "")
+        return (f'<span class="update-line">{_text(line)}</span><span class="update-chips">'
+                + "".join(badge(words(c), assessment_anchor(c["after"], config.grades), prefix, cls="update-chip") for c in changes) + "</span>")
+
     def catalogue_row(pid: str, prefix: str = "") -> str:
         """One person as the research table shows them; site.js's catalogueRow builds the same row from the shared data."""
         person = people[pid]
         shown_id = next((i["value"] for i in person.get("external_ids", []) if i.get("value")), pid)
         kin = catalogue_kin(pid)
-        cells = [f'<td>{ref(pid, prefix)}<span class="record-id">{_text(shown_id)}</span></td>']
+        cells = [f'<td>{ref(pid, prefix)}<span class="record-id">{_text(shown_id)}</span>{update_note(pid, prefix)}</td>']
         words = [n["value"] for n in person.get("names", []) if n.get("value")] + [pid] + [i["value"] for i in person.get("external_ids", []) if i.get("value")]
         for kind in ("birth", "death"):
             date, place = catalogue_vital(pid, kind)
@@ -2115,7 +2167,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                   else f'<p class="result-count">{total_searches} search{"" if total_searches == 1 else "es"}, newest first.</p>' if total_searches else "")
                                + empty([search_item(r) for r in searches_newest[:LATEST_SEARCHES]], "No public searches recorded.").replace('class="record-list"', 'class="record-list research-log"', 1))
 
-    def pending_updates(pid: str, person: dict[str, Any]) -> str:
+    def pending_updates_section(pid: str, person: dict[str, Any]) -> str:
         """The dossier's "Pending <tree> updates": each change still to make on the online tree, as the catalogue's tree
         menu counts it (catalogue_facets): a finding neither "reviewed" nor "applied" that changed a relationship of this
         person's. Only public findings, links and people reach here, so a withheld one is never listed."""
@@ -2173,7 +2225,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                  ("research", "Research", research_by_subject[pid]), ("research-log", "Research log", searches_by_subject[pid]), ("relationships", "All relationships", related_rels), ("external", "External identifiers", external)]
         linked_pages = connected_pages(pid, personal_claims)
         jumps.append(("connected", "Connected pages", linked_pages))
-        updates = pending_updates(pid, person)
+        updates = pending_updates_section(pid, person)
         jumps.insert([key for key, _, _ in jumps].index("relationships"), ("updates", f'Pending {config.tree_name or "tree"} updates', updates))
         explore = [(f"tree.html?person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
         if canonical_surname(pid):
@@ -3276,28 +3328,11 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         "replace" when its note says the link replaces another ("replaces", "replaced") or the same finding moves a link
         of the same relationship for the same person to disproved, and "add" otherwise.
         """
-        sexes = {pid: {"f": "F", "female": "F", "m": "M", "male": "M"}.get(value.casefold(), value) for pid, value in sex.items()}
-        def side(row: dict[str, Any], pid: str) -> str:
-            kind = str(row["kind"]).casefold()
-            if kind in PARENT_KINDS:
-                if row["object_id"] == pid:
-                    return "child"
-                other = sexes.get(row["object_id"])
-                return "father" if kind == "father" or (kind != "mother" and other == "M") else "mother" if kind == "mother" or other == "F" else "parent"
-            return "spouse" if kind in PARTNER_KINDS else "sibling" if kind in SIBLING_KINDS else kind
-        disproved = lambda value: value == "disproved" or config.grades.get(str(value), {}).get("confidence") == "disproved"
-        pending: dict[str, list[list[str]]] = defaultdict(list)
-        for finding in project["findings"]:
-            if str(finding.get("status") or "").casefold() in ("reviewed", "applied"):
-                continue
-            links = [(change, relationships_by_id[change["record_id"]]) for change in finding.get("changes", []) if change.get("record_id") in relationships_by_id]
-            dropped = {(row["subject_id"], side(row, row["subject_id"])) for change, row in links if change.get("before") and disproved(change.get("after"))}
-            for change, row in links:
-                action = "regrade" if change.get("before") else "replace" if (
-                    re.search(r"\breplac", str(change.get("note") or ""), re.I) or (row["subject_id"], side(row, row["subject_id"])) in dropped) else "add"
-                for pid in dict.fromkeys((row["subject_id"], row["object_id"])):
-                    if pid in people:
-                        pending[pid].append([side(row, pid), action, str(change["after"])])
+        # Each [relationship, action, new value], then the significance and link estimate where recorded.
+        trim = lambda items: items[:max((i + 1 for i, v in enumerate(items) if v is not None), default=3)]
+        pending = {pid: [trim([c["relation"], c["action"], c["after"], c["significance"], c["estimate"]]) for c in changes] for pid, changes in pending_updates().items()}
+        if config.tree_name:
+            shared["site"]["tree_name"] = config.tree_name
         used: set[str] = set()
         group_studies = {sid for sid, row in studies.items() if str(row.get("kind") or "").casefold() == "group"}
         for row in shared["people"]:

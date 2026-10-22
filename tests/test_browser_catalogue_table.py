@@ -192,8 +192,8 @@ class CatalogueTableBrowserTests(unittest.TestCase):
         page = self.page
         table, view = page.locator('[data-catalogue]'), page.locator('.catalogue-map')
         self.assertFalse(view.is_visible())
-        page.get_by_role('button', name='Map', exact=True).click()
-        self.assertEqual('true', page.get_by_role('button', name='Map', exact=True).get_attribute('aria-pressed'))
+        page.get_by_role('tab', name='Map', exact=True).click()
+        self.assertEqual('true', page.get_by_role('tab', name='Map', exact=True).get_attribute('aria-selected'))
         self.assertFalse(table.is_visible())
         self.assertFalse(page.locator('.pagination').is_visible())
         self.assertEqual({'view': 'map'}, self.query())
@@ -215,7 +215,7 @@ class CatalogueTableBrowserTests(unittest.TestCase):
         page.goto(address, wait_until='networkidle')
         self.assertTrue(view.is_visible())
         self.assertEqual(['Lanternby, North Shire, Fableland: 1 person'], markers.locator('title').all_text_contents())
-        page.get_by_role('button', name='Table', exact=True).click()
+        page.get_by_role('tab', name='Table', exact=True).click()
         self.assertTrue(table.is_visible())
         self.assertEqual({'q': 'Ada Table'}, self.query())
         # A large site maps everyone matching, not just one page.
@@ -239,7 +239,7 @@ class CatalogueTableBrowserTests(unittest.TestCase):
                         self.assertGreater(*self.page.locator('.table-wrap').evaluate('w => [w.scrollWidth, w.clientWidth]'))
                         tops = self.page.locator('details.filter-group > summary').evaluate_all('s => s.map(n => n.getBoundingClientRect().top)')
                         self.assertGreater(len(set(tops)), 1)
-                    self.page.get_by_role('button', name='Map', exact=True).click()
+                    self.page.get_by_role('tab', name='Map', exact=True).click()
                     self.axe()
                     self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
 
