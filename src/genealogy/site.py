@@ -59,6 +59,7 @@ PLACE_LIST_LIMIT = 200  # people, sub-places, surnames or studies listed on a pl
 PLACE_PEOPLE_BYTES = 40_000  # a place's people list also stops here, and each of its other lists at a third of it
 STATISTICS_ROWS = 25  # rows per statistics table; the rest are counted, so the page stays small on a large site
 CONNECTED_LIMIT = 12  # pages listed per group under a dossier's "Connected pages"; the rest are counted
+PENDING_LIMIT = 25  # changes listed under a dossier's "Pending … updates"; the rest are counted, and each is noted beside its link
 UNPLACED_REGION = "Places without a broader jurisdiction"
 PLACE_CARDS = 100  # places drawn as cards on places.html and by its filter; past this a site pages its places by region
 PLACE_CARD_BYTES = 50_000  # a large site's places page stops its busiest-places cards here
@@ -2114,6 +2115,41 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                   else f'<p class="result-count">{total_searches} search{"" if total_searches == 1 else "es"}, newest first.</p>' if total_searches else "")
                                + empty([search_item(r) for r in searches_newest[:LATEST_SEARCHES]], "No public searches recorded.").replace('class="record-list"', 'class="record-list research-log"', 1))
 
+    def pending_updates(pid: str, person: dict[str, Any]) -> str:
+        """The dossier's "Pending <tree> updates": each change still to make on the online tree, as the catalogue's tree
+        menu counts it (catalogue_facets): a finding neither "reviewed" nor "applied" that changed a relationship of this
+        person's. Only public findings, links and people reach here, so a withheld one is never listed."""
+        tree = config.tree_name
+        items = []
+        for row in relationships_by_person[pid]:
+            other = row["object_id"] if row["subject_id"] == pid else row["subject_id"]
+            if other == pid or other not in people:
+                continue
+            kind = str(row["kind"]).casefold()
+            # Worded from this person's side: the other end's role ("Father", "Daughter", "Spouse or partner").
+            role = (child_role(row, sex.get(other)) if row["object_id"] == pid else parent_role(row, {"father": "m", "mother": "f"}.get(kind) or sex.get(other))
+                    ) if kind in PARENT_KINDS else "Spouse or partner" if kind in PARTNER_KINDS else "Sibling" if kind in SIBLING_KINDS else str(row["kind"]).replace("_", " ").capitalize()
+            for finding, change in changes_of.get(row["id"], []):
+                if str(finding.get("status") or "").casefold() in ("reviewed", "applied"):
+                    continue
+                significance = change.get("significance")
+                items.append(((-significance if isinstance(significance, int) else 1, str(finding.get("recorded_on") or "")),
+                              f'<li data-relationship-id="{_text(row["id"])}"><p><span class="family-role">{_text(role)}</span> {ref(other, "../")} {change_chip(change, "../")}</p>'
+                              + (f'<p class="meta">{_text(change["note"])}</p>' if change.get("note") else "")
+                              + f'<p class="meta">Finding: {ref(finding["id"], "../", finding["conclusion"])}' + (f' · {when(finding["recorded_on"])}' if finding.get("recorded_on") else "") + "</p>"
+                              + (f'<p class="meta pending-significance">Significance {significance} of 100</p>' if isinstance(significance, int) else "") + "</li>"))
+        if not items:
+            return ""
+        # Most significant first, then the newest finding; a change with no significance follows those with one.
+        items.sort(key=lambda item: item[0][1], reverse=True)
+        items.sort(key=lambda item: item[0][0])
+        more = len(items) - PENDING_LIMIT
+        profile = next(((i, _url(i.get("url"))) for i in person.get("external_ids", []) if _url(i.get("url"))), None)
+        link = (f'<p class="pending-profile"><a href="{_text(profile[1])}" rel="noreferrer">Open on {_text(tree or profile[0]["system"])}<span aria-hidden="true"> ↗</span></a></p>' if profile else "")
+        return (f'<h2 id="updates">Pending {_text(tree or "tree")} updates</h2><p class="meta">Changes the research supports making on {_text(tree or "the online tree")}, '
+                'not yet marked reviewed or applied, each with the finding behind it.</p>' + empty([item for _, item in items[:PENDING_LIMIT]]).replace('class="record-list"', 'class="record-list pending-updates"', 1)
+                + (f'<p class="meta">and {more:,} more, each noted beside its link under <a href="#relationships">All recorded relationships</a></p>' if more > 0 else "") + link)
+
     for pid, person in people.items():
         related_events = events_by_person[pid]
         subject_ids = {pid, *(e["id"] for e in related_events)}
@@ -2137,9 +2173,13 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                  ("research", "Research", research_by_subject[pid]), ("research-log", "Research log", searches_by_subject[pid]), ("relationships", "All relationships", related_rels), ("external", "External identifiers", external)]
         linked_pages = connected_pages(pid, personal_claims)
         jumps.append(("connected", "Connected pages", linked_pages))
+        updates = pending_updates(pid, person)
+        jumps.insert([key for key, _, _ in jumps].index("relationships"), ("updates", f'Pending {config.tree_name or "tree"} updates', updates))
         explore = [(f"tree.html?person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
         if canonical_surname(pid):
             explore.append((f"catalogue.html?surname={quote(canonical_surname(pid))}", f"Everyone surnamed {canonical_surname(pid)}"))
+        if updates:
+            explore.append((people_urls[pid] + "#updates", "Pending updates"))
         # The researcher's own notes, when there are any, open the page instead of generated sentences.
         content = dossier_hero(pid, span, recorded_sex, explore, "" if person.get("notes") else introduction(pid)) + '<div class="dossier-layout">'
         if any(filled for _, _, filled in jumps):
@@ -2151,7 +2191,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         content += family(pid)
         content += '<h2 id="events">Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2 id="claims">Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
         content += '<h2 id="studies">Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
-        content += '<h2 id="research">Research</h2>' + empty(research_items(pid)) + research_log(pid) + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
+        content += '<h2 id="research">Research</h2>' + empty(research_items(pid)) + research_log(pid) + updates + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
         content += linked_pages + "</div></div>"
         pages[people_urls[pid]] = content
 
