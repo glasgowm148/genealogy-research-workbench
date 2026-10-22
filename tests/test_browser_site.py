@@ -209,18 +209,15 @@ class BrowserSiteTests(unittest.TestCase):
             self.page.goto(large + page, wait_until='networkidle')
             for menu in menus:
                 self.assertEqual(self.large_people + 1, self.page.locator(f'{menu} option').count(), page)
-        # The full menus sit under "or choose from the list" beside the type-to-find boxes.
+        # The full menus stay in the form, out of sight behind the type-to-find boxes; setting one still draws.
         self.page.goto(large + 'compare.html')
-        for summary in self.page.locator('details.picker-menu > summary').all():
-            summary.click()
-        self.page.locator('[data-compare-a]').select_option('p0001')
-        self.page.locator('[data-compare-b]').select_option('p0002')
+        self.assertEqual(0, self.page.locator('details.picker-menu').count())
+        self.page.locator('[data-compare-a]').select_option('p0001', force=True)
+        self.page.locator('[data-compare-b]').select_option('p0002', force=True)
         self.assertIn('Person 0002 Fable', self.page.locator('#compare-result').inner_text())
         self.page.goto(large + 'connections.html')
-        for summary in self.page.locator('details.picker-menu > summary').all():
-            summary.click()
-        self.page.locator('[data-connection-a]').select_option('p0001')
-        self.page.locator('[data-connection-b]').select_option('p0003')
+        self.page.locator('[data-connection-a]').select_option('p0001', force=True)
+        self.page.locator('[data-connection-b]').select_option('p0003', force=True)
         self.assertIn('Person 0003 Fable', self.page.locator('#connection-result').inner_text())
         if os.environ.get('GENEALOGY_AXE_PATH'):
             axe = Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8')
@@ -346,13 +343,13 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.locator('[data-tree-view="branches"]').click()
         self.assertGreater(self.page.locator('#tree-output a').count(), 0)
         self.page.goto(self.base + 'compare.html')
-        self.page.locator('[data-compare-a]').select_option('person:01')
-        self.page.locator('[data-compare-b]').select_option('person:02')
+        self.page.locator('[data-compare-a]').select_option('person:01', force=True)
+        self.page.locator('[data-compare-b]').select_option('person:02', force=True)
         self.assertIn('Ada Alder', self.page.locator('#compare-result').inner_text())
         self.assertIn('Bram Alder', self.page.locator('#compare-result').inner_text())
         self.page.goto(self.base + 'connections.html')
-        self.page.locator('[data-connection-a]').select_option('person:01')
-        self.page.locator('[data-connection-b]').select_option('person:02')
+        self.page.locator('[data-connection-a]').select_option('person:01', force=True)
+        self.page.locator('[data-connection-b]').select_option('person:02', force=True)
         self.assertIn('Ada Alder', self.page.locator('#connection-result').inner_text())
         self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
 
@@ -362,8 +359,8 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.locator('p.explore').get_by_role('link', name='Find a connection').click()
         self.page.wait_for_url('**/connections.html?a=person%3A01')
         self.assertEqual('person:01', self.page.locator('[data-connection-a]').input_value())
-        self.assertTrue(self.page.evaluate("document.activeElement.matches('[data-connection-b]')"))  # the empty menu is next
-        self.page.locator('[data-connection-b]').select_option('person:02')
+        self.assertTrue(self.page.get_by_role('combobox', name='Find the second person').evaluate('e => e === document.activeElement'))  # the empty box is next
+        self.page.locator('[data-connection-b]').select_option('person:02', force=True)
         self.assertIn('Bram Alder', self.page.locator('#connection-result').inner_text())
         # Both people in the address: the result renders without a choice.
         self.page.goto(self.base + 'connections.html?a=person%3A01&b=person%3A02')
@@ -376,7 +373,7 @@ class BrowserSiteTests(unittest.TestCase):
         # An id that is not a public person is ignored; the menu it named is the one left to choose.
         self.page.goto(self.base + 'compare.html?a=no-such-person&b=person%3A02')
         self.assertEqual('', self.page.locator('[data-compare-a]').input_value())
-        self.assertTrue(self.page.evaluate("document.activeElement.matches('[data-compare-a]')"))
+        self.assertTrue(self.page.get_by_role('combobox', name='Find the first person').evaluate('e => e === document.activeElement'))
         self.assertEqual(0, self.page.locator('#compare-result .comparison').count())
         # A large site fills its menus from the data before preselecting.
         large = self.base.replace('/nested/', '/large/')
@@ -899,9 +896,13 @@ class BrowserSiteTests(unittest.TestCase):
         first = page.get_by_role('combobox', name='Find the first person')
         second = page.get_by_role('combobox', name='Find the second person')
         options = page.locator('[role=listbox]:visible').get_by_role('option')  # a menu's own options are options too
-        # A small site keeps its full menu in view beside the box; typing and a click choose a person.
+        # The tree keeps its full menu in view beside the box on a small site; the compare and connections
+        # forms keep theirs out of sight (still in the form, so it submits ?a=&b=). Typing and a click choose a person.
+        page.goto(self.base + 'tree.html')
+        self.assertTrue(page.locator('#tree-root').is_visible())
         page.goto(self.base + 'compare.html')
-        self.assertTrue(page.locator('[data-compare-a]').is_visible())
+        self.assertFalse(page.locator('[data-compare-a]').is_visible())
+        self.assertEqual(1, page.locator('form[data-person-form] select[name=a][data-compare-a]').count())
         self.assertEqual(0, page.locator('details.picker-menu').count())
         first.fill('ada ald')
         self.assertEqual('true', first.get_attribute('aria-expanded'))
@@ -914,7 +915,7 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual('false', first.get_attribute('aria-expanded'))
         self.assertEqual('Ada Alder', first.input_value())
         self.assertIn('Choose two people', page.locator('#compare-result').inner_text())
-        # Keyboard only: Tab past the first menu, type, arrows move the active option, Escape closes, Enter chooses.
+        # Keyboard only: Tab past the swap button, type, arrows move the active option, Escape closes, Enter chooses.
         first.focus()
         page.keyboard.press('Tab')
         page.keyboard.press('Tab')
@@ -942,7 +943,7 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertIn('Bram Alder', page.locator('#compare-result').inner_text())
         self.assertEqual(2, page.locator('#compare-result .comparison .card').count())
         # Choosing from the menu updates the box; a grouped spelling finds the whole surname group.
-        page.locator('[data-compare-b]').select_option('person:43')
+        page.locator('[data-compare-b]').select_option('person:43', force=True)
         self.assertEqual('Iona Hayle', second.input_value())
         second.fill('iona hale')
         self.assertEqual(['Iona Hayle'], [t.split('\n')[0] for t in options.all_inner_texts()])
@@ -971,12 +972,12 @@ class BrowserSiteTests(unittest.TestCase):
         chosen = relative.get_attribute('aria-label').removeprefix('Focus on ')
         relative.click()
         self.assertEqual(chosen, tree_box.input_value())
-        # A large site folds its menu under "or choose from the list"; matches stop at twelve.
+        # A large site's form keeps its menus out of sight too; matches stop at twelve.
         large = self.base.replace('/nested/', '/large/')
         for width in (1440, 390):
             page.set_viewport_size({'width': width, 'height': 900})
             page.goto(large + 'compare.html', wait_until='networkidle')
-            self.assertEqual(2, page.locator('details.picker-menu:not([open])').count())
+            self.assertEqual(0, page.locator('details.picker-menu').count())
             self.assertFalse(page.locator('[data-compare-a]').is_visible())
             first.fill('person 01')
             self.assertEqual(12, options.count())
@@ -989,12 +990,15 @@ class BrowserSiteTests(unittest.TestCase):
             second.fill('person 0002 fable')
             options.first.click()
             self.assertIn('Person 0002 Fable', page.locator('#compare-result').inner_text())
-            page.locator('details.picker-menu summary').first.click()
-            self.assertTrue(page.locator('[data-compare-a]').is_visible())
             self.assertEqual('p0001', page.locator('[data-compare-a]').input_value())
+            # The tree folds its full menu under "or choose from the list".
+            page.goto(large + 'tree.html', wait_until='networkidle')
+            self.assertEqual(1, page.locator('details.picker-menu:not([open])').count())
+            page.locator('details.picker-menu summary').first.click()
+            self.assertTrue(page.locator('#tree-root').is_visible())
             if axe:
-                self.assertEqual([], self.axe_violations(), f'large compare, list open, {width}')
-        # With one person given, the box for the other takes focus, since its menu is folded away.
+                self.assertEqual([], self.axe_violations(), f'large tree, list open, {width}')
+        # With one person given, the box for the other takes focus, since its menu is out of sight.
         page.goto(large + 'connections.html?a=p0001', wait_until='networkidle')
         self.assertEqual('Person 0001 Fable', first.input_value())
         self.assertTrue(page.evaluate("document.activeElement.matches('[role=combobox]')"))

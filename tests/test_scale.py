@@ -82,9 +82,13 @@ class LargeSiteTests(unittest.TestCase):
     def test_person_menus_and_lists_are_not_written_out(self):
         for page in ("tree.html", "compare.html", "connections.html"):
             html = self.text(page)
-            self.assertLessEqual(html.count("<option"), 3, page)
+            # Each person menu holds only its placeholder; connections' evidence threshold has three options of its own.
+            self.assertLessEqual(html.count("<option"), 3 + 3 * (page == "connections.html"), page)
+            for menu in re.findall(r"<select[^>]*data-(?:compare|connection)-[ab]>(.*?)</select>", html):
+                self.assertEqual(1, menu.count("<option"), page)
             self.assertNotIn("Person 0123 Fable", html, page)
-        self.assertIn(f"All {PEOPLE:,} people are listed in the", self.text("compare.html"))
+        for page in ("compare.html", "connections.html"):
+            self.assertIn('<a href="catalogue.html">Browse the name index →</a>', self.text(page))
         self.assertIn("recorded family connections. Each person's page lists", self.text("tree.html"))
         self.assertNotIn("Person 0123 Fable", self.text("sitemap.html"))
 

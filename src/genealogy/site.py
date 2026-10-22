@@ -1196,8 +1196,108 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                               '<a href="evidence.html">Reading the evidence</a>.</p>' + research_counts() + questions_section()
                               + hypotheses_section(sorted(project["hypotheses"], key=lambda r: (str(r.get("status", "open")).casefold() not in OUTSTANDING, r["id"])), outstanding_rows(project["hypotheses"]))
                               + findings_section() + claims_section())
-    for route, heading, hook in (("compare.html", "Compare people", "compare"), ("connections.html", "Find a connection", "connection")):
-        pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + browse_people
+    # Compare and connections: one GET form per page (?a=&b=, as a dossier's explore links write them), so the
+    # menus still name both people without JavaScript; the script draws the result and adds swap and type-to-find.
+    def uncertain_link(row: dict[str, Any]) -> bool:
+        """A link the connections search leaves out until "Include uncertain relationships" is ticked (site.js agrees)."""
+        return row.get("confidence") == "possible" or bool(re.search(r"uncertain|challenged|disputed|proposed|doubt", str(row.get("tree_status") or ""), re.I))
+
+    def connection_presets() -> list[tuple[str, str, str]]:
+        """Up to three pairs joined by the longest recorded paths, found with the page's default settings.
+        Two breadth-first sweeps per family group find its longest path without trying every pair."""
+        adjacent: dict[str, list[str]] = defaultdict(list)
+        for r in project["relationships"]:
+            a, b = r["subject_id"], r["object_id"]
+            if a != b and a in people and b in people and r.get("confidence") != "disproved" and not uncertain_link(r):
+                adjacent[a].append(b)
+                adjacent[b].append(a)
+        def sweep(start: str) -> dict[str, int]:
+            seen, queue = {start: 0}, [start]
+            for pid in queue:
+                for other in adjacent[pid]:
+                    if other not in seen:
+                        seen[other] = seen[pid] + 1
+                        queue.append(other)
+            return seen
+        groups, placed = [], set()
+        for pid in sorted(adjacent):
+            if pid not in placed:
+                group = sweep(pid)
+                placed.update(group)
+                groups.append(group)
+        groups.sort(key=lambda g: (-len(g), min(g)))
+        farthest = lambda d: sorted(d, key=lambda k: (-d[k], k))
+        candidates: list[tuple[str, str, int]] = []
+        for group in groups[:3]:
+            for start in farthest(group)[:2]:  # each end of a group's longest path, and the next farthest person
+                reach = sweep(start)
+                candidates += [(start, end, reach[end]) for end in farthest(reach)[:6] if reach[end] > 0]
+        candidates.sort(key=lambda t: (-t[2], t[0], t[1]))
+        pairs: list[tuple[str, str, int]] = []
+        for fresh in (True, False):  # pairs with no person in common first, so the three questions differ
+            for a, b, n in candidates:
+                if len(pairs) < 3 and not any({a, b} == {x, y} for x, y, _ in pairs) and not (fresh and {a, b} & {pid for x, y, _ in pairs for pid in (x, y)}):
+                    pairs.append((a, b, n))
+        return [(a, b, f"{n} step{'s' if n != 1 else ''}") for a, b, n in pairs]
+
+    def compare_presets() -> list[tuple[str, str, str]]:
+        """Up to three pairs sharing a surname, a shared full name first: the comparisons a researcher makes most."""
+        by_surname: dict[str, list[str]] = defaultdict(list)
+        for pid in people:
+            if canonical_surname(pid):
+                by_surname[canonical_surname(pid)].append(pid)
+        ordered = sorted(by_surname.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        pairs: list[tuple[str, str, str]] = []
+        used: set[str] = set()
+        covered: set[str] = set()
+        def take(a: str, b: str, note: str, group: str) -> None:
+            if len(pairs) < 3 and not {a, b} & used:
+                pairs.append((a, b, note))
+                used.update((a, b))
+                covered.add(group)
+        for group_name, ids in ordered:  # a full name recorded twice is the likeliest duplicate
+            named: dict[str, list[str]] = defaultdict(list)
+            for pid in ids:
+                named[person_name(pid).casefold()].append(pid)
+            twin = next((v for v in named.values() if len(v) > 1), None)
+            if twin:
+                take(twin[0], twin[1], f"both named {person_name(twin[0])}", group_name)
+        for spread in (True, False):  # one pair per surname first, then more from the largest groups
+            for group_name, ids in ordered:
+                free = [pid for pid in ids if pid not in used]
+                for i in range(0, len(free) - 1, 2):
+                    if spread and group_name in covered:
+                        break
+                    take(free[i], free[i + 1], f"both {group_name}", group_name)
+        return pairs[:3]
+
+    def tool_page(route: str, heading: str, hook: str, eyebrow: str, intro: str, submit: str, presets: list[tuple[str, str, str]], extra: str = "") -> str:
+        known = "".join(f'<li><a href="{route}?a={_text(quote(a, safe=""))}&amp;b={_text(quote(b, safe=""))}">{_text(person_name(a))} and {_text(person_name(b))}</a> <span class="meta">· {_text(note)}</span></li>'
+                        for a, b, note in presets)
+        return (f'<p class="eyebrow">{eyebrow}</p><h1>{heading}</h1><p class="tool-intro">{intro}</p>'
+                f'<form class="person-form" method="get" action="{route}" data-person-form><div class="person-form-pair">'
+                f'<label>First person <select name="a" data-{hook}-a>{options}</select></label>'
+                '<button type="button" class="person-swap" data-person-swap hidden aria-label="Swap the two people" title="Swap the two people">⇄</button>'
+                f'<label>Second person <select name="b" data-{hook}-b>{options}</select></label>'
+                f'<button type="submit" class="button">{submit}</button></div>{extra}</form>'
+                f'<noscript><p class="note">The result is drawn in the browser and needs JavaScript; every person&#39;s own page lists the same details.</p></noscript>'
+                f'<div id="{hook}-result" role="status"></div>'
+                + (f'<h2>Start with a known question</h2><ul class="preset-pairs">{known}</ul>' if known else "")
+                + '<p class="tool-browse"><a href="catalogue.html">Browse the name index →</a></p>')
+
+    pages["compare.html"] = tool_page(
+        "compare.html", "Compare people", "compare", "Test a possible connection",
+        "Compare two people&#39;s recorded dates, names, places, relatives and claims side by side. Details they share are leads, not proof that they are one person or related.",
+        "Compare", compare_presets())
+    pages["connections.html"] = tool_page(
+        "connections.html", "Find a connection", "connection", "Follow the links",
+        "Choose two people to see the shortest route between them through recorded family links, the kind of relationship at each step and the evidence behind it.",
+        "Find the connection →", connection_presets(),
+        '<div class="person-form-options"><label>Evidence threshold <select name="evidence" data-connection-evidence>'
+        '<option value="any">Any recorded link, including unassessed</option><option value="probable">Probable and above</option><option value="documented">Documented only</option></select></label>'
+        '<label class="check"><input type="checkbox" name="partners" value="1" checked data-connection-partners> Allow connections through partnership</label>'
+        '<label class="check"><input type="checkbox" name="uncertain" value="1" data-connection-uncertain> Include uncertain relationships</label></div>'
+        '<p class="hint">A route follows recorded links; it is not a claim that the whole path is proved. Disproved links are never used, and possible links or links the source tree marks uncertain are left out until you include them.</p>')
     def record_label(rid: str) -> str:
         text = readable(rid)
         return text if len(text) <= 90 else text[:87].rstrip() + "…"
@@ -2821,6 +2921,108 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             entries.append({key: value for key, value in entry.items() if value not in (None, "", [])})
         return entries
 
+    # Compare and connections: one GET form per page (?a=&b=, as a dossier's explore links write them), so the
+    # menus still name both people without JavaScript; the script draws the result and adds swap and type-to-find.
+    def uncertain_link(row: dict[str, Any]) -> bool:
+        """A link the connections search leaves out until "Include uncertain relationships" is ticked (site.js agrees)."""
+        return row.get("confidence") == "possible" or bool(re.search(r"uncertain|challenged|disputed|proposed|doubt", str(row.get("tree_status") or ""), re.I))
+
+    def connection_presets() -> list[tuple[str, str, str]]:
+        """Up to three pairs joined by the longest recorded paths, found with the page's default settings.
+        Two breadth-first sweeps per family group find its longest path without trying every pair."""
+        adjacent: dict[str, list[str]] = defaultdict(list)
+        for r in project["relationships"]:
+            a, b = r["subject_id"], r["object_id"]
+            if a != b and a in people and b in people and r.get("confidence") != "disproved" and not uncertain_link(r):
+                adjacent[a].append(b)
+                adjacent[b].append(a)
+        def sweep(start: str) -> dict[str, int]:
+            seen, queue = {start: 0}, [start]
+            for pid in queue:
+                for other in adjacent[pid]:
+                    if other not in seen:
+                        seen[other] = seen[pid] + 1
+                        queue.append(other)
+            return seen
+        groups, placed = [], set()
+        for pid in sorted(adjacent):
+            if pid not in placed:
+                group = sweep(pid)
+                placed.update(group)
+                groups.append(group)
+        groups.sort(key=lambda g: (-len(g), min(g)))
+        farthest = lambda d: sorted(d, key=lambda k: (-d[k], k))
+        candidates: list[tuple[str, str, int]] = []
+        for group in groups[:3]:
+            for start in farthest(group)[:2]:  # each end of a group's longest path, and the next farthest person
+                reach = sweep(start)
+                candidates += [(start, end, reach[end]) for end in farthest(reach)[:6] if reach[end] > 0]
+        candidates.sort(key=lambda t: (-t[2], t[0], t[1]))
+        pairs: list[tuple[str, str, int]] = []
+        for fresh in (True, False):  # pairs with no person in common first, so the three questions differ
+            for a, b, n in candidates:
+                if len(pairs) < 3 and not any({a, b} == {x, y} for x, y, _ in pairs) and not (fresh and {a, b} & {pid for x, y, _ in pairs for pid in (x, y)}):
+                    pairs.append((a, b, n))
+        return [(a, b, f"{n} step{'s' if n != 1 else ''}") for a, b, n in pairs]
+
+    def compare_presets() -> list[tuple[str, str, str]]:
+        """Up to three pairs sharing a surname, a shared full name first: the comparisons a researcher makes most."""
+        by_surname: dict[str, list[str]] = defaultdict(list)
+        for pid in people:
+            if canonical_surname(pid):
+                by_surname[canonical_surname(pid)].append(pid)
+        ordered = sorted(by_surname.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        pairs: list[tuple[str, str, str]] = []
+        used: set[str] = set()
+        covered: set[str] = set()
+        def take(a: str, b: str, note: str, group: str) -> None:
+            if len(pairs) < 3 and not {a, b} & used:
+                pairs.append((a, b, note))
+                used.update((a, b))
+                covered.add(group)
+        for group_name, ids in ordered:  # a full name recorded twice is the likeliest duplicate
+            named: dict[str, list[str]] = defaultdict(list)
+            for pid in ids:
+                named[person_name(pid).casefold()].append(pid)
+            twin = next((v for v in named.values() if len(v) > 1), None)
+            if twin:
+                take(twin[0], twin[1], f"both named {person_name(twin[0])}", group_name)
+        for spread in (True, False):  # one pair per surname first, then more from the largest groups
+            for group_name, ids in ordered:
+                free = [pid for pid in ids if pid not in used]
+                for i in range(0, len(free) - 1, 2):
+                    if spread and group_name in covered:
+                        break
+                    take(free[i], free[i + 1], f"both {group_name}", group_name)
+        return pairs[:3]
+
+    def tool_page(route: str, heading: str, hook: str, eyebrow: str, intro: str, submit: str, presets: list[tuple[str, str, str]], extra: str = "") -> str:
+        known = "".join(f'<li><a href="{route}?a={_text(quote(a, safe=""))}&amp;b={_text(quote(b, safe=""))}">{_text(person_name(a))} and {_text(person_name(b))}</a> <span class="meta">· {_text(note)}</span></li>'
+                        for a, b, note in presets)
+        return (f'<p class="eyebrow">{eyebrow}</p><h1>{heading}</h1><p class="tool-intro">{intro}</p>'
+                f'<form class="person-form" method="get" action="{route}" data-person-form><div class="person-form-pair">'
+                f'<label>First person <select name="a" data-{hook}-a>{options}</select></label>'
+                '<button type="button" class="person-swap" data-person-swap hidden aria-label="Swap the two people" title="Swap the two people">⇄</button>'
+                f'<label>Second person <select name="b" data-{hook}-b>{options}</select></label>'
+                f'<button type="submit" class="button">{submit}</button></div>{extra}</form>'
+                f'<noscript><p class="note">The result is drawn in the browser and needs JavaScript; every person&#39;s own page lists the same details.</p></noscript>'
+                f'<div id="{hook}-result" role="status"></div>'
+                + (f'<h2>Start with a known question</h2><ul class="preset-pairs">{known}</ul>' if known else "")
+                + '<p class="tool-browse"><a href="catalogue.html">Browse the name index →</a></p>')
+
+    pages["compare.html"] = tool_page(
+        "compare.html", "Compare people", "compare", "Test a possible connection",
+        "Compare two people&#39;s recorded dates, names, places, relatives and claims side by side. Details they share are leads, not proof that they are one person or related.",
+        "Compare", compare_presets())
+    pages["connections.html"] = tool_page(
+        "connections.html", "Find a connection", "connection", "Follow the links",
+        "Choose two people to see the shortest route between them through recorded family links, the kind of relationship at each step and the evidence behind it.",
+        "Find the connection →", connection_presets(),
+        '<div class="person-form-options"><label>Evidence threshold <select name="evidence" data-connection-evidence>'
+        '<option value="any">Any recorded link, including unassessed</option><option value="probable">Probable and above</option><option value="documented">Documented only</option></select></label>'
+        '<label class="check"><input type="checkbox" name="partners" value="1" checked data-connection-partners> Allow connections through partnership</label>'
+        '<label class="check"><input type="checkbox" name="uncertain" value="1" data-connection-uncertain> Include uncertain relationships</label></div>'
+        '<p class="hint">A route follows recorded links; it is not a claim that the whole path is proved. Disproved links are never used, and possible links or links the source tree marks uncertain are left out until you include them.</p>')
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:

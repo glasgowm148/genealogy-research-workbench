@@ -143,15 +143,16 @@ function researchFilters(records){
 // Past 300 people (site.py's INLINE_LIMIT) a full menu is a long scroll, so it folds away under a details.
 let pickerCount=0;
 const VALUE=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value');
-function picker(menu,label){
+function picker(menu,label,{hide=false,placeholder='Type a name or ID'}={}){
  if(!menu||'picker' in menu.dataset||!people.length)return;menu.dataset.picker='';fillPeople(menu);
  const n=++pickerCount,large=people.length>300,focused=document.activeElement===menu,holder=menu.closest('label')||menu;
  const box=el('div',undefined,'person-picker'),wrap=el('div',undefined,'picker-field'),input=el('input'),list=el('ul',undefined,'picker-list'),status=el('p',undefined,'picker-status');
  input.type='search';input.id=`picker-${n}`;list.id=`picker-${n}-list`;list.hidden=true;list.setAttribute('role','listbox');list.setAttribute('aria-label',`Matches for ${label.toLowerCase()}`);status.setAttribute('role','status');
- for(const [k,v] of [['role','combobox'],['aria-autocomplete','list'],['aria-expanded','false'],['aria-controls',list.id],['autocomplete','off'],['spellcheck','false'],['placeholder','Type a name or ID']])input.setAttribute(k,v);
+ for(const [k,v] of [['role','combobox'],['aria-autocomplete','list'],['aria-expanded','false'],['aria-controls',list.id],['autocomplete','off'],['spellcheck','false'],['placeholder',placeholder]])input.setAttribute(k,v);
  holder.before(box);wrap.append(field(label,input),list);box.append(wrap,status);
- if(large){const more=el('details',undefined,'picker-menu');more.append(el('summary','or choose from the list'),holder);box.append(more);}else box.append(holder);
- if(focused)(large?input:menu).focus();
+ // A form page keeps its menu for the form and for no-JS readers, out of sight: the box is the one control.
+ if(hide){holder.hidden=true;box.append(holder);}else if(large){const more=el('details',undefined,'picker-menu');more.append(el('summary','or choose from the list'),holder);box.append(more);}else box.append(holder);
+ if(focused)(large||hide?input:menu).focus();
  // Names, the ID and each name's canonical surname, folded, so any listed spelling finds the person.
  let index,matches=[],active=-1;
  const entries=()=>index||(index=[...people].sort((x,y)=>name(x).localeCompare(name(y))||x.id.localeCompare(y.id)).map(p=>({p,first:fold(name(p)),text:fold([...(p.names||[]).map(x=>x.value),name(p),p.id,...(p.names||[]).map(x=>canonical(x.surname))].join(' '))})));
@@ -430,16 +431,99 @@ function familyLanes(output,root,refocus){
  output.append(viewport,note,extra,text);const pz=svgPanZoom(svg,group,W,height);return {zoom:pz.zoom,fit:pz.fit,dispose(){}};
 }
 const TREE_VIEWS={hourglass:hourglassTree,sun:familySun,lanes:familyLanes};
+// The dossier anchors each relationship as "r-" + the SHA-256 of its id (site.py's _anchor), so a step can link to its entry.
+function sha256(text){
+ const K=[],H=[],prime=n=>{for(let d=2;d*d<=n;d++)if(n%d===0)return false;return true;};
+ for(let n=2;K.length<64;n++)if(prime(n)){if(H.length<8)H.push(Math.pow(n,1/2)*2**32|0);K.push(Math.pow(n,1/3)*2**32|0);}
+ const bytes=new TextEncoder().encode(text),len=bytes.length,total=(len+72)>>6<<6,m=new Uint8Array(total),v=new DataView(m.buffer),w=new Int32Array(64),ror=(x,n)=>x>>>n|x<<32-n;
+ m.set(bytes);m[len]=0x80;v.setUint32(total-8,Math.floor(len/2**29));v.setUint32(total-4,len*8>>>0);
+ for(let o=0;o<total;o+=64){
+  for(let i=0;i<64;i++)w[i]=i<16?v.getInt32(o+i*4):(ror(w[i-15],7)^ror(w[i-15],18)^w[i-15]>>>3)+w[i-7]+(ror(w[i-2],17)^ror(w[i-2],19)^w[i-2]>>>10)+w[i-16]|0;
+  let [a,b,c,d,e,f,g,h]=H;
+  for(let i=0;i<64;i++){const t1=h+(ror(e,6)^ror(e,11)^ror(e,25))+(e&f^~e&g)+K[i]+w[i]|0,t2=(ror(a,2)^ror(a,13)^ror(a,22))+(a&b^a&c^b&c)|0;h=g;g=f;f=e;e=d+t1|0;d=c;c=b;b=a;a=t1+t2|0;}
+  [a,b,c,d,e,f,g,h].forEach((x,i)=>H[i]=H[i]+x|0);}
+ return H.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');
+}
+// A relationship reads "subject's <kind> is object" (models.Relationship); a step says it from the side it is walked.
+const PARENT_WORD={father:'father',mother:'mother',adoptive_parent:'adoptive parent',biological_parent:'biological parent'};
+const SAME_WORD={spouse:'spouse',partner:'partner',husband:'spouse',wife:'spouse',marriage:'spouse',sibling:'sibling',brother:'sibling',sister:'sibling',half_sibling:'half-sibling','half-sibling':'half-sibling'};
+// Each step: the words between the two people, and whether it goes up to a parent (1) or down to a child (-1).
+function stepWords(r,from){const k=String(r?.kind||'').toLowerCase(),word=k.replace(/_/g,' ')||'relative',own=r?.subject_id===from,role=r?.pedigree&&r.pedigree!=='birth'?` (${r.pedigree})`:'';
+ if(PARENT_KINDS.includes(k))return own?{words:` is the child${role} of `,dir:1}:{words:` is the ${PARENT_WORD[k]||'parent'}${role} of `,dir:-1};
+ if(k==='child')return own?{words:` is the parent${role} of `,dir:-1}:{words:` is the child${role} of `,dir:1};
+ if(k in SAME_WORD)return {words:` is the ${own||!['husband','wife','brother','sister'].includes(k)?SAME_WORD[k]:k} of `,dir:0};
+ return own?{words:`’s ${word} is `,dir:0}:{words:` is the ${word} of `,dir:0};}
+const kinName=(n,up)=>n<2?(up?'child':'parent'):n===2?(up?'grandchild':'grandparent'):`${n>3?ordinal(n-2)+' ':''}great-grand${up?'child':'parent'}`;
+// Possible links and links the source tree marks as doubtful wait for "Include uncertain relationships" (site.py's uncertain_link).
+const uncertainLink=r=>r?.confidence==='possible'||/uncertain|challenged|disputed|proposed|doubt/i.test(r?.tree_status||'');
+const linkEvidence=r=>links[r.subject_id]?`${links[r.subject_id].split('#')[0]}#r-${sha256(r.id)}`:null;
+// Both people in the address once chosen, so a result can be shared; file:// pages may refuse, and the tool still works.
+function keepAddress(pairs){try{const u=new URL(location.href);for(const [k,v] of pairs){if(v)u.searchParams.set(k,v);else u.searchParams.delete(k);}if(u.href!==location.href)history.replaceState(history.state,'',u.href);}catch(_){/* keep going */}}
+const sentence=(parts,cls)=>{const p=el('p',undefined,cls);parts.forEach(x=>p.append(typeof x==='string'?document.createTextNode(x):x));return p;};
 function comparison(){
  const a=$('[data-compare-a]'),b=$('[data-compare-b]'),out=$('#compare-result');if(!a||!b||!out)return;fillPeople(a);fillPeople(b);preselect(a,b);
- function draw(){out.replaceChildren();const pa=personBy.get(a.value),pb=personBy.get(b.value);if(!pa||!pb){out.append(empty('Choose two people to compare the recorded details.'));return;}const grid=el('div',undefined,'comparison');for(const p of [pa,pb]){const card=el('section',undefined,'card');card.append(el('h2',name(p)));const dl=el('dl');const add=(k,v)=>{const dd=el('dd');dd.append(v);dl.append(el('dt',k),dd);};const many=(items,none)=>items.length?pillList(items):none;add('Birth',shownDates(p)[0]);add('Death',shownDates(p)[1]);add('Names',many((p.names||[]).map(n=>n.value).filter(Boolean),'No name recorded'));add('Places',many([...new Set(pe(p).map(e=>placeBy.get(e.place_id)?.name).filter(Boolean))],'No place recorded'));add('Relatives',many(relativeIds(p.id).map(id=>linkTo(id,name(personBy.get(id)))),'No public relationships recorded'));const cs=claimsByPerson.get(p.id)||[];add('Claims',`${cs.length} recorded · ${cs.filter(c=>c.status==='supported').length} supported`);card.append(dl,personLink(p));grid.append(card);}out.append(grid,el('p','Similar details are research leads. Comparison does not establish identity or authorize a merge.','note'));}
+ const placeLinks=Object.fromEntries(Object.entries({...data.site?.place_routes,...data.site?.place_urls}).map(([id,url])=>[id,window.GENEALOGY_SITE_DATA?root+url:url]));
+ // Every value a row can share, keyed so the two people's sets can be intersected.
+ const facts=p=>({born:year(dates(p)[0]),died:year(dates(p)[1]),names:new Map((p.names||[]).map(n=>[fold(n.value),{label:n.value}])),
+  surnames:new Map((p.names||[]).filter(n=>n.surname).map(n=>[fold(canonical(n.surname)),{label:n.surname}])),
+  places:new Map(pe(p).filter(e=>placeBy.has(e.place_id)).map(e=>[e.place_id,{label:placeBy.get(e.place_id).name||'Unnamed place',href:placeLinks[e.place_id]}])),
+  relatives:new Map(relativeIds(p.id).filter(id=>personBy.has(id)).map(id=>[id,{label:name(personBy.get(id)),href:links[id]}]))});
+ const pills=(items,shared,none)=>{if(!items.size)return document.createTextNode(none);const ul=el('ul',undefined,'value-pills');for(const [key,{label,href}] of items){const li=el('li',undefined,shared.has(key)?'shared':undefined),n=el(href?'a':'span',label);if(href)n.href=href;li.append(n);if(shared.has(key))li.append(el('span','both','pill-note'));ul.append(li);}return ul;};
+ const dateCell=(raw,same)=>{const s=el('span',raw);if(raw!=='Unknown')s.dataset.date=raw;return same?[s,el('span',' · same year','pill-note')]:[s];};
+ function draw(){out.replaceChildren();const pa=personBy.get(a.value),pb=personBy.get(b.value);if(!pa||!pb){out.append(empty('Choose two people to compare the recorded details.'));return;}
+  const fa=facts(pa),fb=facts(pb),both=k=>new Set([...fa[k].keys()].filter(x=>fb[k].has(x)));
+  const shared={names:both('names'),surnames:both('surnames'),places:both('places'),relatives:both('relatives')},born=fa.born!==null&&fa.born===fb.born,died=fa.died!==null&&fa.died===fb.died;
+  const common=[born&&'birth year',died&&'death year',...[['names','name'],['surnames','surname'],['places','place'],['relatives','relative']].filter(([k])=>shared[k].size).map(([k,w])=>`${shared[k].size} ${w}${shared[k].size===1?'':'s'}`)].filter(Boolean);
+  out.append(el('p',common.length?`In common: ${common.length>1?common.slice(0,-1).join(', ')+' and '+common.at(-1):common[0]}. Shared values are marked “both” below.`:'No recorded date, name, place or relative in common.','compare-summary'));
+  const direct=(relationsByPerson.get(pa.id)||[]).find(r=>r.confidence!=='disproved'&&(r.subject_id===pb.id||r.object_id===pb.id));
+  const next=el('a','Find how they are connected →');next.href=`${root}connections.html?a=${encodeURIComponent(pa.id)}&b=${encodeURIComponent(pb.id)}`;
+  out.append(direct?sentence(['Recorded link: ',name(pa),stepWords(direct,pa.id).words,name(pb),` (${relLabel(direct)}). `,next],'meta'):sentence([next],'meta'));
+  const grid=el('div',undefined,'comparison');
+  for(const [p,f] of [[pa,fa],[pb,fb]]){const card=el('section',undefined,'card'),h=el('h2');h.append(personLink(p));card.append(h);const dl=el('dl');
+   const add=(k,v,hit)=>{const dd=el('dd',undefined,hit?'shared':undefined);dd.append(...[v].flat());dl.append(el('dt',k),dd);};
+   add('Born',dateCell(dates(p)[0],born),born);add('Died',dateCell(dates(p)[1],died),died);
+   add('Names',pills(f.names,shared.names,'No name recorded'));add('Surname',pills(f.surnames,shared.surnames,'No surname recorded'));
+   add('Places',pills(f.places,shared.places,'No place recorded'));add('Relatives',pills(f.relatives,shared.relatives,'No public relationships recorded'));
+   const cs=claimsByPerson.get(p.id)||[];add('Claims',`${cs.length} recorded · ${cs.filter(c=>c.status==='supported').length} supported`);card.append(dl);grid.append(card);}
+  out.append(grid,el('p','Similar details are research leads. Comparison does not establish identity or authorize a merge.','note'));
+  keepAddress([['a',pa.id],['b',pb.id]]);}
  a.addEventListener('change',draw);b.addEventListener('change',draw);draw();
 }
 function connections(){
  const a=$('[data-connection-a]'),b=$('[data-connection-b]'),out=$('#connection-result');if(!a||!b||!out)return;fillPeople(a);fillPeople(b);preselect(a,b);
- const adjacency=new Map;for(const r of relationships){if(r.confidence==='disproved'||!personBy.has(r.subject_id)||!personBy.has(r.object_id))continue;for(const [x,y] of [[r.subject_id,r.object_id],[r.object_id,r.subject_id]]){if(!adjacency.has(x))adjacency.set(x,[]);adjacency.get(x).push({id:y,relation:r});}}
- function draw(){out.replaceChildren();if(!personBy.has(a.value)||!personBy.has(b.value)){out.append(empty('Choose two people to explore their recorded connections.'));return;}const queue=[a.value],seen=new Map([[a.value,null]]);let found=false;for(let i=0;i<queue.length;i++){const id=queue[i];if(id===b.value){found=true;break;}for(const n of adjacency.get(id)||[]){if(!seen.has(n.id)){seen.set(n.id,{previous:id,relation:n.relation});queue.push(n.id);}}}if(!found){out.append(empty('No connection found in the public records in this project. This does not establish that the people are unrelated.'));return;}const path=[];let id=b.value;while(id!==null){const step=seen.get(id);path.unshift({id,relation:step?.relation});id=step?.previous??null;}out.append(el('p',`${plural(path.length-1,'recorded connection')} · shortest available path`,'result-count'));const row=el('div',undefined,'connection-path'),steps=el('ol',undefined,'connection-sentences');path.forEach((n,i)=>{if(i){const before=path[i-1].id,words=relPhrase(n.relation,before);const step=el('span',`${words} · `,'connection-step');step.append(...relBadges(n.relation));row.append(step);steps.append(el('li',`${name(personBy.get(before))} ${words} ${name(personBy.get(n.id))} (${relLabel(n.relation)})`));}const box=el('div',undefined,'connection-person');box.append(personLink(personBy.get(n.id)));row.append(box);});out.append(row,steps,el('p','This path follows recorded relationships, including uncertain connections. It is not a proof of kinship.','note'));}
- a.addEventListener('change',draw);b.addEventListener('change',draw);draw();
+ const level=$('[data-connection-evidence]'),partners=$('[data-connection-partners]'),uncertain=$('[data-connection-uncertain]'),params=new URLSearchParams(location.search);
+ // ?evidence= comes from the form, where an unticked box is simply absent; a dossier's ?a= link keeps the defaults.
+ if(level&&params.has('evidence')){if([...level.options].some(o=>o.value===params.get('evidence')))level.value=params.get('evidence');partners.checked=params.has('partners');uncertain.checked=params.has('uncertain');}
+ const settings=()=>({level:level?.value||'any',partners:partners?partners.checked:true,uncertain:uncertain?uncertain.checked:true});
+ const allowed=(r,s)=>r.confidence!=='disproved'&&(s.level==='any'||(s.level==='documented'?r.confidence==='documented':firm(r)))&&(s.partners||!PARTNER_KINDS.includes(String(r.kind||'').toLowerCase()))&&(s.uncertain||!uncertainLink(r));
+ // Breadth-first over the links the settings allow: the fewest steps, each with the relationship that made it.
+ function route(from,to,s){const adjacency=new Map;for(const r of relationships){if(!allowed(r,s)||!personBy.has(r.subject_id)||!personBy.has(r.object_id))continue;for(const [x,y] of [[r.subject_id,r.object_id],[r.object_id,r.subject_id]]){if(!adjacency.has(x))adjacency.set(x,[]);adjacency.get(x).push({id:y,relation:r});}}
+  const queue=[from],seen=new Map([[from,null]]);for(let i=0;i<queue.length&&!seen.has(to);i++)for(const n of adjacency.get(queue[i])||[])if(!seen.has(n.id)){seen.set(n.id,{previous:queue[i],relation:n.relation});queue.push(n.id);}
+  if(!seen.has(to))return null;const path=[];for(let id=to;seen.get(id);id=seen.get(id).previous)path.unshift({from:seen.get(id).previous,to:id,relation:seen.get(id).relation});return path;}
+ function draw(){out.replaceChildren();const pa=personBy.get(a.value),pb=personBy.get(b.value);
+  if(!pa||!pb){out.append(empty(pa||pb?'Choose a second person to find the connection.':'Choose two people to explore their recorded connections.'));return;}
+  if(pa===pb){out.append(empty('Choose two different people.'));return;}
+  const s=settings(),path=route(pa.id,pb.id,s),changed=s.level!=='any'||!s.partners||s.uncertain;
+  keepAddress([['a',pa.id],['b',pb.id],['evidence',changed?s.level:''],['partners',changed&&s.partners?'1':''],['uncertain',changed&&s.uncertain?'1':'']]);
+  if(!path){const loose=route(pa.id,pb.id,{level:'any',partners:true,uncertain:true});out.append(empty(loose?`No connection with these settings. A ${loose.length}-step route exists if you lower the evidence threshold or include partnerships or uncertain relationships.`:'No connection found in the public records in this project. This does not establish that the people are unrelated.'));return;}
+  const steps=path.map(st=>({...st,...stepWords(st.relation,st.from)})),line=steps.every(x=>x.dir===1)||steps.every(x=>x.dir===-1);
+  // Up to parents and then down to children: the turning point is an ancestor they share.
+  const turn=steps.findIndex(x=>x.dir!==1),shared=turn>0&&steps.slice(turn).every(x=>x.dir===-1)?personBy.get(steps[turn].from):null;
+  out.append(line?sentence([personLink(pa),` is a ${kinName(steps.length,steps[0].dir===1)} of `,personLink(pb),'.'],'connection-summary')
+   :sentence([personLink(pa),' and ',personLink(pb),` are connected in ${steps.length} step${steps.length===1?'':'s'}`,...(shared?[', through a shared ancestor, ',personLink(shared)]:[]),'.'],'connection-summary'));
+  out.append(el('p',`${plural(steps.length,'recorded connection')} · shortest available path with these settings`,'result-count'));
+  const list=el('ol',undefined,'connection-path connection-steps');
+  for(const st of steps){const li=el('li'),from=personBy.get(st.from),to=personBy.get(st.to),said=`${name(from)}${st.words}${name(to)}`;li.append(sentence([personLink(from),st.words,personLink(to),'.']));
+   const meta=el('p',undefined,'meta');meta.append(...relBadges(st.relation));const href=linkEvidence(st.relation);if(href){const ev=el('a','Evidence for this link');ev.href=href;ev.setAttribute('aria-label',`Evidence that ${said}`);meta.append(' · ',ev);}li.append(meta);list.append(li);}
+  out.append(list,el('p','This path follows recorded relationships at the chosen evidence threshold. It is not a proof of kinship.','note'));}
+ a.addEventListener('change',draw);b.addEventListener('change',draw);for(const n of [level,partners,uncertain])n?.addEventListener('change',draw);draw();
+}
+// The compare and connections forms: swap the two people, and submit draws in place (the page also updates on each choice).
+function personForms(){
+ for(const form of $$('[data-person-form]')){const a=$('select[name=a]',form),b=$('select[name=b]',form),swap=$('[data-person-swap]',form);if(!a||!b)continue;
+  const box=menu=>menu.closest('.person-picker')?.querySelector('[role=combobox]')||menu;
+  if(swap){swap.hidden=false;swap.addEventListener('click',()=>{const x=a.value;a.value=b.value;b.value=x;a.dispatchEvent(new Event('change',{bubbles:true}));});}
+  form.addEventListener('submit',e=>{e.preventDefault();a.dispatchEvent(new Event('change',{bubbles:true}));if(!a.value||!b.value)box(a.value?b:a).focus();});}
 }
 function timeline(){
  const host=$('[data-timeline]');if(!host)return;const rows=$$('[data-event-id]',host);
@@ -687,7 +771,8 @@ function records(){
  }
 }
 // After tree, comparison and connections, which fill and preselect these menus.
-function personPickers(){for(const [menu,label] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person'],['[data-compare-b]','Find the second person'],['[data-connection-a]','Find the first person'],['[data-connection-b]','Find the second person']])picker($(menu),label);}
+// The form pages' boxes suggest the first two public people as examples.
+function personPickers(){const ex=i=>({hide:true,...(people[i]?{placeholder:`e.g. ${name(people[i])}`}:{})});for(const [menu,label,opts] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person',ex(0)],['[data-compare-b]','Find the second person',ex(1)],['[data-connection-a]','Find the first person',ex(0)],['[data-connection-b]','Find the second person',ex(1)]])picker($(menu),label,opts);}
 // Latest findings: filter the table by words, type, status, person, study and place. Every filter is in the address
 // (?q=&kind=&status=&person=&study=&place=&order=), so the "Findings by study" and "by place" links open a filtered view.
 // A long log's page holds only the newest findings; it then loads data/findings-index.js, so a filter searches them all.
@@ -777,7 +862,7 @@ function findingsTable(){
 }
 // A link into a closed <details> (a claim row on research.html) opens it; browsers that do not do so themselves still show the target.
 function openTargets(){const open=()=>{const target=location.hash.length>1&&document.getElementById(decodeURIComponent(location.hash.slice(1)));let n=target,opened=false;while(n){if(n.tagName==='DETAILS'&&!n.open){n.open=true;opened=true;}n=n.parentElement;}if(opened)target.scrollIntoView();};open();window.addEventListener('hashchange',open);}
-const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers,openTargets];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
+const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers,personForms,openTargets];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
 for(const task of [mapFit,placeCards,placeEvents]){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{records();}catch(error){console.warn('Optional genealogy enhancement unavailable: records',error);}
