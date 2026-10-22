@@ -33,6 +33,7 @@ from .labels import plural  # one rule for every printed count
 INLINE_LIMIT = 300
 LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are on archive pages
 LATEST_SEARCHES = 50  # research.html lists the newest searches; each dossier lists all of its own
+QUESTION_RELATED = 4  # hypotheses and findings about a question's people shown on its card; the rest are on their pages
 FINDINGS_PER_PAGE = 50
 CATALOGUE_PER_PAGE = 100  # people per catalogue page on a large site, in name order
 PLACES_PER_PAGE = 100  # places per region page on a large site
@@ -645,7 +646,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         """research.html's Hypotheses: a lone hypothesis as before, with its points inline."""
         item = lambda r: (f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r["statement"])}</h3>{metadata(r)}{hypothesis_points(r)}<p>'
                           + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>')
-        return '<h2>Hypotheses</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty(with_competing(rows, item, here=True))
+        return '<h2 id="hypotheses">Hypotheses</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty(with_competing(rows, item, here=True))
 
     def research_items(pid: str) -> list[str]:
         """A dossier's Research list; a lone hypothesis shows its points inline."""
@@ -1058,23 +1059,112 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             + "".join(source_card(sources[sid], level=3) for sid in by_type[slug]) + '</section>' for slug in type_order) + '</div>'
     else:
         pages["sources.html"] = sources_intro + '<div data-sources>' + ("".join(source_card(src) for src in sources.values()) or '<p class="empty-state">No public sources recorded.</p>') + '</div>'
-    research = ['<h1>Research notebook</h1><p>Claims and their evidence first, then the work still outstanding: hypotheses, open questions and draft or reviewed findings. <a href="evidence.html">Reading the evidence</a>.</p><h2>Claims</h2>', (
-        f'<p>{len(project["claims"]):,} claims. Each is shown, with its citations and evidence, on the page of the person it concerns.</p>'
-        + "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex" and c["id"] not in home_of)
-        if compact_claims else "".join(claim(c) for c in project["claims"] if c.get("predicate") != "sex") or '<p>No public claims recorded.</p>')]
-    for collection, heading, field in (("hypotheses", "Hypotheses", "statement"), ("questions", "Research questions", "question"), ("findings", "Findings", "conclusion")):
-        rows = sorted(project[collection], key=lambda r: (str(r.get("status", "open")).casefold() not in OUTSTANDING, r["id"]))
-        outstanding = sum(str(r.get("status", "open")).casefold() in OUTSTANDING for r in rows)
-        if collection == "hypotheses":
-            research.append(hypotheses_section(rows, outstanding))
-            continue
-        if collection == "findings" and compact_findings:
+    # research.html leads with the work still open: a count strip, the open
+    # questions as cards, then hypotheses, findings, the claims and the log.
+    # A claim's full card lives on its subject's dossier; on a small site the
+    # notebook keeps each claim (and each assessment) as a short anchored row
+    # so links into research.html still land on it.
+    outstanding_rows = lambda rows: sum(str(r.get("status", "open")).casefold() in OUTSTANDING for r in rows)
+    research_by_id = {r["id"]: r for collection in ("questions", "findings", "hypotheses") for r in project[collection]}
+    PRIORITY_ORDER = {"high": 0, "normal": 1, "low": 2}
+
+    def research_counts() -> str:
+        counts = [("open-questions", outstanding_rows(project["questions"]), "open question", "open questions"),
+                  ("hypotheses", outstanding_rows(project["hypotheses"]), "open hypothesis", "open hypotheses"),
+                  ("findings", outstanding_rows(project["findings"]), "draft finding", "draft findings"),
+                  ("research-log", len(project["searches"]), "search logged", "searches logged")]
+        return ('<nav class="research-counts" aria-label="Notebook sections"><ul>' + "".join(
+            f'<li><a href="#{key}"><strong>{n:,}</strong> {one if n == 1 else many}</a></li>' for key, n, one, many in counts) + "</ul></nav>")
+
+    def linked_label(rid: str) -> str:
+        """A linked record by what it says, never by its id."""
+        if rid in evidence_by_id:
+            c = claims_by_id.get(evidence_by_id[rid].get("claim_id"))
+            return f'Evidence for {c["predicate"]}: {c["value"]}' if c else "Evidence assessment"
+        if rid in claims_by_id:
+            return changed_label(rid)
+        if rid in research_by_id:
+            r = research_by_id[rid]
+            return str(r.get("question") or r.get("statement") or r.get("conclusion"))
+        return readable(rid)
+
+    def question_card(row: dict[str, Any]) -> str:
+        """An open question as a card: who it concerns, its plan, and what is linked to it."""
+        related = list(dict.fromkeys(row.get("related_ids", [])))
+        who = [rid for rid in related if rid in people_urls]
+        in_studies = list(dict.fromkeys([rid for rid in related if rid in study_urls] + [s["id"] for s in studies_by_subject.get(row["id"], [])]))
+        linked = [record_link(rid) if rid in citations else ref(rid, label=linked_label(rid))
+                  for rid in related if rid not in people_urls and rid not in study_urls and rid in record_routes]
+        # Hypotheses and findings about the same people, open ones first: the work a reader would check next.
+        nearby = sorted(dict.fromkeys(r["id"] for pid in who for r in research_by_subject[pid] if "question" not in r and r["id"] not in related),
+                        key=lambda rid: str(research_by_id[rid].get("status", "open")).casefold() not in OUTSTANDING)
+        priority = str(row.get("priority") or "normal")
+        rows_of = lambda label, refs: f'<p class="question-links"><strong>{label}:</strong> ' + " · ".join(refs) + "</p>" if refs else ""
+        extra = [f"<li>{html}</li>" for html in linked] + [f'<li>{ref(rid, label=linked_label(rid))}{metadata(research_by_id[rid])}</li>' for rid in nearby[:QUESTION_RELATED]]
+        more = len(nearby) - QUESTION_RELATED
+        return (f'<li class="card question-card" id="{_anchor(row["id"])}" data-status="{_text(row.get("status", ""))}" data-priority="{_text(priority)}">'
+                f'<p class="eyebrow">{_text(priority.replace("_", " ").capitalize())} priority</p><h3>{_text(row["question"])}</h3><p>{metadata(row).strip()}</p>'
+                + rows_of("People", [ref(pid) for pid in who]) + rows_of("Study" if len(in_studies) == 1 else "Studies", [ref(sid, label=studies[sid]["title"]) for sid in in_studies if sid in studies])
+                + question_next(row)
+                + (f'<details class="question-evidence"><summary>Linked evidence and related research</summary><ul>{"".join(extra)}</ul>'
+                   + (f'<p class="meta">{more:,} more on the people\'s own pages.</p>' if more > 0 else "") + "</details>" if extra else "")
+                + "</li>")
+
+    def questions_section() -> str:
+        rows = sorted(project["questions"], key=lambda r: (PRIORITY_ORDER.get(str(r.get("priority") or "normal").casefold(), 1), r["id"]))
+        open_rows = [r for r in rows if str(r.get("status", "open")).casefold() in OUTSTANDING]
+        closed = [f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}">{_text(r["question"])}{metadata(r)}'
+                  + (' <span class="meta">' + " · ".join(ref(rid) for rid in dict.fromkeys(r.get("related_ids", [])) if rid in people_urls) + "</span>" if any(rid in people_urls for rid in r.get("related_ids", [])) else "")
+                  + "</li>" for r in rows if r not in open_rows]
+        return ('<h2 id="open-questions">Open questions</h2><p>What is still being worked out, highest priority first: who each question concerns, what would answer it and the next record to check.</p>'
+                + (f'<ul class="question-cards">{"".join(question_card(r) for r in open_rows)}</ul>' if open_rows else '<p class="empty-state">No open research questions.</p>')
+                + (f'<h3 id="closed-questions">Answered or closed questions</h3><ul class="record-list closed-questions">{"".join(closed)}</ul>' if closed else ""))
+
+    def findings_section() -> str:
+        rows = sorted(project["findings"], key=lambda r: (str(r.get("status", "open")).casefold() not in OUTSTANDING, r["id"]))
+        outstanding = outstanding_rows(rows)
+        if compact_findings:
             # The findings log and its archive hold every finding; the notebook keeps the open work.
-            research.append(f'<h2>{heading}</h2><p class="result-count">{outstanding} of {len(rows):,} open or in draft. All findings are in the <a href="findings.html">findings log</a>.</p>'
-                            + empty([f'<li data-status="{_text(r.get("status", ""))}">{ref(r["id"], label=r[field])}{metadata(r)}</li>' for r in rows if str(r.get("status", "open")).casefold() in OUTSTANDING], "No open or draft findings."))
-            continue
-        research.append(f'<h2>{heading}</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft</p>' if rows else "") + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r[field])}</h3>{metadata(r)}{finding_kind(r) if collection == "findings" else ""}{finding_details(r) if collection == "findings" else ""}{question_next(r) if collection == "questions" else ""}<p>' + ", ".join(ref(rid) for rid in r.get("related_ids", [])) + '</p><p>' + ", ".join(ref(eid, label="Evidence assessment") for eid in r.get("evidence_ids", [])) + '</p></li>' for r in rows]))
-    pages["research.html"] = "".join(research)
+            return (f'<h2 id="findings">Findings</h2><p class="result-count">{outstanding} of {len(rows):,} open or in draft. All findings are in the <a href="findings.html">findings log</a>.</p>'
+                    + empty([f'<li data-status="{_text(r.get("status", ""))}">{ref(r["id"], label=r["conclusion"])}{metadata(r)}</li>' for r in rows if str(r.get("status", "open")).casefold() in OUTSTANDING], "No open or draft findings."))
+        line = lambda r: " · ".join(part for part in (", ".join(ref(rid, label=linked_label(rid)) for rid in r.get("related_ids", []) if rid in record_routes),
+                                                       ", ".join(ref(eid, label=linked_label(eid)) for eid in r.get("evidence_ids", []) if eid in record_routes)) if part)
+        return ('<h2 id="findings">Findings</h2>' + (f'<p class="result-count">{outstanding} of {len(rows)} open or in draft. The <a href="findings.html">findings log</a> lists them by date.</p>' if rows else "")
+                + empty([f'<li id="{_anchor(r["id"])}" data-status="{_text(r.get("status", ""))}"><h3>{_text(r["conclusion"])}</h3><p class="finding-meta">'
+                         + (f'<span class="meta">{_text(r["recorded_on"])}</span>' if r.get("recorded_on") else "") + f'{metadata(r)}{finding_kind(r)}</p>{finding_details(r)}'
+                         + (f'<p class="meta">{line(r)}</p>' if line(r) else "") + "</li>" for r in rows]).replace('class="record-list"', 'class="record-list findings-compact"', 1))
+
+    def claim_row(c: dict[str, Any]) -> str:
+        """A claim on research.html as one line, linked to its full card; its assessments keep their anchors."""
+        home = people_urls[c["subject_id"]]
+        assessed = [f'<a id="{_anchor(e["id"])}" href="{home}#{_anchor(e["id"])}">{"Supports" if e.get("supports", True) else "Challenges"}: '
+                    + _text(sources.get(citations.get(e.get("citation_id"), {}).get("source_id"), {}).get("title", "a cited record")) + "</a>" for e in evidence_by_claim[c["id"]]]
+        return (f'<li id="{_anchor(c["id"])}"><a href="{home}#{_anchor(c["id"])}">{_text(c["predicate"])}: {_text(c["value"])}</a>{metadata(c)}{change_notes(c["id"])}'
+                + ('<span class="claim-assessments meta">' + "; ".join(assessed) + "</span>" if assessed else "") + "</li>")
+
+    def claims_section() -> str:
+        shown = [c for c in project["claims"] if c.get("predicate") != "sex"]
+        if compact_claims:
+            return ('<h2 id="claims">Claims</h2>' + f'<p>{len(project["claims"]):,} claims. Each is shown, with its citations and evidence, on the page of the person it concerns.</p>'
+                    + "".join(claim(c) for c in shown if c["id"] not in home_of))
+        if not shown:
+            return '<h2 id="claims">Claims</h2><p>No public claims recorded.</p>'
+        by_person: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for c in shown:
+            if c["subject_id"] in people_urls:
+                by_person[c["subject_id"]].append(c)
+        order = sorted(by_person, key=lambda pid: (person_name(pid).casefold(), pid))
+        groups = "".join(f'<details class="claims-person"><summary>{_text(person_name(pid))} <span class="meta">· {len(by_person[pid])} claim{"" if len(by_person[pid]) == 1 else "s"}</span></summary>'
+                         f'<p class="meta">Full records and assessments are on {ref(pid, label=person_name(pid) + chr(8217) + "s page")}.</p><ul class="claim-rows">'
+                         + "".join(claim_row(c) for c in by_person[pid]) + "</ul></details>" for pid in order)
+        return ('<h2 id="claims">Claims</h2>' + f'<p>{len(shown):,} claim{"" if len(shown) == 1 else "s"} about {len(order):,} {"person" if len(order) == 1 else "people"}, grouped by person. '
+                'Each is shown in full, with its records and assessments, on the page of the person it concerns.</p>'
+                + groups + "".join(claim(c) for c in shown if c["subject_id"] not in people_urls))
+
+    pages["research.html"] = ('<h1>Research notebook</h1><p>The work still open comes first: questions, then hypotheses being tested and findings, then the claims and the research log. '
+                              '<a href="evidence.html">Reading the evidence</a>.</p>' + research_counts() + questions_section()
+                              + hypotheses_section(sorted(project["hypotheses"], key=lambda r: (str(r.get("status", "open")).casefold() not in OUTSTANDING, r["id"])), outstanding_rows(project["hypotheses"]))
+                              + findings_section() + claims_section())
     for route, heading, hook in (("compare.html", "Compare people", "compare"), ("connections.html", "Find a connection", "connection")):
         pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + browse_people
     def record_label(rid: str) -> str:

@@ -144,7 +144,8 @@ class ReadableSiteTests(unittest.TestCase):
     def test_references_name_places_and_events_not_their_ids(self):
         research = self.page("research.html")
         question = research[research.index("Where was Ada buried?"):]
-        question = question[:question.index("</li>")]
+        # The card nests its linked evidence in its own list, so it ends at the next card or heading.
+        question = question[:min(i for i in (question.find('<li class="card question-card"'), question.find("<h2")) if i > 0)]
         self.assertIn(">Lanternford (fictional)</a>", question)
         self.assertIn(">Death of Ada Fable, c. 1808</a>", question)
         self.assertNotIn(">place:lantern<", research)

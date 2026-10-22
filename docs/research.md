@@ -85,6 +85,8 @@ genealogy --project my-family record add ResearchQuestion --input question.json
 
 On **Research** and in the dossier of each related person, an open question shows "What would answer this" and "Next record to check". A blank field prints "Not yet identified", so readers can see which steps are still unplanned. The toolkit never fills a blank in for you. Once a question is answered or closed (any other status), neither line is shown. There is no `question add` command: add questions with `record add`, and to change one, edit its JSON.
 
+**Research** (`research.html`) opens with a count of open questions, open hypotheses, draft findings and searches logged, then shows each open or draft question as a card, `priority` `high` first, then `normal` and `low`. A card shows the people it concerns, any study that lists or mentions it, the plan above, and under **Linked evidence and related research** the other records in its `related_ids` (claims, evidence, sources, findings) and up to four hypotheses and findings about the same people. Answered and closed questions follow the cards as a short list. Hypotheses, findings, the claims (one line each, grouped by person, with the full record table on the person's page) and the research log come after.
+
 ## Log a search
 
 Record each search you make, and especially the ones that found nothing. A negative result is evidence too: it shows which records have been checked, so neither you nor the next researcher repeats the search, and it is part of showing that a search was reasonably exhaustive.

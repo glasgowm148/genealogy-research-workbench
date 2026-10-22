@@ -639,7 +639,9 @@ function placeEvents(){
 }
 // After tree, comparison and connections, which fill and preselect these menus.
 function personPickers(){for(const [menu,label] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person'],['[data-compare-b]','Find the second person'],['[data-connection-a]','Find the first person'],['[data-connection-b]','Find the second person']])picker($(menu),label);}
-const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
+// A link into a closed <details> (a claim row on research.html) opens it; browsers that do not do so themselves still show the target.
+function openTargets(){const open=()=>{const target=location.hash.length>1&&document.getElementById(decodeURIComponent(location.hash.slice(1)));let n=target,opened=false;while(n){if(n.tagName==='DETAILS'&&!n.open){n.open=true;opened=true;}n=n.parentElement;}if(opened)target.scrollIntoView();};open();window.addEventListener('hashchange',open);}
+const tasks=[overview,catalogue,tree,comparison,connections,timeline,sourceSearch,studySearch,map,bookmarks,personPickers,openTargets];for(const task of tasks){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 try{siteSearch();}catch(error){console.warn('Optional genealogy enhancement unavailable: siteSearch',error);}
 for(const task of [mapFit,placeCards,placeEvents]){try{task();}catch(error){console.warn('Optional genealogy enhancement unavailable:',task.name,error);}}
 })();
