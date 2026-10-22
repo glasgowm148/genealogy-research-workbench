@@ -64,7 +64,7 @@ An adapter returns `AdapterBatch`: typed neutral entities, private audit observa
 1. Set the version in `pyproject.toml` and date its `CHANGELOG.md` entry.
 2. Run the unit and browser checks (with `GENEALOGY_AXE_PATH`), then build the wheel and source distribution.
 3. Install the wheel outside the checkout and check `init → import → build → check-links`.
-4. Inspect the fictional demo and README screenshots, and validate documentation links.
+4. Inspect the fictional demo, refresh the README screenshots with `python tools/readme_screenshots.py` (needs the browser extras) and check them, and validate documentation links.
 5. Review the release for real research, credentials, private captures and generated artifacts.
 6. Commit, tag `vX.Y.Z`, push `main` and the tag, then publish the GitHub release:
 

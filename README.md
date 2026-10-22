@@ -24,28 +24,43 @@ Imports and builds run on your computer with **no runtime dependencies or networ
 
 ## What you can build
 
-![The fictional Alderwick family research website](docs/images/overview.webp)
+![The fictional Alderwick family research website: a home page with the tree at a glance, question-led entry cards and the latest findings](docs/images/overview.webp)
 
-| Explore the tree | Follow the evidence |
+| Find a person | Read a dossier |
 | --- | --- |
-| ![Interactive family tree with recorded relationship labels](docs/images/tree.webp) | ![Research notebook with claims, citations, hypotheses and questions](docs/images/research.webp) |
-| Pan, zoom and focus on a family. Uncertain links stay visible. | Keep sources, assessments and outstanding questions in view. |
-| ![Person dossier showing parents, partners, children and siblings](docs/images/dossier.webp) | ![Written study with linked people and a current conclusion](docs/images/study.webp) |
-| Read a family at a glance, including recorded step and adoptive roles. | Explain what you investigated, what the records show and what you conclude. |
+| ![The people catalogue: a research table with birth, death, places, spouse, father and mother, and seven filter menus](docs/images/people.webp) | ![A person dossier opening with a hero card of vitals, actions and the latest finding](docs/images/dossier.webp) |
+| A research table of everyone — dates, places, spouse, father and mother, each link with its evidence badge — behind seven menus: Name, Relatives, Dates, Places, Evidence, Filters and your tree. | Vitals, the latest finding and what to do next, then names, family with the reason for every link, events, studies and research. |
+| ![Interactive family tree, here the hourglass view around one person](docs/images/tree.webp) | ![The research notebook: open questions as cards, then hypotheses, findings, claims and the research log](docs/images/research.webp) |
+| Whole tree, family focus, branch cards, hourglass, family sun and lanes. Uncertain links stay visible. | Open questions first, with what would answer them; then hypotheses, findings, claims and every search made, including the ones that found nothing. |
 
 <details>
-<summary><b>More views: people, places, branches and evidence</b></summary>
+<summary><b>More views: studies, findings, records, branches, places, evidence, statistics and the data</b></summary>
 
-| Find and explore | Read with context |
+| Write it up | Follow the evidence |
 | --- | --- |
-| ![Searchable people catalogue with surname filters and life dates](docs/images/people.webp) | ![Surname groups and connected families](docs/images/branches.webp) |
-| Search names, relatives, events and places; filter, sort and paginate. | Browse surname groups and recorded family connections. |
-| ![Offline map using coordinates supplied in the imported data](docs/images/places.webp) | ![Reader's guide to confidence, status and relationship labels](docs/images/evidence.webp) |
-| Explore a timeline and place list, with a map where coordinates are supplied. | See what confidence labels mean, including “Unassessed tree link”. |
+| ![A written study with its type, counts, a locator map, limits and grouped links](docs/images/study.webp) | ![The findings log as a filterable table with a legend and feed link](docs/images/findings.webp) |
+| Why a question was investigated, what the records show, what it does not establish, and who and where it concerns. | Every dated conclusion, filterable by words, type, status, person, study and place; an Atom feed when a site has an address. |
+| ![The records page: one row per cited record with year, people, type, place and strongest assessment](docs/images/records.webp) | ![Reading the evidence: every badge and line explained, from strongest to weakest](docs/images/evidence.webp) |
+| Browse every cited record; search, filter by type, year and evidence, and sort. | One badge system across the site: confidence, grade, status, record quality and finding type, each linked to its meaning. |
+| ![Families and branches: surname groups with their people, years and places](docs/images/branches.webp) | ![Places: summary cards, a region filter and an offline map from supplied coordinates](docs/images/places.webp) |
+| Surname groups (spelling variants folded together) and connected families. | Place cards and pages, grouped by the region you file them under, with a map wherever coordinates are supplied. No tiles, no network. |
+| ![Statistics: a panel of headline figures and charts of births by century, names and places](docs/images/statistics.webp) | ![About the data: what the site counts, why pages count differently, and what it leaves out](docs/images/about-data.webp) |
+| What is in the collection and how well it is evidenced. | How the figures were gathered and graded, what every label means, and a dated change log of what moved. |
 
 </details>
 
-The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md), captured on 19 October 2026 at 1440 × 1000. They contain no real family data. Core people, source, and research content remains readable with JavaScript disabled; interactive tools use local JavaScript.
+The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md), captured on 22 October 2026 at 1440 × 1000 with `python tools/readme_screenshots.py`. They contain no real family data. Every page is readable with JavaScript disabled; the menus, search, maps and trees are local JavaScript with no network requests.
+
+### What a site contains
+
+| Area | Pages |
+| --- | --- |
+| People | Find a person (the catalogue), person dossiers, families and branches, possible duplicates (optional) |
+| Family | Family tree (six views), timeline, find a connection, compare two people |
+| Places | Map and place list, one page per place, statistics |
+| Records | All cited records, sources and citations, reading the evidence |
+| Research | Research notebook, studies, latest findings, research progress |
+| About | Site index and downloads (JSON, CSV, GeoJSON, GEDCOM, feeds), about the data, change log, corrections |
 
 ## Get started
 
@@ -115,13 +130,13 @@ The demo has 42 invented people, four generations, sources, uncertainty, and res
 
 | From a GEDCOM or OneTree export | With additional research |
 | --- | --- |
-| People, recorded names, supported event fields, and family links | Evidence-based identity and relationship assessments |
-| Search, individual dossiers, whole tree, family focus, branch cards and surname groups | Written family studies and a dated findings log, once you write them |
-| Timelines and place lists; maps when coordinates are supplied | Reviewed coordinates with their precision, and archive research |
-| Comparison and shortest recorded connection paths | Resolution of namesakes and competing hypotheses |
-| GEDCOM bibliography and citation locators after explicit review | Source transcriptions, images, and record-by-record analysis |
-| Step/adoptive roles and the tree's own uncertainty marks, shown as such | Assessed confidence for each relationship, with its reasoning |
-| Public JSON, CSV, GeoJSON and a filtered GEDCOM download | Derived DNA findings supplied separately and reviewed |
+| People, recorded names, supported event fields, and family links | Evidence-based identity and relationship assessments, each with its reason and limits |
+| Find a person, dossiers, six tree views, branch cards, surname groups and statistics | Written studies, a dated findings log with what each finding changed, and a research log of searches made |
+| Timelines, place cards and pages; maps when coordinates are supplied | Reviewed coordinates with their precision, the regions you file places under, and archive research |
+| Comparison and shortest recorded connection paths, with an evidence threshold | Resolution of namesakes and competing hypotheses, with the points for and against |
+| GEDCOM bibliography and citation locators after explicit review | Record quality, abstracts, source transcriptions and record-by-record analysis |
+| Step/adoptive roles and the tree's own uncertainty marks, shown as such | Assessed confidence for each relationship, in your own grades if you define them |
+| Public JSON, CSV, GeoJSON and a filtered GEDCOM download; a change log and progress history | Open questions with what would answer them and the next record to check; corrections from readers |
 
 An export supplies recorded tree assertions. It cannot manufacture missing sources, prove parentage, recover photographs, or infer DNA results. OneTree biography text is retained privately; arbitrary WikiTree markup is not converted into independently verified citations. [Supported formats and limitations](docs/imports.md) describe exactly what is imported.
 
@@ -168,12 +183,14 @@ All generated site links are relative, so the site works under a subdirectory an
 | [Developer guide](docs/development.md) | Tests, package builds, adapters, and release checklist |
 | [Changelog](CHANGELOG.md) | Changes in the reusable package |
 
+To make the site read as your project's, set the surname, the online tree you work from, spelling variants, your own confidence grades, a contact address for corrections and a base address for feeds in `genealogy.toml`; [build and deployment](docs/deployment.md) lists every setting.
+
 ```sh
 python -m pip install -e '.[dev]'
 make check
 python -m build
 ```
 
-Browser checks are optional: install `.[browser]`, run `python -m playwright install chromium`, then `make browser-check`. Tests and demos use fictional records only.
+Browser checks are optional: install `.[browser]`, run `python -m playwright install chromium`, then `make browser-check`. The same extras let `python tools/readme_screenshots.py` refresh the screenshots above from the demo. Tests and demos use fictional records only.
 
 Licensed under [MIT](LICENSE). The software license does not grant rights to records, photographs, or other material you import.
