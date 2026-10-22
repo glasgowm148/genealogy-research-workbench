@@ -15,7 +15,7 @@ from genealogy.case import CaseStore
 from genealogy.config import ProjectConfig
 from genealogy.models import AccessLevel, Event, LivingStatus, Name, Person
 from genealogy.server import UploadServer
-from genealogy.site import build_site
+from genealogy.site import SOURCES_PER_PAGE, build_site
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -282,7 +282,7 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.goto(large + 'places.html', wait_until='networkidle')
         self.assertEqual(people // 2, self.page.locator('#map-output .map-point').count())
         self.page.goto(large + 'sources.html', wait_until='networkidle')
-        self.assertIn(f'{people + 1:,} sources, 100 on this page', self.page.locator('.result-count').inner_text())
+        self.assertIn(f'{people + 1:,} sources, {SOURCES_PER_PAGE} on this page', self.page.locator('.result-count').inner_text())
         self.page.get_by_role('searchbox', name='Search sources').fill('volume 0390')
         self.assertFalse(self.page.locator('[data-sources]').is_visible())
         self.assertFalse(self.page.locator('[data-source-pages]').is_visible())

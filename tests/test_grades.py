@@ -76,8 +76,10 @@ class GradeTests(unittest.TestCase):
             out = Path(directory) / "site"
             build_site(case(), config(Path(directory)), out)
             dossier = next(p for p in (out / "people").glob("*.html") if 'data-person-id="ada"' in p.read_text()).read_text()
-            self.assertIn('href="../evidence.html#grade-strongly_supported" data-confidence="probable" data-grade="strongly_supported">Strongly supported (80%)</a>', dossier)
-            self.assertIn('href="../evidence.html#grade-uncertain" data-status="supported" data-confidence="possible" data-grade="uncertain">Supported · Uncertain</a>', dossier)
+            self.assertIn('href="../evidence.html#grade-strongly_supported" data-confidence="probable" data-grade="strongly_supported">'
+                          '<span class="badge-glyph" aria-hidden="true">~</span>Strongly supported (80%)</a>', dossier)
+            self.assertIn('href="../evidence.html#grade-uncertain" data-status="supported" data-confidence="possible" data-grade="uncertain">'
+                          '<span class="badge-glyph" aria-hidden="true">?</span>Supported · Uncertain</a>', dossier)
             guide = (out / "evidence.html").read_text()
             self.assertIn("<h2>This project&#x27;s grades</h2>", guide)
             self.assertIn('<dt id="grade-strongly_supported">Strongly supported</dt><dd>Several independent records agree, short of proof. '

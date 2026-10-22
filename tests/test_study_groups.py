@@ -155,10 +155,10 @@ class StudyPageTests(unittest.TestCase):
     def test_a_text_alternative_lists_every_link_with_its_label_note_and_records(self):
         details = self.text(re.search(r'<details class="groups-text">.*?</details>', self.page).group(0))
         self.assertIn("Diagram of 3 groups and 3 links between them, as text", details)
-        self.assertIn("The Mill Lane household → The Quay Street lodgers Strongly supported The same witness signs both entries. "
+        self.assertIn("The Mill Lane household → The Quay Street lodgers ~ Strongly supported The same witness signs both entries. "
                       "Records: Invented harbour register (entry 40) , Invented harbour register (entry 12)", details)
-        self.assertIn("The Quay Street lodgers → Chapel baptisms Possible", details)
-        self.assertIn("The Mill Lane household → Chapel baptisms Disproved", details)
+        self.assertIn("The Quay Street lodgers → Chapel baptisms ? Possible", details)
+        self.assertIn("The Mill Lane household → Chapel baptisms ✕ Disproved", details)
         self.assertIn('href="../evidence.html#grade-strongly_supported"', self.page)
 
     def test_records_still_to_inspect_are_listed_as_written(self):

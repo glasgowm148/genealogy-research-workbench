@@ -149,12 +149,15 @@ class RenderingTests(unittest.TestCase):
 
     def test_findings_log_research_page_and_feed_carry_a_chip_per_change(self):
         out = self.build(case(history()))
-        chip = '<span class="badge change" data-after="documented" data-before="possible">Possible → Documented</span>'
+        chip = ('<a class="badge evidence-badge badge-documented change" href="evidence.html#confidence-documented" data-after="documented" data-before="possible">'
+                '<span class="badge-glyph" aria-hidden="true">✓</span>Possible → Documented</a>')
         for page in ("findings.html", "research.html"):
             text = (out / page).read_text()
             self.assertIn(chip, text)
-            self.assertIn('<span class="badge change" data-after="strongly_supported" data-before="possible">Possible → Strongly supported</span>', text)
-            self.assertIn('<span class="badge change" data-after="probable">Recorded as Probable</span>', text)
+            self.assertIn('<a class="badge evidence-badge badge-probable change" href="evidence.html#grade-strongly_supported" data-after="strongly_supported" data-before="possible">'
+                          '<span class="badge-glyph" aria-hidden="true">~</span>Possible → Strongly supported</a>', text)
+            self.assertIn('<a class="badge evidence-badge badge-probable change" href="evidence.html#confidence-probable" data-after="probable">'
+                          '<span class="badge-glyph" aria-hidden="true">~</span>Recorded as Probable</a>', text)
             self.assertIn(f'<a href="tree.html#{_anchor("ada-parent")}">Bram Fable is a parent of Ada Fable</a> {chip} <span class="meta">Baptism entry found.</span>', text)
         feed = (out / "findings.xml").read_text()
         self.assertIn("Changed: Bram Fable is a parent of Ada Fable: Possible → Documented; Ada Fable and Cara Fable are spouses: "

@@ -67,7 +67,7 @@ class EvidenceTableTests(unittest.TestCase):
             self.assertIn('Invented census</a><br><span class="meta">schedule 12</span>', household)
             self.assertIn('<td data-label="What it says">Ada Fable, wife, of Mill Lane.</td>', household)  # abstract before quotation
             self.assertIn("<strong>Supports</strong>: Names her as wife.", household)
-            self.assertIn('class="badge evidence-badge"', household)
+            self.assertIn('class="badge evidence-badge badge-', household)
             self.assertIn('<td data-label="Limitation">The return gives no age &lt;or&gt; mother.</td>', household)
             self.assertIn(f'<tr id="{_anchor("ev-entry")}">', entry)
             self.assertIn('<td data-label="What it says"><q>Ada Fable, spinster</q></td>', entry)

@@ -171,6 +171,7 @@ def guide_entries(grades: Mapping[str, Mapping[str, str]] | None = None) -> list
     rows += [(f"status-{key}", RESEARCH_STATUS[key], meaning, "Research status") for key, meaning in RESEARCH_MEANINGS.items()]
     rows.append(("research-status", "Other statuses", "A project's own wording for the state of a question, hypothesis, finding or study, printed as recorded.", "Research status"))
     rows.append(("not-yet-identified", "Not yet identified", "Printed on an open question when the researcher has not yet recorded what evidence would answer it, or which record to check next. It marks a gap in the plan, not a search that found nothing.", "Research status"))
+    rows.append(("finding-kind", "Finding type", "The researcher's own grouping for a finding, such as vital, relationship or record. It says what a finding is about, not how far it is believed.", "Research status"))
     rows.append(("pedigree", "Step, adoptive, foster, non-biological", "The supplied nature of a parent link. A link without one is a recorded parent whose nature was not stated.", "Relationship roles"))
     rows.append(("recorded-sibling", "Recorded sibling", "A sibling or half-sibling link recorded in its own right, not only inferred from parents in common. It carries its own label, and a sibling who also shares recorded parents is listed once, with that label.", "Relationship roles"))
     rows.append(("alternatives", "Competing parent records", "More recorded parents than one person can have by birth. Each is kept with its own label until research resolves it.", "Relationship roles"))
@@ -186,3 +187,29 @@ PLURALS = {"person": "people", "study": "studies", "family": "families", "child"
 def plural(n: int, word: str, many: str | None = None) -> str:
     """ "1 person", "2 people", "1,204 evidence assessments": the count and the right form of the word."""
     return f"{n:,} {word if n == 1 else many or PLURALS.get(word) or word + 's'}"
+# One badge system: each label's guide entry decides its family, so a pill is
+# coloured and marked by what it links to. Glyphs mark evidence strength only;
+# a type or a research status says what something is, not how far it is believed.
+BADGE_GLYPHS = {"documented": "✓", "probable": "~", "possible": "?", "unassessed": "○", "conflict": "✕", "tree": "◇", "kind": "", "status": ""}
+CONFIDENCE_FAMILY = {"documented": "documented", "probable": "probable", "possible": "possible", "disproved": "conflict", "unknown": "unassessed"}
+STATUS_FAMILY = {"supported": "documented", "asserted": "unassessed", "disputed": "conflict", "rejected": "conflict"}
+
+
+def badge_family(anchor: str, grades: Mapping[str, Mapping[str, str]] | None = None) -> str:
+    """The family (colour and glyph) of the badge linking to a guide entry."""
+    if anchor == "confidence-tree-link":
+        return "unassessed"
+    if anchor.startswith("confidence-"):
+        return CONFIDENCE_FAMILY.get(anchor[len("confidence-"):], "unassessed")
+    if anchor.startswith("grade-"):
+        return CONFIDENCE_FAMILY.get(str((grades or {}).get(anchor[len("grade-"):], {}).get("confidence")), "unassessed")
+    if anchor.startswith("status-"):
+        return STATUS_FAMILY.get(anchor[len("status-"):], "status")
+    if anchor == "tree-marked":
+        return "tree"
+    return "kind" if anchor.startswith(("quality-", "information-")) or anchor == "finding-kind" else "status"
+
+
+def assessment_anchor(value: Any, grades: Mapping[str, Mapping[str, str]] | None = None) -> str:
+    """The guide entry for a stored confidence or grade, such as a finding's before or after value."""
+    return f"grade-{value}" if grades and value in grades else f"confidence-{str(value or 'unknown').casefold()}"

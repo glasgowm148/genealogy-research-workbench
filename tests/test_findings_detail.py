@@ -48,7 +48,7 @@ class FindingDetailTests(unittest.TestCase):
             out = build(c, directory)
             log = (out / "findings.html").read_text()
             self.assertIn("<strong>Limits:</strong> The register is a later copy.", log)
-            self.assertIn('data-kind="vital">Vital</span>', log)
+            self.assertIn('<a class="badge evidence-badge badge-kind finding-kind" href="evidence.html#finding-kind" data-kind="vital">Vital</a>', log)
             self.assertIn("Invented parish register (1801, entry 4)", log)
             self.assertIn("The register is a later copy.", (out / "research.html").read_text())
             self.assertIn("Limits: The register is a later copy.", (out / "findings.xml").read_text())

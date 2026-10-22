@@ -134,19 +134,20 @@ class FamilyReasonTests(unittest.TestCase):
         rejected = self.section("ada", "Rejected and superseded links")
         self.assertIn("Assessed evidence contradicts these links. They are kept, with their reasons, so the reasoning stays visible.", text(rejected))
         corin = self.item("ada", "Rejected and superseded links", "Corin Vale")
-        self.assertIn('href="../evidence.html#confidence-disproved" data-confidence="disproved">Disproved</a>', corin)
+        self.assertIn('<a class="badge evidence-badge badge-conflict" href="../evidence.html#confidence-disproved" data-confidence="disproved">'
+                      '<span class="badge-glyph" aria-hidden="true">✕</span>Disproved</a>', corin)
         self.assertIn("<strong>Reason:</strong> Corin was buried two years before Ada&#x27;s birth.", corin)
         # The list comes last in the family section, after the siblings.
         family = self.dossier("ada").split('<h2 id="family-heading">Family</h2>', 1)[1].split("</section>", 1)[0]
         self.assertEqual(["Parents", "Spouses and partners", "Children", "Siblings", "Rejected and superseded links"], re.findall(r"<h3>(.*?)</h3>", family))
         # Every link is still listed under "All recorded relationships".
-        self.assertRegex(text(self.dossier("ada").split('<h2 id="relationships">All recorded relationships</h2>', 1)[1]), r"Corin Vale is the father of Ada Fable Disproved")
+        self.assertRegex(text(self.dossier("ada").split('<h2 id="relationships">All recorded relationships</h2>', 1)[1]), r"Corin Vale is the father of Ada Fable ✕\s*Disproved")
 
     def test_a_grade_counting_as_disproved_is_set_apart_with_its_wording(self):
         self.assertNotIn("Fen Fable", self.section("ada", "Children"))
         fen = self.item("ada", "Rejected and superseded links", "Fen Fable")
         self.assertIn(">Ruled out</a>", fen)
-        self.assertEqual("Mother Ada Fable b. c. 1801 – d. 1870 Ruled out", text(self.item("fen", "Rejected and superseded links", "Ada Fable")))
+        self.assertEqual("Mother Ada Fable b. c. 1801 – d. 1870 ✕Ruled out", text(self.item("fen", "Rejected and superseded links", "Ada Fable")))
         self.assertIn("No public parents recorded.", self.dossier("fen"))
 
     def test_the_opening_sentences(self):
@@ -174,7 +175,7 @@ class FamilyReasonTests(unittest.TestCase):
         box = ada.split('<aside class="latest-finding"', 1)[1].split("</aside>", 1)[0]
         self.assertIn('<h2 id="latest-finding-heading">Latest finding</h2>', box)
         self.assertIn(f'<a href="../research.html#{_anchor("f-new")}">Ada Fable&#x27;s father is Tobin Fable.</a>', box)
-        self.assertIn('data-status="reviewed" data-confidence="documented">Reviewed · Documented</a>', box)
+        self.assertIn('data-status="reviewed" data-confidence="documented"><span class="badge-glyph" aria-hidden="true">✓</span>Reviewed · Documented</a>', box)
         self.assertIn('<p class="meta">Recorded <time datetime="2026-09-08">8 Sep 2026</time></p>', box)
         # The related study was updated after the newest finding.
         self.assertIn('<p class="meta research-date">Research last recorded <time datetime="2026-10-01">1 Oct 2026</time></p>', box)

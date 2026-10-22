@@ -72,7 +72,8 @@ class FamilySiteTests(unittest.TestCase):
         self.assertIn("Father", parents)
         self.assertIn("Mother", parents)
         self.assertIn("Step-father", parents)
-        self.assertIn("Unassessed tree link · tree-marked uncertain", parents)
+        # The tree's own mark is a badge of its own, beside the project's label.
+        self.assertRegex(parents, r"○\s+Unassessed tree link\s+◇\s+Tree-marked uncertain")
         self.assertIn("Probable", parents)
         self.assertIn("Possible", parents)
         self.assertIn("Competing parent records", parents)

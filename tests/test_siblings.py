@@ -74,10 +74,10 @@ class RecordedSiblingTests(unittest.TestCase):
 
     def test_recorded_and_inferred_siblings_are_merged_in_birth_order(self):
         self.assertEqual([
-            "Recorded sibling Bram Fable b. 1798 Probable",
-            "Sibling (recorded link; two recorded parents in common) Iris Fable b. 1802 Documented (80%)",
-            "Half-sibling (recorded link; shares a recorded parent) Pip Vale b. 1804 Possible",
-            "Recorded half-sibling Lark Vale b. 1810 Unassessed tree link",
+            "Recorded sibling Bram Fable b. 1798 ~ Probable",
+            "Sibling (recorded link; two recorded parents in common) Iris Fable b. 1802 ✓ Documented (80%)",
+            "Half-sibling (recorded link; shares a recorded parent) Pip Vale b. 1804 ? Possible",
+            "Recorded half-sibling Lark Vale b. 1810 ○ Unassessed tree link",
         ], self.siblings("Ada Fable"))
 
     def test_badges_link_to_the_guide_and_keep_stored_values(self):
@@ -86,9 +86,9 @@ class RecordedSiblingTests(unittest.TestCase):
         self.assertIn('href="../evidence.html#confidence-tree-link"', family)
 
     def test_recorded_links_are_symmetric(self):
-        self.assertEqual(["Recorded sibling Ada Fable b. 1800 Probable"], self.siblings("Bram Fable"))
-        self.assertEqual(["Recorded half-sibling Ada Fable b. 1800 Unassessed tree link"], self.siblings("Lark Vale"))
-        self.assertEqual(["Sibling (recorded link; two recorded parents in common) Ada Fable b. 1800 Documented (80%)",
+        self.assertEqual(["Recorded sibling Ada Fable b. 1800 ~ Probable"], self.siblings("Bram Fable"))
+        self.assertEqual(["Recorded half-sibling Ada Fable b. 1800 ○ Unassessed tree link"], self.siblings("Lark Vale"))
+        self.assertEqual(["Sibling (recorded link; two recorded parents in common) Ada Fable b. 1800 ✓ Documented (80%)",
                           "Shares a recorded parent Pip Vale b. 1804"], self.siblings("Iris Fable"))
 
     def test_disproved_link_is_not_a_sibling_but_stays_recorded(self):
@@ -98,10 +98,10 @@ class RecordedSiblingTests(unittest.TestCase):
         # Both dossiers set the disproved link apart, with its badge, after the siblings.
         for name, other in (("Ada Fable", "Nell Fable"), ("Nell Fable", "Ada Fable")):
             rejected = self.dossier(name).split("<h3>Rejected and superseded links</h3>", 1)[1].split("</section>", 1)[0]
-            self.assertRegex(re.sub(r"<[^>]+>", " ", rejected), rf"Recorded sibling\s+{other}\s+b\. \d+\s+Disproved")
+            self.assertRegex(re.sub(r"<[^>]+>", " ", rejected), rf"Recorded sibling\s+{other}\s+b\. \d+\s+✕\s*Disproved")
         for name in ("Ada Fable", "Nell Fable"):
             recorded = re.sub(r"<[^>]+>", " ", self.dossier(name).split('<h2 id="relationships">All recorded relationships</h2>', 1)[1])
-            self.assertRegex(recorded, r"Nell Fable\s+is a sister of\s+Ada Fable\s+Disproved")
+            self.assertRegex(recorded, r"Nell Fable\s+is a sister of\s+Ada Fable\s+✕\s*Disproved")
 
     def test_guide_explains_recorded_siblings_once(self):
         guide = self.paths["evidence.html"].read_text()

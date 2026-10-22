@@ -128,15 +128,17 @@ class AboutDataTests(unittest.TestCase):
                 continue  # only the terms public citations state; see below
             self.assertIn(f'evidence.html#{anchor}"', legend, anchor)
         # Badges use the same markup as every page, so they carry the same stored values.
-        self.assertIn('<a class="badge evidence-badge" href="evidence.html#confidence-documented" data-confidence="documented">Documented</a>', legend)
-        self.assertIn('href="evidence.html#grade-strongly_supported" data-confidence="probable" data-grade="strongly_supported">Strongly supported</a>', legend)
-        self.assertIn('>Unassessed tree link · tree-marked uncertain</a>', legend)
-        self.assertIn('<span class="record-quality"><a href="evidence.html#quality-original" data-quality="original">Original record</a></span>', legend)
+        self.assertIn('<a class="badge evidence-badge badge-documented" href="evidence.html#confidence-documented" data-confidence="documented"><span class="badge-glyph" aria-hidden="true">✓</span>Documented</a>', legend)
+        self.assertIn('href="evidence.html#grade-strongly_supported" data-confidence="probable" data-grade="strongly_supported"><span class="badge-glyph" aria-hidden="true">~</span>Strongly supported</a>', legend)
+        # A tree's own mark is its own badge beside the unassessed link it qualifies.
+        self.assertIn('data-tree-status="uncertain"><span class="badge-glyph" aria-hidden="true">○</span>Unassessed tree link</a> '
+                      '<a class="badge evidence-badge badge-tree" href="evidence.html#tree-marked"><span class="badge-glyph" aria-hidden="true">◇</span>Tree-marked uncertain</a>', legend)
+        self.assertIn('<span class="record-quality"><a class="badge badge-kind" href="evidence.html#quality-original" data-quality="original">Original record</a></span>', legend)
         # A term no public citation states is not listed: the private citation's "secondary" stays unseen.
         self.assertNotIn("quality-derivative", legend)
         self.assertNotIn("Secondary information", legend)
         self.assertIn('href="evidence.html#record-quality"', legend)
-        self.assertIn('<span class="badge change">Possible → Documented</span>', legend)
+        self.assertIn('<a class="badge evidence-badge badge-documented change" href="evidence.html#confidence-documented" data-after="documented" data-before="possible"><span class="badge-glyph" aria-hidden="true">✓</span>Possible → Documented</a>', legend)
         for cls, words in (("tree-edge", "Solid"), ("tree-edge uncertain", "Dashed"), ("tree-edge uncertain candidate", "candidate parent")):
             self.assertIn(f'<path class="{cls}" d="M2 6H46"/>', legend)
             self.assertIn(words, legend)

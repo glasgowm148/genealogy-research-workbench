@@ -14,8 +14,8 @@ from genealogy.models import (AccessLevel as A, Citation, Claim, ClaimStatus, Ev
 from genealogy.site import build_site
 from genealogy.sitecheck import check_site
 
-BADGES = ('<a href="{p}evidence.html#quality-original" data-quality="original">Original record</a> · '
-          '<a href="{p}evidence.html#information-primary" data-information="primary">primary information</a>')
+BADGES = ('<a class="badge badge-kind" href="{p}evidence.html#quality-original" data-quality="original">Original record</a> · '
+          '<a class="badge badge-kind" href="{p}evidence.html#information-primary" data-information="primary">primary information</a>')
 
 
 def case(quality="original", information="primary"):
@@ -78,7 +78,7 @@ class CitationQualityTests(unittest.TestCase):
             out = self.build(directory)
             sources = (out / "sources.html").read_text()
             self.assertIn('<p class="record-quality">' + BADGES.format(p="") + "</p><p><strong>Locator:</strong> entry 4</p>", sources)
-            self.assertIn('<p class="record-quality"><a href="evidence.html#quality-derivative" data-quality="derivative">Derivative record</a></p>'
+            self.assertIn('<p class="record-quality"><a class="badge badge-kind" href="evidence.html#quality-derivative" data-quality="derivative">Derivative record</a></p>'
                           "<p><strong>Locator:</strong> index p. 2</p>", sources)
             self.assertEqual(2, sources.count('class="record-quality"'))  # the plain citation states neither
             dossier = next((out / "people").glob("*.html")).read_text()

@@ -26,6 +26,7 @@ from .maps import geojson
 from .home import SUN_SLICES, file_size, rings as sun_rings, sun_svg, sun_tree  # the home page's tree preview
 from .labels import CLAIM_STATUS, guide_basis  # the evidence guide's basis and example lines
 from .labels import plural  # one rule for every printed count
+from .labels import BADGE_GLYPHS, assessment_anchor, badge_family  # one badge system
 
 # Lists longer than this are not written out in full: the interactive views
 # load them from the shared data script, and readers without JavaScript
@@ -37,7 +38,7 @@ QUESTION_RELATED = 4  # hypotheses and findings about a question's people shown 
 FINDINGS_PER_PAGE = 50
 CATALOGUE_PER_PAGE = 100  # people per catalogue page on a large site, in name order
 PLACES_PER_PAGE = 100  # places per region page on a large site
-SOURCES_PER_PAGE = 100  # sources per page on a large site, in title order
+SOURCES_PER_PAGE = 80  # sources per page on a large site, in title order; keeps a page of full source cards under 100 KB
 STUDIES_PER_PAGE = 100  # studies on a large site's studies page (newest) and on each title page
 CITED_FOR_LIMIT = 20  # people, findings or family links listed under a source's "Cited for"
 STUDY_GROUPS_DRAWN = 20  # groups drawn in a study's connection diagram; all are listed
@@ -167,6 +168,7 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
         data["site"]["study_urls"] = study_urls
     if grades:
         data["site"]["grades"] = {key: grade["label"] for key, grade in grades.items()}
+        data["site"]["grade_confidence"] = {key: grade["confidence"] for key, grade in grades.items()}  # each grade badge's family
     if name_variants:
         data["site"]["name_variants"] = name_variants
     # The catalogue's recorded-sex filter: the first sex claim not rejected, as
@@ -538,6 +540,18 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def empty(items: list[str], message: str = "No public records recorded.") -> str:
         return '<ul class="record-list">' + "".join(items) + "</ul>" if items else f'<p class="empty-state">{_text(message)}</p>'
 
+    def badge(words: str, anchor: str, prefix: str = "", attrs: str = "", cls: str = "", base: str = "badge evidence-badge") -> str:
+        """Every pill on the site: linked to its guide entry, coloured and marked
+        by that entry's family; the glyph is decoration, the words carry the label."""
+        family = badge_family(anchor, config.grades)
+        glyph = f'<span class="badge-glyph" aria-hidden="true">{BADGE_GLYPHS[family]}</span>' if BADGE_GLYPHS[family] else ""
+        return f'<a class="{base} badge-{family}{" " + cls if cls else ""}" href="{prefix}evidence.html#{_text(anchor)}"{attrs}>{glyph}{_text(words)}</a>'
+
+    def change_chip(change: dict[str, Any], prefix: str = "") -> str:
+        """A finding's change, e.g. "Possible → Documented", marked and linked as its new value."""
+        attrs = f' data-after="{_text(change["after"])}"' + (f' data-before="{_text(change["before"])}"' if change.get("before") else "")
+        return badge(shift(change), assessment_anchor(change["after"], config.grades), prefix, attrs, "change")
+
     def metadata(row: dict[str, Any], prefix: str = "", *, relationship: bool = False) -> str:
         """A labelled badge linked to the guide; stored values stay in data attributes."""
         if not (relationship or row.get("status") or row.get("confidence")):
@@ -545,7 +559,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         confidence = str(row.get("confidence") or "unknown")
         graded = grade_label(row, config.grades)
         if relationship:
-            words = relationship_label(row, config.grades)
+            # The supplying tree's own mark is a second badge, linked to its own entry.
+            words = relationship_label({**row, "tree_status": None}, config.grades)
             anchor = f'grade-{row["grade"]}' if graded else "confidence-tree-link" if confidence == "unknown" else f"confidence-{confidence}"
         else:
             words = " · ".join(value for value in (status_label(row.get("status")) if row.get("status") else "",
@@ -553,13 +568,13 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             anchor = (status_anchor(row["status"]) if row.get("status") and not row.get("confidence") else
                       f'grade-{row["grade"]}' if graded else f"confidence-{confidence}")
         stored = "".join(f' data-{name.replace("_", "-")}="{_text(row[name])}"' for name in ("status", "confidence", "grade", "tree_status") if row.get(name))
-        return f' <a class="badge evidence-badge" href="{prefix}evidence.html#{_text(anchor)}"{stored}>{_text(words)}</a>'
+        marked = f' {badge("Tree-marked " + str(row["tree_status"]), "tree-marked", prefix)}' if relationship and row.get("tree_status") else ""
+        return f' {badge(words, anchor, prefix, stored)}{marked}'
 
     def record_quality(row: dict[str, Any], prefix: str = "") -> str:
         """A citation's stated form and information, each linked to its guide entry; stored values stay in data attributes."""
-        # Plain links, styled as badges by the wrapping .record-quality: a source page lists a hundred citations.
-        return " · ".join(f'<a href="{prefix}evidence.html#{_text(anchor)}" data-{name}="{_text(row[name])}">{_text(words)}</a>'
-                          for name, anchor, words in quality_parts(row))
+        # The shortest class list: a source page lists a hundred citations.
+        return " · ".join(badge(words, anchor, prefix, f' data-{name}="{_text(row[name])}"', base="badge") for name, anchor, words in quality_parts(row))
 
     def citation(row: dict[str, Any], prefix: str = "", *, canonical: bool = False) -> str:
         src = sources.get(row["source_id"], {})
@@ -587,8 +602,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         cited = [f"<li>{record_link(cid, prefix)}</li>" for cid in row.get("citation_ids", []) if cid in citations]
         if cited:
             parts.append('<p class="meta">Records:</p><ul class="finding-records">' + "".join(cited) + "</ul>")
-        changed = [f'<li>{ref(c["record_id"], prefix, changed_label(c["record_id"]))} <span class="badge change" data-after="{_text(c["after"])}"'
-                   + (f' data-before="{_text(c["before"])}"' if c.get("before") else "") + f'>{_text(shift(c))}</span>'
+        changed = [f'<li>{ref(c["record_id"], prefix, changed_label(c["record_id"]))} {change_chip(c, prefix)}'
                    + (f' <span class="meta">{_text(c["note"])}</span>' if c.get("note") else "") + "</li>" for c in row.get("changes", [])]
         if changed:
             parts.append('<p class="meta">Changed:</p><ul class="finding-changes">' + "".join(changed) + "</ul>")
@@ -666,8 +680,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return with_competing(research_by_subject[pid], lambda r: f'<li>{ref(r["id"], "../", r.get("question") or r.get("conclusion") or r.get("statement"))}{metadata(r, "../")}'
                               + f'{question_next(r, "../") if "question" in r else ""}{hypothesis_points(r, "../") if "statement" in r else ""}</li>', "../")
 
-    def finding_kind(row: dict[str, Any]) -> str:
-        return f' <span class="badge finding-kind" data-kind="{_text(row["kind"])}">{_text(str(row["kind"]).replace("-", " ").replace("_", " ").capitalize())}</span>' if row.get("kind") else ""
+    def finding_kind(row: dict[str, Any], prefix: str = "") -> str:
+        return " " + badge(str(row["kind"]).replace("-", " ").replace("_", " ").capitalize(), "finding-kind", prefix, f' data-kind="{_text(row["kind"])}"', "finding-kind") if row.get("kind") else ""
 
     def event(row: dict[str, Any], prefix: str = "", *, canonical: bool = True) -> str:
         place = places.get(row.get("place_id"), {})
@@ -1192,7 +1206,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return f'<li>{ref(rid, prefix, record_label(rid))}' + (f' <span class="meta">{_text(span)}</span>' if span else "") + "</li>"
 
     def study_meta(row: dict[str, Any], prefix: str = "") -> str:
-        parts = [f'<span class="badge" data-status="{_text(row.get("status", ""))}">{_text(status_label(row.get("status")) or "Draft")}</span>']
+        parts = [badge(status_label(row.get("status")) or "Draft", status_anchor(row.get("status") or "draft"), prefix, f' data-status="{_text(row.get("status", ""))}"')]
         if row.get("updated_on"):
             parts.append(f'<span class="meta">Updated {when(row["updated_on"])}</span>')
         return " ".join(parts)
@@ -1508,7 +1522,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         subjects = ", ".join(ref(rid, prefix, record_label(rid)) for rid in row.get("related_ids", []) if rid in record_routes)
         in_studies = ", ".join(f'<a href="{prefix}{study_urls[s["id"]]}">{_text(s["title"])}</a>' for s in studies_by_subject[row["id"]])
         return (f'<li class="finding-entry" id="{_anchor(row["id"])}" data-recorded-on="{_text(row.get("recorded_on") or "")}"><p class="meta">{when(row.get("recorded_on"), missing="Undated")}</p>'
-                f'<h3><a href="{prefix}{record_routes[row["id"]]}">{_text(row["conclusion"])}</a></h3>{metadata(row, prefix)}{finding_kind(row)}'
+                f'<h3><a href="{prefix}{record_routes[row["id"]]}">{_text(row["conclusion"])}</a></h3>{metadata(row, prefix)}{finding_kind(row, prefix)}'
                 + finding_details(row, prefix) + (f'<p>About: {subjects}</p>' if subjects else "") + (f'<p>Studies: {in_studies}</p>' if in_studies else "")
                 + (f'<p class="meta">{plural(len(row.get("evidence_ids", [])), "evidence assessment")}</p>' if row.get("evidence_ids") else "") + "</li>")
 
@@ -1639,7 +1653,33 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         return ((f'<dd class="guide-basis">Usually rests on: {_text(basis)}</dd>' if basis else "")
                 + (f'<dd class="guide-example">Example: {examples[anchor]}</dd>' if anchor in examples else ""))
 
-    guide = ['<h1>Reading the evidence</h1><p>Every relationship, claim and finding on this site carries a label describing how far it has been assessed. Labels never claim more than the record behind them. A family-tree export supplies assertions: it cannot by itself prove parentage, supply missing sources, or establish DNA findings.</p>']
+    def guide_glance() -> str:
+        """The guide's index: each badge drawn once, as it appears around the
+        site, with the first sentence of its meaning, linked to the full entry."""
+        rank = ("documented", "probable", "possible", "unassessed", "conflict", "tree")
+        groups: dict[str, list[tuple[str, str, str]]] = {key: [] for key in ("evidence", "Claim status", "Research status", "Record quality and finding types")}
+        also = []
+        for anchor, label, meaning, group in guide_entries(config.grades):
+            family = badge_family(anchor, config.grades)
+            if anchor.startswith(("confidence-", "grade-")) or anchor == "tree-marked":
+                key = "evidence"
+            elif anchor.startswith("status-"):
+                key = group
+            elif family == "kind":
+                key = "Record quality and finding types"
+            else:
+                also.append(f'<a href="#{_text(anchor)}">{_text(label[0].lower() + label[1:] if label[1:2].islower() else label)}</a>')
+                continue
+            groups.setdefault(key, []).append((anchor, label, meaning.split(". ")[0].rstrip(".") + "."))
+        groups["evidence"].sort(key=lambda row: rank.index(badge_family(row[0], config.grades)))  # stable: grades follow the grade they count as
+        item = lambda row: f'<li>{badge(row[1], row[0])} <span class="glance-meaning">{_text(row[2])}</span></li>'
+        lists = [f'<h3>From strongest to weakest, then conflicts</h3><ol class="glance-list">{"".join(map(item, groups.pop("evidence")))}</ol>']
+        lists += [f'<h3>{_text(key)}</h3><ul class="glance-list">{"".join(map(item, rows))}</ul>' for key, rows in groups.items() if rows]
+        return ('<section class="guide-glance" aria-labelledby="at-a-glance"><h2 id="at-a-glance">The labels at a glance</h2>'
+                '<p>Each label is drawn here as it appears on the site; select one, here or on any page, to read its full entry.</p>'
+                + "".join(lists) + (f'<p class="glance-also">Also: {", ".join(also)}.</p>' if also else "") + "</section>")
+
+    guide = ['<h1>Reading the evidence</h1><p>Every relationship, claim and finding on this site carries a label describing how far it has been assessed. Labels never claim more than the record behind them. A family-tree export supplies assertions: it cannot by itself prove parentage, supply missing sources, or establish DNA findings.</p>', guide_glance()]
     current_group = None
     for anchor, label, meaning, group in guide_entries(config.grades):
         if group != current_group:
@@ -1746,7 +1786,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         if "corrections.html" in routes:
             actions += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
                                                            if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"
-        sex_line = f'<p class="meta">Recorded sex: {_text(recorded_sex)} <span class="badge">Unassessed tree assertion</span></p>' if recorded_sex else ""
+        sex_line = f'<p class="meta">Recorded sex: {_text(recorded_sex)} {badge("Unassessed tree assertion", "status-asserted", "../")}</p>' if recorded_sex else ""
         return ('<header class="dossier-hero"><div class="dossier-hero-main"><p class="eyebrow">Person dossier</p>'
                 f'<h1>{_text(person_name(pid))}</h1>' + (f'<p class="lifespan">{_text(span)}</p>' if span else "") + f'<p class="record-id meta">Record ID: {_text(pid)}</p>'
                 + opening + vitals(pid) + sex_line + f'<div class="dossier-actions">{actions}</div></div>' + latest_finding(pid) + "</header>")
@@ -2150,7 +2190,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     stat = lambda value, words: f'<div class="stat"><strong>{value}</strong><small>{_text(words)}</small></div>'
     changed = [f for f in dated if f.get("changes")][:20]
     recent = [f'<li><p class="meta">{when(f["recorded_on"])}</p><p>{ref(f["id"], "", f["conclusion"])}</p><ul class="finding-changes">'
-              + "".join(f'<li>{ref(c["record_id"], "", changed_label(c["record_id"]))} <span class="badge change">{_text(shift(c))}</span></li>' for c in f["changes"])
+              + "".join(f'<li>{ref(c["record_id"], "", changed_label(c["record_id"]))} {change_chip(c)}</li>' for c in f["changes"])
               + "</ul></li>" for f in changed]
     pages["progress.html"] = (
         '<h1>Research progress</h1><p>How far the research has got: which family links have been assessed against records, how well the connected groups hold together, '
@@ -2474,8 +2514,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             + (f'<p class="meta">Also explained: ' + ", ".join(f'<a href="evidence.html#{_text(a)}">{_text(l)}</a>' for a, l, b in entries if f'#{a}"' not in b) + "</p>"
                if any(f'#{a}"' not in b for a, _, b in entries) else "")
             for group, entries in families.items())
-        legend += ('<h3>Changes of grade</h3><p class="legend-badges"><span class="badge change">'
-                   + _text(shift({"before": "possible", "after": "documented"})) + '</span></p><p class="meta">A finding that reassessed a family link or claim, '
+        legend += ('<h3>Changes of grade</h3><p class="legend-badges">' + change_chip({"before": "possible", "after": "documented"})
+                   + '</p><p class="meta">A finding that reassessed a family link or claim, '
                    'shown beside the record and in <a href="findings.html">Latest findings</a>.</p>')
         sample = lambda cls: (f'<svg class="line-sample" viewBox="0 0 48 12" width="48" height="12" aria-hidden="true" focusable="false">'
                               f'<path class="{cls}" d="M2 6H46"/></svg>')

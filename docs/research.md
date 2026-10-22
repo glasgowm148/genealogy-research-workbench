@@ -156,7 +156,7 @@ meaning = "The records are too thin to weigh either way."
 confidence = "possible"
 ```
 
-Then give a relationship, claim, evidence assessment or hypothesis a `grade` as well as its `confidence`, for example `"confidence": "probable", "grade": "strongly_supported"`. The site prints your label ("Strongly supported (80%)"), and **Reading the evidence** lists each grade with its meaning and the standard grade it counts as. Filters, colours and the tree use the standard grade.
+Then give a relationship, claim, evidence assessment or hypothesis a `grade` as well as its `confidence`, for example `"confidence": "probable", "grade": "strongly_supported"`. The site prints your label ("Strongly supported (80%)"), and **Reading the evidence** lists each grade with its meaning and the standard grade it counts as. Filters, colours and the tree use the standard grade, and so does the grade's badge: "Strongly supported" counted as probable is drawn with the probable colour and ~ glyph.
 
 `genealogy validate` and every build reject a grade that `genealogy.toml` does not define, or whose `confidence` differs from the one the grade counts as.
 

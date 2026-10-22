@@ -120,7 +120,8 @@ class ProgressPageTests(unittest.TestCase):
         recent = section(html, "recently-assessed")
         self.assertLess(recent.index("Conclusion f2."), recent.index("Conclusion f1."))
         self.assertNotIn("Conclusion f3.", recent)  # it changed no grade
-        self.assertIn('<span class="badge change">Possible → Strongly supported</span>', recent)
+        self.assertIn('<a class="badge evidence-badge badge-probable change" href="evidence.html#grade-strongly_supported" data-after="strongly_supported" data-before="possible">'
+                      '<span class="badge-glyph" aria-hidden="true">~</span>Possible → Strongly supported</a>', recent)
 
     def test_recently_assessed_lists_the_newest_twenty(self):
         dated = [finding(f"f{n:02d}", f"2026-01-{n:02d}", [("bram-ada", None, "documented")] if n == 25 else [("eli-bram", None, "documented")])

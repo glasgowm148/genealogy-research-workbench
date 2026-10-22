@@ -184,9 +184,11 @@ class LargeSiteTests(unittest.TestCase):
         self.assertIn("<title>Sources: Census transcriptions —", census)
         self.assertEqual(per_type, census.count("data-source-id="))
         self.assertNotIn("site-data.js", census)
-        # 241 register sources: three pages of 100, every one listed once, in title order.
-        register = [self.text(f"sources/type-register{suffix}.html") for suffix in ("", "--2", "--3")]
-        self.assertFalse((self.out / "sources/type-register--4.html").exists())
+        # 241 register sources: pages of SOURCES_PER_PAGE, every one listed once, in title order.
+        registers = 1 + sum(1 for n in range(PEOPLE) if n % 5 > 1)
+        page_count = -(-registers // SOURCES_PER_PAGE)
+        register = [self.text(f"sources/type-register{suffix}.html") for suffix in ("", *(f"--{n}" for n in range(2, page_count + 1)))]
+        self.assertFalse((self.out / f"sources/type-register--{page_count + 1}.html").exists())
         listed = [sid for page in register for sid in re.findall(r'data-source-id="([^"]+)"', page)]
         self.assertEqual(SOURCES_PER_PAGE, register[0].count("data-source-id="))
         self.assertEqual(sorted(["register"] + [f"p{n:04d}-src" for n in range(PEOPLE) if n % 5 > 1]), sorted(listed))
