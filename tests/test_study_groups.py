@@ -132,9 +132,9 @@ class StudyPageTests(unittest.TestCase):
         self.assertIn("The Quay Street lodgers Cara Vale b. 1805 Dora Vale", text)
         self.assertEqual(3, self.page.count('class="study-group card"'))
         self.assertIn('href="../people/p-', re.search(r'<section class="study-group card".*?</section>', self.page).group(0))
-        # Sections follow the conclusion in order, before the study's linked records.
-        order = [self.page.index(h) for h in ("<h2>Current conclusion</h2>", "<h2>Households and groups</h2>", "<h3>How the groups connect</h3>",
-                                              "<h2>Records still to inspect</h2>", "<h2>People and records in this study</h2>")]
+        # Sections come in order before the conclusion, which precedes the study's linked records.
+        order = [self.page.index(h) for h in ("<h2>Households and groups</h2>", "<h3>How the groups connect</h3>",
+                                              "<h2>Records still to inspect</h2>", "<h2>Current conclusion</h2>", "<h2>People and records in this study</h2>")]
         self.assertEqual(sorted(order), order)
 
     def test_the_diagram_draws_boxes_and_labelled_lines_dashed_unless_documented_or_probable(self):

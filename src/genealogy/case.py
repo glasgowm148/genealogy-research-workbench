@@ -13,7 +13,7 @@ from .markup import references as prose_references
 from .models import (
     CASE_SCHEMA_VERSION, CITATION_INFORMATION, CITATION_QUALITIES, MODEL_TYPES, Citation, Claim, ClaimStatus,
     Confidence, Evidence, ExternalIdentifier, Finding, Hypothesis, ImportProvenance, LivingStatus, Name, PLACE_PRECISIONS,
-    Person, Place, Record, ResearchQuestion, access_level, is_raw_dna, record_from_dict,
+    Person, Place, Record, ResearchQuestion, Study, access_level, is_raw_dna, record_from_dict,
 )
 
 
@@ -372,7 +372,7 @@ def _validate_record_fields(record: Record) -> list[str]:
     for field_name in optional_strings:
         if hasattr(record, field_name) and not _string(getattr(record, field_name), optional=True):
             errors.append(f"{record.id}.{field_name} must be a string or null")
-    if isinstance(record, Finding) and record.kind is not None and not (_string(record.kind) and record.kind.strip()):
+    if isinstance(record, (Finding, Study)) and record.kind is not None and not (_string(record.kind) and record.kind.strip()):
         errors.append(f"{record.id}.kind must be a non-empty string or null")
     grade = getattr(record, "grade", None)
     if grade is not None and not (_string(grade) and re.fullmatch(GRADE_KEY, grade)):

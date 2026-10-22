@@ -138,7 +138,10 @@ class StudySiteTests(unittest.TestCase):
         # Ada's birth is the study's only dated event; Rowan has none.
         page = self.paths[next(name for name in self.paths if name.startswith("studies/"))].read_text()
         self.assertNotIn("Chronology", page)
-        self.assertNotIn("<figure", page)
+        # The study's located parish still gets its locator map.
+        self.assertNotIn('<figure class="chronology"', page)
+        self.assertEqual(1, page.count("<figure"))
+        self.assertIn('<figure class="place-locator study-locator">', page)
 
 
 def chronology_case(extra: int = 0):

@@ -45,6 +45,10 @@ CHRONOLOGY_LANES = 30  # people drawn in a study's chronology; the rest are coun
 CHRONOLOGY_BYTES = 36_000  # lanes stop once the drawing reaches this, so a busy study page stays small
 PLACE_LIST_LIMIT = 200  # events, sub-places, surnames or studies listed on a place's page; the rest are counted
 PLACE_PEOPLE_BYTES = 40_000  # a place's event table also stops here, and each of its other lists at a third of it
+STUDY_MAP_NAMED = 30  # places named under a study's locator map; the rest are counted
+STUDY_MAP_DRAWN = 200  # markers on a study's locator map, so a study of a whole region stays small
+PLACE_LIST_LIMIT = 200  # people, sub-places, surnames or studies listed on a place's page; the rest are counted
+PLACE_PEOPLE_BYTES = 40_000  # a place's people list also stops here, and each of its other lists at a third of it
 STATISTICS_ROWS = 25  # rows per statistics table; the rest are counted, so the page stays small on a large site
 UNPLACED_REGION = "Places without a broader jurisdiction"
 PLACE_CARDS = 100  # places drawn as cards on places.html and by its filter; past this a site pages its places by region
@@ -1388,22 +1392,104 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             out += '<h2>Records still to inspect</h2><ul class="next-records">' + "".join(f"<li>{_text(item)}</li>" for item in pending) + "</ul>"
         return out
 
+    # The study page: header, stat strip and locator, then the account, its
+    # drawings, its limits and conclusion, and its links grouped by type.
+    collection_of = {row["id"]: collection for collection, rows in project.items() if isinstance(rows, list) for row in rows}
+    STUDY_LINK_GROUPS = (("people", "People"), ("places", "Places"), ("sources", "Sources"), ("findings", "Findings"),
+                         ("questions", "Questions"), ("hypotheses", "Hypotheses"), ("other", "Other records"))
+
+    def study_people(row: dict[str, Any]) -> list[str]:
+        """The public people a study concerns: those it links, then those it only groups."""
+        return [rid for rid in dict.fromkeys([*row.get("related_ids", []), *(pid for g in row.get("groups", []) if isinstance(g, dict) for pid in g.get("member_ids", []))]) if rid in people]
+
+    def study_events(row: dict[str, Any], who: list[str]) -> list[dict[str, Any]]:
+        found = {e["id"]: e for pid in who for e in events_by_person[pid]}
+        found.update((rid, events_by_id[rid]) for rid in row.get("related_ids", []) if rid in events_by_id)
+        return list(found.values())
+
+    def study_kind(row: dict[str, Any]) -> str:
+        return (f'<span class="badge study-kind" data-kind="{_text(row["kind"])}">{_text(str(row["kind"]).replace("-", " ").replace("_", " ").capitalize())}</span> '
+                if row.get("kind") else "")
+
+    def study_stats(counts: list[tuple[int, str, str]]) -> str:
+        return ('<ul class="study-stats" aria-label="This study at a glance">'
+                + "".join(f'<li><strong>{n:,}</strong> <span>{_text(one if n == 1 else many)}</span></li>' for n, one, many in counts) + "</ul>")
+
+    def study_locator(row: dict[str, Any], evs: list[dict[str, Any]], prefix: str) -> str:
+        """The place-page basemap cropped to fit every located place of the study, one marker each."""
+        ids = dict.fromkeys([*(e["place_id"] for e in evs if e.get("place_id")), *(rid for rid in row.get("related_ids", []) if rid in places)])
+        located = sorted((places[i] for i in ids if i in places and places[i].get("latitude") is not None and places[i].get("longitude") is not None),
+                         key=lambda p: (str(p["name"]).casefold(), p["id"]))
+        if not located:
+            return ""
+        xy = [((p["longitude"] + 180) * 960 / 360, (90 - p["latitude"]) * 480 / 180) for p in located]
+        xs, ys = [x for x, _ in xy], [y for _, y in xy]
+        # Padded around the markers, at least 7.5 degrees across, and the 2:1 shape of the basemap.
+        w = min(max((max(xs) - min(xs)) * 1.3, (max(ys) - min(ys)) * 2.6, 20), 960)
+        h = w / 2
+        left = min(max((max(xs) + min(xs)) / 2 - w / 2, 0), 960 - w)
+        top = min(max((max(ys) + min(ys)) / 2 - h / 2, 0), 480 - h)
+        marks = "".join(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="{w * (0.022 if p.get("precision") in BROAD_PRECISIONS else 0.011):.2f}"'
+                        + (' class="broad"' if p.get("precision") in BROAD_PRECISIONS else "") + f'><title>{_text(p["name"])}</title></circle>'
+                        for p, (x, y) in list(zip(located, xy))[:STUDY_MAP_DRAWN])
+        named = [ref(p["id"], prefix, p["name"]) for p in located[:STUDY_MAP_NAMED]]
+        more = len(located) - len(named)
+        label = f'Map of {len(located)} {"place" if len(located) == 1 else "places"} in this study'
+        return ('<section class="study-places" aria-labelledby="study-places"><h2 id="study-places">Places in this study</h2>'
+                f'<figure class="place-locator study-locator"><svg class="place-map" viewBox="{left:.1f} {top:.1f} {w:.1f} {h:.1f}" role="img" aria-label="{_text(label)}">'
+                f'<rect width="960" height="480" fill="#e8efec"/><image href="{prefix}assets/world.svg" width="960" height="480"/>{marks}</svg>'
+                '<figcaption>Each dot is a place where the study\'s people have a recorded event, or a place it links, at its supplied coordinates on a '
+                'Natural Earth overview; rings mark places located only broadly. Shared places do not prove kinship. '
+                + (f"The first {STUDY_MAP_DRAWN} by name are drawn. " if len(located) > STUDY_MAP_DRAWN else "")
+                + f'<span class="study-place-names">Places: {", ".join(named)}' + (f" and {more:,} more" if more > 0 else "") + '.</span></figcaption></figure></section>')
+
+    def study_limits(row: dict[str, Any]) -> str:
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", str(row.get("limitations") or "")) if part.strip()]
+        return ('<aside class="study-limits" aria-labelledby="study-limits"><h2 id="study-limits">What this does not show</h2>'
+                + "".join(f"<p>{_text(part)}</p>" for part in paragraphs) + "</aside>") if paragraphs else ""
+
+    def study_links(row: dict[str, Any], sid: str, who: list[str], prefix: str) -> str:
+        """The study's people and records, a list per type with its count; research items keep their status."""
+        linked = [rid for rid in dict.fromkeys([*row.get("related_ids", []), *who]) if rid in record_routes]
+        research = [r["id"] for collection in ("findings", "questions", "hypotheses") for r in project[collection] if sid in r.get("related_ids", [])]
+        grouped: dict[str, list[str]] = defaultdict(list)
+        for rid in dict.fromkeys([*linked, *(rid for rid in research if rid in record_routes)]):
+            collection = collection_of.get(rid)
+            grouped[collection if collection in dict(STUDY_LINK_GROUPS) else "other"].append(rid)
+        rows = {r["id"]: r for collection in ("findings", "questions", "hypotheses") for r in project[collection]}
+
+        def item(rid: str) -> str:
+            if rid in rows:
+                r = rows[rid]
+                return f'<li>{ref(rid, prefix, r.get("conclusion") or r.get("question") or r.get("statement"))}{metadata(r, prefix)}</li>'
+            return subject_item(rid, prefix)
+        sections = "".join(f'<section class="study-links-group"><h3>{words} <span class="count">{len(grouped[key]):,}</span></h3>'
+                           f'<ul class="record-list">{"".join(item(rid) for rid in grouped[key])}</ul></section>'
+                           for key, words in STUDY_LINK_GROUPS if grouped[key])
+        return ('<h2>People and records in this study</h2>'
+                + (f'<div class="study-links">{sections}</div>' if sections else '<p class="empty-state">No public people or records are linked.</p>'))
+
     for sid, row in studies.items():
         prefix = "../"
         linked = [rid for rid in row.get("related_ids", []) if rid in record_routes]
-        related_research = [r for collection in ("findings", "questions", "hypotheses") for r in project[collection] if sid in r.get("related_ids", []) or r["id"] in linked]
-        content = f'<p class="eyebrow">Research study</p><h1>{_text(row["title"])}</h1><p>{study_meta(row, prefix)}</p>'
-        if row.get("summary"):
-            content += f'<p class="lead">{_text(row["summary"])}</p>'
-        if row.get("rationale"):
-            content += '<h2>Why this study</h2>' + prose(row["rationale"], prefix)
+        who = study_people(row)
+        evs = study_events(row, who)
+        findings_linked = {rid for rid in linked if collection_of.get(rid) == "findings"} | {f["id"] for f in project["findings"] if sid in f.get("related_ids", [])}
+        content = (f'<p class="back-link"><a href="{prefix}studies.html">← Studies</a></p>'
+                   f'<p class="eyebrow">Research study</p><h1>{_text(row["title"])}</h1><p>{study_kind(row)}{study_meta(row, prefix)}</p>')
+        content += study_stats([(len(who), "person", "people"), (len(linked), "linked record", "linked records"),
+                                (len(evs), "event", "events"), (len(findings_linked), "finding linked", "findings linked")])
+        question = (f'<p class="lead">{_text(row["summary"])}</p>' if row.get("summary") else "") + ('<h2>Why this study</h2>' + prose(row["rationale"], prefix) if row.get("rationale") else "")
+        locator = study_locator(row, evs, prefix)
+        if question or locator:
+            content += f'<div class="study-header{" with-map" if locator else ""}"><div class="study-question">{question}</div>{locator}</div>'
         if row.get("body"):
             content += '<section class="study-body">' + prose(row["body"], prefix) + '</section>'
-        content += '<h2>Current conclusion</h2>' + (prose(row["conclusion"], prefix) if row.get("conclusion") else '<p class="empty-state">No conclusion has been reached yet.</p>')
         content += chronology(row, prefix)
         content += study_groups(row, prefix)
-        content += '<h2>People and records in this study</h2>' + empty([subject_item(rid, prefix) for rid in linked], "No public people or records are linked.")
-        content += '<h2>Related findings and questions</h2>' + empty([f'<li>{ref(r["id"], prefix, r.get("conclusion") or r.get("question") or r.get("statement"))}{metadata(r, prefix)}</li>' for r in related_research], "No related findings or questions recorded.")
+        content += study_limits(row)
+        content += '<h2>Current conclusion</h2>' + (prose(row["conclusion"], prefix) if row.get("conclusion") else '<p class="empty-state">No conclusion has been reached yet.</p>')
+        content += study_links(row, sid, who, prefix)
         pages[study_urls[sid]] = content
 
     # Latest findings: the dated discovery log; the research page keeps the full account.

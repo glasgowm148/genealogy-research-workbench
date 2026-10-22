@@ -333,6 +333,12 @@ class Study(Record):
     links: list[dict[str, Any]] = field(default_factory=list)
     # Records still to inspect, as plain text.
     next_records: list[str] = field(default_factory=list)
+    # A project's own type for the study, e.g. "place", "family" or
+    # "documentary overview", shown as a label on its page.
+    kind: str | None = None
+    # What the study does not show or establish, as plain text: printed in a
+    # callout beside the conclusion so a reader does not over-read it.
+    limitations: str | None = None
 
 
 @dataclass(slots=True)

@@ -254,10 +254,12 @@ A study is the written account of one research question: why it was undertaken, 
 {
   "id": "study:harbour-households",
   "title": "Two households at the harbour",
+  "kind": "family study",
   "summary": "Which household the 1841 child belongs to.",
   "rationale": "Two families used the same given names in the same decade.",
   "body": "## The records\n\nThe register names [[gedcom:person:I1]] and [[gedcom:person:I2|her brother]].\n\n- **Documented:** the baptism entry.\n- *Probable:* the census household.",
   "conclusion": "Probably the Quay Street household, pending [[question:census]].",
+  "limitations": "Shared given names and a shared street do not establish kinship.",
   "related_ids": ["gedcom:person:I1", "gedcom:person:I2", "question:census"],
   "status": "draft",
   "updated_on": "2026-10-19",
@@ -277,6 +279,11 @@ The prose fields use a small Markdown subset:
 - `[[record-id]]` or `[[record-id|label]]` references to any record in the case.
 
 Pipe tables work too: a header row, a separator row such as `|---|---|`, then one row per line. Cells may contain links and `[[record]]` references. Raw HTML is shown as text. Validation rejects a reference to a record that does not exist. A study is published only when it is public and **every** record it lists in `related_ids` or references in its prose is public, so it can never reveal a living or withheld person. Its free text is still your responsibility: the toolkit cannot detect a name typed as plain text.
+
+The study page opens with a **← Studies** link, the study's type, its status and a strip of counts: the people it concerns (those in `related_ids` and those in its groups), its linked records, those people's public events and the findings it links or that link it. Beside the summary and rationale, a small map marks every place with supplied coordinates where those people have a public event, or that the study links, on the bundled overview basemap; the map is left out when none has coordinates. Then come the body, the chronology and groups, a **What this does not show** callout, the conclusion, and the people and records grouped by type (People, Places, Sources, Findings, Questions, Hypotheses, Other records) with a count for each.
+
+- `kind` is your own type for the study, such as `family study`, `place study` or `documentary overview`, shown as a label (a `-` or `_` reads as a space). Leave it out for none; an empty string is rejected.
+- `limitations` says what the study does not show or establish, as plain text; separate paragraphs with a blank line. It is printed in a bordered callout before the conclusion, so a reader sees it before the answer. It is not prose markup, so `[[record]]` references are shown as written.
 
 A study page draws a **chronology** of the people in `related_ids`: one line per person, ordered by their first dated event, running from a recorded birth to a recorded death (otherwise from the first to the last dated event), with a marker for each public event, coloured by kind (birth or baptism, marriage, death or burial, other). Events listed in `related_ids` whose people are not in the study share a line of their own. An approximate or bounded date such as `about 1850` or `BEF 1800` is drawn at its recorded year and its marker shows the date as written; events without a year are counted under the drawing instead. A study with fewer than two dated events has no chronology, and past 30 people only the 30 earliest are drawn, with the rest counted. The drawing is plain SVG, so it needs no JavaScript, and a **…, as text** section beneath it lists the same events for screen readers and text browsers. To improve it, record dates on the people's events; nothing is inferred.
 

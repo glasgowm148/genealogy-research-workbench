@@ -3144,6 +3144,8 @@
         "body": "## What the records say\n\nThe invented register names [[person:05]] and her siblings in one household entry. The Willowmere return lists [[person:05|Elara]] with [[person:13]] after 1802.\n\n- **Documented:** the register entry for the four children of [[person:01]].\n- *Probable:* the link for person 10, because a second adult shares the given name.\n\n> Every source in this study is invented for demonstration.\n\n## Still to check\n\nWhether [[question:household]] can be answered from the household returns alone.",
         "conclusion": "The Lanternford children are documented as Ada Alder's; the Willowmere household is a probable continuation of Elara Cairn's line, pending [[finding:willowmere-household]].",
         "id": "study:households",
+        "kind": "family study",
+        "limitations": "Shared places and given names do not establish kinship. The Willowmere returns list a household without stating how its members are related, so the continuation of Elara Cairn's line rests on the marriage record and the register, not on the returns alone.",
         "rationale": "Several children share given names across the two places. This study sets out which records tie each child to Ada Alder and which links remain uncertain.",
         "related_ids": [
           "person:01",
