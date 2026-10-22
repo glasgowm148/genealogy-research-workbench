@@ -12,7 +12,7 @@ from genealogy.models import (AccessLevel as A, Claim, Confidence as C, Event, E
                               Relationship, ResearchQuestion, Study)
 from genealogy.site import build_site
 
-ALL = ["names", "biography", "family-heading", "events", "claims", "studies", "research", "relationships", "external"]
+ALL = ["names", "biography", "family-heading", "events", "claims", "studies", "research", "relationships", "external", "connected"]
 
 
 def nav_case():
@@ -61,8 +61,8 @@ class DossierNavTests(unittest.TestCase):
         self.assertEqual(ALL, self.menu(page))
         for key in ALL:
             self.assertRegex(page, rf'<h2 id="{key}">')
-        # The menu follows the heading block directly, so the dossier opening stays one insertion point.
-        self.assertRegex(page, r'<p class="record-id meta">Record ID: ada:fable 1</p><nav class="page-sections"')
+        # The menu follows the hero card directly and opens the two-column body, so the dossier opening stays one insertion point.
+        self.assertRegex(page, r'</header><div class="dossier-layout"><nav class="page-sections" aria-label="On this page"><ol>')
 
     def test_menu_skips_sections_showing_only_their_empty_state(self):
         page = self.dossier("p0003")

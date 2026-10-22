@@ -388,8 +388,9 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.locator('p.explore').get_by_role('link', name='Family tree').click()
         self.page.locator('#tree-output svg').wait_for()
         self.assertEqual('person:01', self.page.locator('#tree-root').input_value())
-        # Wide screens keep the menu in view; a jump leaves its heading clear of it. Narrow screens leave it in the flow.
-        for width, position in ((1600, 'sticky'), (390, 'static')):
+        # Wide screens keep the numbered menu in view as a column beside the sections; a jump
+        # leaves its heading clear of it. Narrow screens leave it in the flow, above the sections.
+        for width, position in ((1600, 'sticky'), (1280, 'sticky'), (390, 'static')):
             self.page.set_viewport_size({'width': width, 'height': 900})
             self.page.goto(self.base + 'people/' + dossier.name)
             nav = self.page.locator('nav.page-sections')
@@ -399,9 +400,14 @@ class BrowserSiteTests(unittest.TestCase):
             heading, menu = self.page.locator('#events').bounding_box(), nav.bounding_box()
             if position == 'sticky':
                 self.assertLess(abs(menu['y']), 1)  # held at the top of the window
-                self.assertGreaterEqual(heading['y'], menu['y'] + menu['height'] - 1)
+                self.assertGreaterEqual(heading['x'], menu['x'] + menu['width'] - 1)  # beside the menu, never under it
+                self.assertGreaterEqual(heading['y'], -1)
+                self.assertLess(heading['y'], 100)  # the jump lands at the top of the window
+                # Numbered 01, 02 … by a counter outside each link, so the link's name stays the section's.
+                self.assertEqual('counter(toc, decimal-leading-zero)', nav.locator('ol > li').first.evaluate("li => getComputedStyle(li, '::before').content"))
             else:
                 self.assertGreaterEqual(heading['y'], -1)
+                self.assertGreaterEqual(heading['y'], menu['y'] + menu['height'] - 1)  # the menu stays above the sections
             self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), width + 1)
             if os.environ.get('GENEALOGY_AXE_PATH'):
                 self.page.add_script_tag(content=Path(os.environ['GENEALOGY_AXE_PATH']).read_text(encoding='utf-8'))

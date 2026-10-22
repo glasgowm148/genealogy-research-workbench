@@ -50,6 +50,7 @@ STUDY_MAP_DRAWN = 200  # markers on a study's locator map, so a study of a whole
 PLACE_LIST_LIMIT = 200  # people, sub-places, surnames or studies listed on a place's page; the rest are counted
 PLACE_PEOPLE_BYTES = 40_000  # a place's people list also stops here, and each of its other lists at a third of it
 STATISTICS_ROWS = 25  # rows per statistics table; the rest are counted, so the page stays small on a large site
+CONNECTED_LIMIT = 12  # pages listed per group under a dossier's "Connected pages"; the rest are counted
 UNPLACED_REGION = "Places without a broader jurisdiction"
 PLACE_CARDS = 100  # places drawn as cards on places.html and by its filter; past this a site pages its places by region
 PLACE_CARD_BYTES = 50_000  # a large site's places page stops its busiest-places cards here
@@ -1717,6 +1718,65 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 f'<p>{ref(newest["id"], "../", newest["conclusion"])}{metadata(newest, "../")}</p><p class="meta">Recorded {when(newest["recorded_on"])}</p>'
                 f'<p class="meta research-date">Research last recorded {when(last)}</p></aside>')
 
+    def vitals(pid: str) -> str:
+        """Born and died, each with its recorded place linked; a baptism or burial stands in, named as such."""
+        rows, recorded = [], False
+        for heading, kinds in (("Born", (("birth", "Born"), ("baptism", "Baptised"), ("christening", "Baptised"))),
+                               ("Died", (("death", "Died"), ("burial", "Buried")))):
+            found = next(((e, label) for kind, label in kinds for e in events_by_person[pid]
+                          if str(e["kind"]).casefold() == kind and (e.get("date") or e.get("place_id") in places)), None)
+            value = '<span class="meta">Not recorded</span>'
+            if found:
+                (e, heading), recorded = found, True
+                value = " · ".join(([when(e["date"], e.get("date_precision"))] if e.get("date") else []) + ([ref(e["place_id"], "../", places[e["place_id"]]["name"])] if e.get("place_id") in places else []))
+            rows.append(f"<div><dt>{heading}</dt><dd>{value}</dd></div>")
+        return '<dl class="vitals">' + "".join(rows) + "</dl>" if recorded else ""
+
+    def dossier_hero(pid: str, span: str, recorded_sex: str | None, explore: list[tuple[str, str]], opening: str) -> str:
+        """The dossier's opening card: who, when, where, what to do next, and the latest finding beside it."""
+        actions = '<p class="explore"><span class="meta">Explore:</span> ' + " ".join(f'<a href="../{_text(url)}">{_text(label)}</a>' for url, label in explore) + "</p>"
+        if "corrections.html" in routes:
+            actions += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
+                                                           if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"
+        sex_line = f'<p class="meta">Recorded sex: {_text(recorded_sex)} <span class="badge">Unassessed tree assertion</span></p>' if recorded_sex else ""
+        return ('<header class="dossier-hero"><div class="dossier-hero-main"><p class="eyebrow">Person dossier</p>'
+                f'<h1>{_text(person_name(pid))}</h1>' + (f'<p class="lifespan">{_text(span)}</p>' if span else "") + f'<p class="record-id meta">Record ID: {_text(pid)}</p>'
+                + opening + vitals(pid) + sex_line + f'<div class="dossier-actions">{actions}</div></div>' + latest_finding(pid) + "</header>")
+
+    def connected_pages(pid: str, personal_claims: list[dict[str, Any]]) -> str:
+        """Every other page this person leads to, grouped, so a reader can move on without scrolling back up.
+        Built from the public projection only, and capped per group so a busy person's page stays small."""
+        prefix = "../"
+        here: dict[str, list[str]] = {}
+        for e in events_by_person[pid]:
+            if e.get("place_id") in places:
+                here.setdefault(e["place_id"], []).append(str(e["kind"]))
+        cited: Counter[str] = Counter(citations[cid]["source_id"] for c in personal_claims
+                                      for cid in dict.fromkeys([*c.get("citation_ids", []), *(e["citation_id"] for e in evidence_by_claim[c["id"]])]) if cid in citations)
+        all_parents, _, all_children = kin(pid)
+        relatives = lambda ids: [ref(r, prefix) + (f' <span class="meta">{_text(lifespan(r))}</span>' if lifespan(r) else "") for r in dict.fromkeys(ids) if r in people]
+        groups = [
+            ("Places", "place", "places", [ref(p, prefix, places[p]["name"]) + f' <span class="meta">{_text(", ".join(dict.fromkeys(kinds)))}</span>' for p, kinds in here.items()]),
+            ("Studies", "study", "studies", [f'<a href="{prefix}{study_urls[s["id"]]}">{_text(s["title"])}</a>' for s in studies_by_subject[pid]]),
+            ("Sources cited", "source", "sources", [ref(sid, prefix, sources[sid].get("title", sid)) + f' <span class="meta">cited {n:,} time{"" if n == 1 else "s"}</span>'
+                                                    for sid, n in sorted(cited.items(), key=lambda item: (-item[1], str(sources[item[0]].get("title", item[0])).casefold()))]),
+            ("Surname", "page", "pages", [f'<a href="{prefix}catalogue.html?surname={_text(quote(canonical_surname(pid)))}">Everyone surnamed {_text(canonical_surname(pid))}</a>'] if canonical_surname(pid) else []),
+            ("Parents", "dossier", "dossiers", relatives(r["object_id"] for r in all_parents if not rejected(r))),
+            ("Children", "dossier", "dossiers", relatives(r["subject_id"] for r in all_children if not rejected(r))),
+        ]
+        cards = []
+        for heading, one, many, items in groups:
+            if items:
+                more = len(items) - CONNECTED_LIMIT
+                cards.append(f'<details class="connected-group"><summary>{heading} <span class="meta">{len(items):,} {one if len(items) == 1 else many}</span></summary><ul>'
+                             + "".join(f"<li>{item}</li>" for item in items[:CONNECTED_LIMIT]) + "</ul>"
+                             + (f'<p class="meta">and {more:,} more, listed in the sections above</p>' if more > 0 else "") + "</details>")
+        if not cards:
+            return ""
+        return ('<h2 id="connected">Connected pages</h2><p class="meta">Other pages on this site for this person: places, studies, the sources cited, '
+                'everyone of the same surname, and the dossiers of parents and children. Open a group to see its pages.</p>'
+                '<div class="connected-pages">' + "".join(cards) + "</div>")
+
     def search_item(row: dict[str, Any], prefix: str = "", *, omit: str | None = None) -> str:
         """One search: when, where it looked, what it found (often nothing), what it could not cover and the records found."""
         found = [f"<li>{record_link(cid, prefix)}</li>" for cid in row.get("citation_ids", []) if cid in citations]
@@ -1760,16 +1820,16 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         jumps = [("names", "Names", name_items), ("biography", "Biography", person.get("notes")), ("family-heading", "Family", family_rows),
                  ("events", "Events", related_events), ("claims", "Claims and evidence", personal_claims), ("studies", "Studies", studies_by_subject[pid]),
                  ("research", "Research", research_by_subject[pid]), ("research-log", "Research log", searches_by_subject[pid]), ("relationships", "All relationships", related_rels), ("external", "External identifiers", external)]
-        if any(filled for _, _, filled in jumps):
-            content += '<nav class="page-sections" aria-label="On this page"><ul>' + "".join(f'<li><a href="#{key}">{label}</a></li>' for key, label, filled in jumps if filled) + "</ul></nav>"
+        linked_pages = connected_pages(pid, personal_claims)
+        jumps.append(("connected", "Connected pages", linked_pages))
         explore = [(f"tree.html?person={quote(pid)}", "Family tree"), (f"connections.html?a={quote(pid)}", "Find a connection"), (f"compare.html?a={quote(pid)}", "Compare")]
         if canonical_surname(pid):
             explore.append((f"catalogue.html?surname={quote(canonical_surname(pid))}", f"Everyone surnamed {canonical_surname(pid)}"))
-        content += '<p class="explore"><span class="meta">Explore:</span> ' + " · ".join(f'<a href="../{_text(url)}">{_text(label)}</a>' for url, label in explore) + "</p>"
-        if recorded_sex:
-            content += f'<p class="meta">Recorded sex: {_text(recorded_sex)} <span class="badge">Unassessed tree assertion</span></p>'
         # The researcher's own notes, when there are any, open the page instead of generated sentences.
-        content += ("" if person.get("notes") else introduction(pid)) + latest_finding(pid)
+        content = dossier_hero(pid, span, recorded_sex, explore, "" if person.get("notes") else introduction(pid)) + '<div class="dossier-layout">'
+        if any(filled for _, _, filled in jumps):
+            content += '<nav class="page-sections" aria-label="On this page"><ol>' + "".join(f'<li><a href="#{key}">{label}</a></li>' for key, label, filled in jumps if filled) + "</ol></nav>"
+        content += '<div class="dossier-body">'
         content += '<h2 id="names">Names</h2>' + empty(name_items)
         if person.get("notes"):
             content += '<h2 id="biography">Biography and notes</h2><p class="preserve-lines">' + _text(person["notes"]) + '</p>'
@@ -1777,9 +1837,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         content += '<h2 id="events">Events</h2>' + empty([event(e, "../") for e in related_events]) + '<h2 id="claims">Claims, citations and evidence</h2>' + ("".join(claim(c, "../") for c in personal_claims) or '<p>No public claims recorded for this person.</p>')
         content += '<h2 id="studies">Studies</h2>' + empty([f'<li><a href="../{study_urls[s["id"]]}">{_text(s["title"])}</a> {study_meta(s, "../")}</li>' for s in studies_by_subject[pid]], "No public studies mention this person.")
         content += '<h2 id="research">Research</h2>' + empty(research_items(pid)) + research_log(pid) + '<h2 id="relationships">All recorded relationships</h2>' + empty([relationship(r, "../") for r in related_rels]) + '<h2 id="external">External identifiers</h2>' + empty(external)
-        if "corrections.html" in routes:
-            content += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
-                                                           if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"
+        content += linked_pages + "</div></div>"
         pages[people_urls[pid]] = content
 
     # Place pages: where a place sits among the places recorded around it, and
