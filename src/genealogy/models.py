@@ -131,6 +131,10 @@ class Place(Record):
     # How exactly the coordinates locate the place, as supplied or reviewed:
     # PLACE_PRECISIONS below. None means not stated, never "exact".
     precision: str | None = None
+    # The country or broad region the project files the place under, as it
+    # words it ("Ireland", "At Sea"). None means the last part of the name
+    # as written ("Town, County, Country" -> "Country") stands in.
+    region: str | None = None
 
 
 @dataclass(slots=True)

@@ -100,7 +100,7 @@ DATA_FILES.add("data/findings-index.js")  # a long findings log's filters search
 BROWSER_FIELDS = {
     "people": ("id", "names", "event_ids", "notes"),
     "events": ("id", "kind", "date", "date_precision", "place_id", "participant_ids", "description"),
-    "places": ("id", "name", "latitude", "longitude", "precision"),
+    "places": ("id", "name", "latitude", "longitude", "precision", "region"),
     "relationships": ("id", "subject_id", "object_id", "kind", "confidence", "grade", "estimate", "tree_status", "pedigree"),
     # A claim's citations, with each record's stated quality, let the catalogue
     # find people whose supported claims rest on an original record.
@@ -357,13 +357,17 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     source_page_url = lambda n: "sources.html" if n == 1 else f"sources/page-{n}.html"
     source_pages = ({sid: source_page_url(index // SOURCES_PER_PAGE + 1) for index, sid in enumerate(sources_ordered)}
                     if compact_sources else {})
-    # Places group by their broadest jurisdiction as written ("Town, County,
-    # Country" -> "Country"); nothing is looked up or inferred. On a large site
-    # each region has its own pages.
+    # Places group by the region the project files them under, else by their
+    # broadest jurisdiction as written ("Town, County, Country" -> "Country");
+    # nothing is looked up or inferred. On a large site each region has its own pages.
+    def place_region_of(p: dict[str, Any]) -> str:
+        if p.get("region"):
+            return str(p["region"]).strip()
+        parts = [part.strip() for part in str(p["name"]).split(",") if part.strip()]
+        return parts[-1] if len(parts) > 1 else UNPLACED_REGION
     regions: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for p in project["places"]:
-        parts = [part.strip() for part in str(p["name"]).split(",") if part.strip()]
-        regions[parts[-1] if len(parts) > 1 else UNPLACED_REGION].append(p)
+        regions[place_region_of(p)].append(p)
     for members in regions.values():
         members.sort(key=lambda row: (str(row["name"]).casefold(), row["id"]))
     region_order = sorted(regions, key=lambda r: (r == UNPLACED_REGION, -len(regions[r]), r.casefold()))
@@ -3234,12 +3238,14 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                     if pid in people:
                         pending[pid].append([side(row, pid), action, str(change["after"])])
         used: set[str] = set()
+        group_studies = {sid for sid, row in studies.items() if str(row.get("kind") or "").casefold() == "group"}
         for row in shared["people"]:
             pid = row["id"]
             cited = {cid: citations[cid] for c in claims_by_subject.get(pid, []) for cid in [*c.get("citation_ids", []), *(e["citation_id"] for e in evidence_by_claim.get(c["id"], []))] if cid in citations}
             kinds = sorted({_slug(str(sources.get(c["source_id"], {}).get("source_type") or "")) or "unknown" for c in cited.values() if c["source_id"] in sources})
             used.update(kinds)
-            facets = {"study_ids": [s["id"] for s in studies_by_subject.get(pid, [])], "record_types": kinds,
+            # "Possible group": the project's group studies when it has any (Study.kind == "group"), else every study naming the person.
+            facets = {"study_ids": [s["id"] for s in studies_by_subject.get(pid, []) if not group_studies or s["id"] in group_studies], "record_types": kinds,
                       "qualities": sorted({c["quality"] if c.get("quality") in SOURCE_QUALITY else "unknown" for c in cited.values()}), "changes": pending.get(pid, [])}
             row.update({key: value for key, value in facets.items() if value})
         if used:

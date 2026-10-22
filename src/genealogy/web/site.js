@@ -11,6 +11,8 @@ const root = page.site?.root ?? '';
 const list = key => Array.isArray(data[key]) ? data[key] : Object.values(data[key] || {});
 const people=list('people'), events=list('events'), places=list('places'), relationships=list('relationships'), claims=list('claims');
 const personBy=new Map(people.map(p=>[p.id,p])), eventBy=new Map(events.map(e=>[e.id,e])), placeBy=new Map(places.map(p=>[p.id,p]));
+// A place's region as the project files it, else the last part of its name as written; site.py's place_region_of agrees.
+const regionOfPlace=(p,unplaced='')=>{if(p.region)return String(p.region).trim();const parts=String(p.name).split(',').map(s=>s.trim()).filter(Boolean);return parts.length>1?parts[parts.length-1]:unplaced||parts[0]||'';};
 // Only citations that state their quality or information are shipped.
 const citationBy=new Map(list('citations').map(c=>[c.id,c]));
 const links=Object.fromEntries(Object.entries(data.site?.people_urls||{}).map(([id,url])=>[id,window.GENEALOGY_SITE_DATA?root+url:url]));
@@ -145,7 +147,7 @@ function catalogueFacets(records,surname){
    first:fold(nm.map(n=>n.given||String(n.value||'').replace(n.surname||'\0','')).join(' ')),last:fold(surnames(nm).join(' ')),lastBirth:fold(birthNames.join(' ')),lastCurrent:fold(current(p).join(' ')),full:fold(nm.map(n=>n.value).join(' ')),
    relatives:Object.fromEntries(Object.entries(rel).map(([k,ids])=>[k,ids.map(names)])),
    where:{record:recorded.map(norm),birth:at(e=>e.kind==='birth').map(norm),death:at(e=>e.kind==='death').map(norm),marriage:at(e=>/^marriage/.test(e.kind||'')).map(norm),bio:p.notes?[norm(p.notes)]:[]},
-   regions:new Set([...recorded.map(n=>n.split(',').map(s=>s.trim()).filter(Boolean).pop()),...(ev.length&&!recorded.length?['Location unknown']:[])]),
+   regions:new Set([...[...new Set(ev.map(e=>placeBy.get(e.place_id)).filter(Boolean))].map(p=>regionOfPlace(p)),...(ev.length&&!recorded.length?['Location unknown']:[])]),
    studies:new Set(p.study_ids||[]),types:new Set(p.record_types||[]),qualities:new Set(p.qualities||[]),
    missingFather:!rel.father.length,missingMother:!rel.mother.length,children:rel.child.length>0,partner:rel.spouse.length>0,
    bornSurname:birthNames.some(isTarget),
@@ -876,7 +878,7 @@ function placeCards(){
  const host=$('[data-place-filter]'),listing=$('[data-place-cards]'),status=$('#place-count');if(!host||!listing||!status||!places.length)return;
  const LIMIT=100,unplaced=host.dataset.unplaced||'',initial=status.textContent,routes={...(data.site?.place_urls||{}),...(data.site?.place_routes||{})};
  // A place's region is the last part of its name as recorded, as the page groups it.
- const regionOf=p=>{const parts=String(p.name).split(',').map(s=>s.trim()).filter(Boolean);return parts.length>1?parts[parts.length-1]:unplaced;};
+ const regionOf=p=>p.region?String(p.region).trim():regionOfPlace(p,unplaced);
  // As the cards count them: an event's people are its participants and anyone listing it among their own events.
  const at=new Map(places.map(p=>[p.id,{p,region:regionOf(p),events:0,people:new Set,years:[]}]));
  for(const [pid,evs] of eventsByPerson){if(!personBy.has(pid))continue;for(const e of evs.values())at.get(e.place_id)?.people.add(pid);}

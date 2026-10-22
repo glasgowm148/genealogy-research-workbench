@@ -48,8 +48,10 @@ def finder_records():
     types and qualities; and pending, reviewed and withheld relationship changes."""
     return [
         Place("fp-lantern", "Lanternby, North Shire, Fableland", latitude=52.0, longitude=-1.0),
-        Place("fp-willow", "Willowby, Inventia", latitude=48.0, longitude=3.0),
+        # Filed under a region of the project's own wording, not the last part of its name.
+        Place("fp-willow", "Willowby, Inventia", latitude=48.0, longitude=3.0, region="The Inventian Isles"),
         Place("fp-moss", "Mossford, Fableland"),
+        Place("fp-sea", "At Sea"),  # a one-part name: its region is the name itself
         Place("fp-secret", "SECRET-PLACE Hamlet, Nowhere", sensitivity=A.PRIVATE),
         # Listed first, but withheld: the page's examples come from the first public person.
         *person("f00", Name("SECRET-FIRST Fable", given="SECRET-FIRST", surname="Fable"), sensitivity=A.PRIVATE,
@@ -65,7 +67,7 @@ def finder_records():
         *person("f07", Name("Gwen Fable", surname="Fable"), sex="F", events=[born("f07", "1803", "fp-lantern")]),
         *person("f08", Name("Hugo Vale", surname="Vale"), sex="M"),
         *person("f09", Name("Iris Rook", surname="Rook"), sex="F", events=[Event("f09-res", "residence", participant_ids=["f09"], sensitivity=A.PUBLIC)]),
-        *person("f10", Name("Jory Fable", surname="Fable"), events=[born("f10", "1830")]),
+        *person("f10", Name("Jory Fable", surname="Fable"), events=[born("f10", "1830"), born("f10", "1861", "fp-sea", "death")]),
         *person("f99", Name("SECRET-PERSON Fable", surname="Fable"), sex="F", sensitivity=A.PRIVATE),
         Event("f01-marriage", "marriage", date="1825", place_id="fp-moss", participant_ids=["f01", "f04"], sensitivity=A.PUBLIC),
         link("r-father", "f01", "f02", "parent", C.DOCUMENTED),
@@ -286,6 +288,37 @@ class FindAPersonPageTests(unittest.TestCase):
                     self.assertNotIn(secret, text, path)
         self.assertNotIn("f99", json.dumps(self.data["people"]))
         self.assertNotIn("f00", self.html)
+
+
+class RegionAndGroupTests(unittest.TestCase):
+    """A place's own region, and the project's group studies as the catalogue's possible groups."""
+    def test_a_places_region_groups_it_and_reaches_the_browser_data(self):
+        case = finder_case()
+        self.assertEqual([], validate_case(case))
+        case.add(Place("fp-bad", "Nowhere", region="  "))
+        self.assertIn("fp-bad.region must be a non-empty string or null", validate_case(case))
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            build_site(finder_case(), config(), out)
+            script = (out / "data/site-data.js").read_text(encoding="utf-8")
+            data = json.loads(script.removeprefix("window.GENEALOGY_SITE_DATA=").removesuffix(";\n"))
+            self.assertEqual("The Inventian Isles", {p["id"]: p for p in data["places"]}["fp-willow"]["region"])
+            places = (out / "places.html").read_text(encoding="utf-8")
+            section = places[places.index("<h2>The Inventian Isles</h2>"):]
+            self.assertIn("Willowby, Inventia</a></h3><p class=\"place-facts\">The Inventian Isles", section[:section.index("</section>")])
+            self.assertEqual("The Inventian Isles", json.loads((out / "data/site.json").read_text(encoding="utf-8"))["places"][1]["region"])
+
+    def test_group_studies_are_the_possible_groups_when_a_project_has_them(self):
+        case = finder_case()
+        case.add(Study("st-cluster", "Lantern cluster", kind="group", related_ids=["f01", "f04"], sensitivity=A.PUBLIC))
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            build_site(case, config(), out)
+            script = (out / "data/site-data.js").read_text(encoding="utf-8")
+            people = {p["id"]: p for p in json.loads(script.removeprefix("window.GENEALOGY_SITE_DATA=").removesuffix(";\n"))["people"]}
+            self.assertEqual(["st-cluster"], people["f01"]["study_ids"])  # not st-lantern, which is not a group
+            self.assertEqual(["st-cluster"], people["f04"]["study_ids"])
+            self.assertNotIn("study_ids", people["f07"])
 
 
 class FindAPersonDefaultsTests(unittest.TestCase):

@@ -216,13 +216,13 @@ class FindAPersonBrowserTests(unittest.TestCase):
         self.assertEqual(['f01'], self.ids())  # the years are read in order
         dates.get_by_label('Dates apply to').select_option('death')
         dates.get_by_label('To year').fill('')
-        self.assertEqual(['f01'], self.ids())  # the only recorded death
+        self.assertEqual(['f01', 'f10'], self.ids())  # the two recorded deaths
         self.assertEqual({'date_type': 'death', 'year_from': '1802'}, self.query())
         self.assertEqual('2', self.badges()['Dates'])
         self.reset()
         places = self.menu('Places')
         regions = places.get_by_label('Country or region').locator('option').all_inner_texts()
-        self.assertEqual(['Any region', 'Fableland', 'Inventia', 'Location unknown'], regions)
+        self.assertEqual(['Any region', 'At Sea', 'Fableland', 'Location unknown', 'The Inventian Isles'], regions)  # Willowby is filed under its Place.region; At Sea has no parts
         for kind, text, expected in (('', 'lanternby', ['f01', 'f06', 'f07']), ('death', 'willowby', ['f01']), ('marriage', 'mossford', ['f01', 'f04']),
                                      ('bio', 'mossbank', ['f01']), ('', 'mossbank', ['f01']), ('record', 'mossbank', [])):
             places.get_by_label('Location applies to').select_option(kind)
@@ -230,7 +230,9 @@ class FindAPersonBrowserTests(unittest.TestCase):
             self.assertEqual(expected, sorted(self.ids()), (kind, text))
         self.reset()
         places.get_by_label('Country or region').select_option('Location unknown')
-        self.assertEqual(['f02', 'f09', 'f10'], sorted(self.ids()))  # events recorded, none placed
+        self.assertEqual(['f02', 'f09'], sorted(self.ids()))  # events recorded, none placed
+        places.get_by_label('Country or region').select_option('At Sea')
+        self.assertEqual(['f10'], sorted(self.ids()))
         places.get_by_label('Country or region').select_option('Fableland')
         self.assertEqual(['f01', 'f04', 'f06', 'f07'], sorted(self.ids()))
         places.get_by_label('Exclude location').fill('inventia')

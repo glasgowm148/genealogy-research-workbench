@@ -409,6 +409,8 @@ def _validate_record_fields(record: Record) -> list[str]:
         errors.append(f"{record.id}.estimate must be a whole percentage from 1 to 99")
     if isinstance(record, Place) and record.precision is not None and record.precision not in PLACE_PRECISIONS:
         errors.append(f"{record.id}.precision must be one of: {', '.join(PLACE_PRECISIONS)}")
+    if isinstance(record, Place) and record.region is not None and (not isinstance(record.region, str) or not record.region.strip()):
+        errors.append(f"{record.id}.region must be a non-empty string or null")
     if isinstance(record, Citation):
         for field_name, allowed in (("quality", CITATION_QUALITIES), ("information", CITATION_INFORMATION)):
             if getattr(record, field_name) is not None and getattr(record, field_name) not in allowed:

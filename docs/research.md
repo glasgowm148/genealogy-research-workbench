@@ -340,6 +340,10 @@ Record an event's date as the record gives it: `1754`, `1754-01`, `1731-05-24`, 
 
 Coordinates supplied for a whole parish, county or country should not be read as an exact address. Set `precision` on a place to one of `exact`, `building`, `street`, `settlement`, `parish`, `district`, `county`, `region`, `country` or `approximate`. Places at parish level or broader are drawn as a dashed ring on the map, and every place says how precisely it is located. Imports leave `precision` unset; nothing is guessed.
 
+## Place region
+
+The places page and the catalogue's **Country or region** menu file each place under the last part of its name as written ("Ballymena, County Antrim, Ireland" under "Ireland"). When a project words its regions differently from the names it records ("At Sea", "Caribbean", a state-less "United States"), set `region` on the place to that wording; it is shown as given and nothing is looked up. Leave it unset to keep the name's last part.
+
 ## Place hierarchy
 
 To say that a place lies within another, set the smaller place's `parent_id` to the larger place's ID: a town's parent is its parish, the parish's its county, the county's its country. Each place with a public event or a place within it gets a page of its own, which names the places it lies within (broadest first, each linked), the places recorded within it, and the events (with their people and the sources their claims cite), surnames, years and studies recorded there. The places page shows each place as a card with its counts, years and main surnames. Nothing is inferred from a place's name; a place with no `parent_id` stands alone. A place whose parent is withheld is withheld with it, so record the hierarchy with public places.
