@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT.parents[1] / "src"))
 from genealogy.case import CaseStore, ResearchCase
 from genealogy.models import (
     AccessLevel, Claim, ClaimStatus, Citation, Confidence, Event, Evidence,
-    Finding, Hypothesis, Name, Person, Place, Relationship, ResearchQuestion,
+    Finding, Haplogroup, Hypothesis, Name, Person, Place, Relationship, ResearchQuestion,
     Source, Study, LivingStatus,
 )
 
@@ -46,7 +46,8 @@ def build() -> ResearchCase:
         c.add(Event(evb,"birth",f"{birth}-01-01","year",place.id,[pid],sensitivity=access))
         c.add(Event(evd,"death",f"{death}-12-31","year",places[(i+1)%3].id,[pid],sensitivity=access))
         given, surname = name.split()
-        c.add(Person(pid,[Name(name,"birth",confidence=Confidence.PROBABLE,given=given,surname=surname)],[evb,evd],living=LivingStatus.DECEASED,notes="Fictional person; dates and identity are illustrative.",sensitivity=access))
+        c.add(Person(pid,[Name(name,"birth",confidence=Confidence.PROBABLE,given=given,surname=surname)],[evb,evd],living=LivingStatus.DECEASED,notes="Fictional person; dates and identity are illustrative.",sensitivity=access,
+                     haplogroup_id={0:"haplo:fable2",2:"haplo:fable3"}.get(i),haplogroup_note={0:"reported root: an invented tester's pedigree reaches him",2:"reported root of the invented Willowmere line"}.get(i)))
         nodes.append(dict(id=pid,name=name,birth=birth,death=death,place=place.name,placeid=place.id))
     # Evidence and sourced, explicitly graded relationship claims. A parent
     # relationship points from the child (subject) to the parent (object).
@@ -74,13 +75,25 @@ def build() -> ResearchCase:
     c.add(ResearchQuestion("question:household", "Which invented household return best connects the Willowmere branch to Lanternford?",[nodes[10]["id"],nodes[18]["id"]],sensitivity=access,resolves="An invented household return naming both branches at one address."))
     c.add(Finding("finding:overview", "The demo models a 42-person, four-generation Alderwick family across three fictional locations; parentage is mostly documented in the invented evidence model, with two explicitly uncertain links.",[nodes[0]["id"],nodes[41]["id"]],["evidence:parent:5"],status="reviewed",confidence=Confidence.PROBABLE,sensitivity=access,recorded_on="2026-09-14"))
     c.add(Finding("finding:willowmere-household", "The invented Willowmere household return names Elara Cairn beside Mara Grove, consistent with their recorded marriage; it does not by itself prove which Cairn household she came from.",[nodes[4]["id"],nodes[12]["id"],"place:willow"],["evidence:parent:5"],status="draft",confidence=Confidence.POSSIBLE,sensitivity=access,recorded_on="2026-10-02"))
+    # A competing father for person 10 (its recorded link is only probable): the reading room shows both candidates side by side,
+    # and a draft finding records the reassessment still to make on the online tree, with how much it matters.
+    c.add(Relationship("rel:parent:10:alt",nodes[9]["id"],nodes[2]["id"],"parent",Confidence.POSSIBLE,rationale="An invented letter names a second household; not yet weighed against the register.",sensitivity=access))
+    c.add(Finding("finding:parent-10", "The invented register entry for person 10 names the household at Lanternford, so the recorded father is the likelier of the two candidates; the letter's household is not yet excluded.",
+                  [nodes[9]["id"],nodes[0]["id"]],["evidence:parent:10"],status="draft",confidence=Confidence.PROBABLE,sensitivity=access,recorded_on="2026-10-20",kind="relationship",
+                  changes=[{"record_id":"rel:parent:10","before":"possible","after":"probable","note":"Register entry weighed against the letter.","significance":60}]))
+    # Three invented Y-DNA branches, with two of the earliest men placed on them as reported roots; no results are modelled.
+    c.add(Haplogroup("haplo:fable1","R-FABLE1",date="c. 1050 CE",note="The invented fork the two family lines share.",sensitivity=access))
+    c.add(Haplogroup("haplo:fable2","R-FABLE2",parent_id="haplo:fable1",date="c. 1480 CE",note="The Lanternford line.",sensitivity=access))
+    c.add(Haplogroup("haplo:fable3","R-FABLE3",parent_id="haplo:fable1",date="c. 1520 CE",note="The Willowmere line.",sensitivity=access))
     c.add(Study("study:households", "Two households, one family: Lanternford and Willowmere",
         summary="How the invented Lanternford register and Willowmere returns connect Ada Alder's children to the Willowmere branch.",
         rationale="Several children share given names across the two places. This study sets out which records tie each child to Ada Alder and which links remain uncertain.",
         body="## What the records say\n\nThe invented register names [[person:05]] and her siblings in one household entry. The Willowmere return lists [[person:05|Elara]] with [[person:13]] after 1802.\n\n- **Documented:** the register entry for the four children of [[person:01]].\n- *Probable:* the link for person 10, because a second adult shares the given name.\n\n> Every source in this study is invented for demonstration.\n\n## Still to check\n\nWhether [[question:household]] can be answered from the household returns alone.",
         conclusion="The Lanternford children are documented as Ada Alder's; the Willowmere household is a probable continuation of Elara Cairn's line, pending [[finding:willowmere-household]].",
         related_ids=[nodes[0]["id"],nodes[4]["id"],nodes[12]["id"],"place:lantern","place:willow","src:register","src:returns","finding:overview","finding:willowmere-household","question:household"],
-        status="draft",updated_on="2026-10-02",sensitivity=access))
+        status="draft",updated_on="2026-10-02",kind="family study",
+        limitations="Shared places and given names do not establish kinship. The Willowmere returns list a household without stating how its members are related, so the continuation of Elara Cairn's line rests on the marriage record and the register, not on the returns alone.",
+        sensitivity=access))
     c.created_at=c.updated_at=STAMP
     return c
 

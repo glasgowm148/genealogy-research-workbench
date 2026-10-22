@@ -124,7 +124,7 @@ genealogy --project examples/demo build
 python -m http.server 8000 --bind 127.0.0.1 --directory examples/demo/dist
 ```
 
-The demo has 42 invented people, four generations, sources, uncertainty, and research questions. The [matching GEDCOM and OneTree files](examples/demo/input/) let you exercise the complete import workflow.
+The demo has 42 invented people, four generations, sources, uncertainty (including one person with two candidate fathers and a reassessment still to make on the tree), three invented DNA branches, and research questions. The [matching GEDCOM and OneTree files](examples/demo/input/) let you exercise the complete import workflow.
 
 ## What comes from your export—and what you add
 
