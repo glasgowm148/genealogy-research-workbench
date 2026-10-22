@@ -39,7 +39,9 @@ FINDING_GROUPS = 30  # studies, places and finding types listed by count on the 
 LATEST_SEARCHES = 50  # research.html lists the newest searches; each dossier lists all of its own
 QUESTION_RELATED = 4  # hypotheses and findings about a question's people shown on its card; the rest are on their pages
 FINDINGS_PER_PAGE = 50
-CATALOGUE_PER_PAGE = 100  # people per catalogue page on a large site, in name order
+CATALOGUE_PER_PAGE = 50  # people per catalogue page on a large site, in name order; the script pages by the same number
+# A recorded date that states a bound or an estimate rather than the day or year itself (site.js has the same pattern).
+APPROXIMATE_DATE = re.compile(r"\s*(?:ABOUT|ABT|CALCULATED|CAL|ESTIMATED|EST|CIRCA|CA|C|BEFORE|BEF|AFTER|AFT|BETWEEN|BET|FROM|TO|INT)(?![A-Z])", re.I)
 PLACES_PER_PAGE = 100  # places per region page on a large site
 SOURCES_PER_PAGE = 80  # sources per page on a large site, in title order; keeps a page of full source cards under 100 KB
 STUDIES_PER_PAGE = 100  # studies on a large site's studies page (newest) and on each title page
@@ -186,6 +188,11 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
         value = sex.get(row["id"], "")
         if value:
             row["sex"] = {"f": "F", "female": "F", "m": "M", "male": "M"}.get(value.casefold(), value)
+    # The catalogue shows a person's first external identifier in place of the record id, as the dossier lists it.
+    external = {p["id"]: next((i["value"] for i in p.get("external_ids", []) if i.get("value")), None) for p in project.get("people", [])}
+    for row in data["people"]:
+        if external.get(row["id"]):
+            row["external_id"] = external[row["id"]]
     return data
 
 
@@ -819,14 +826,62 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     options = '<option value="">Choose a person</option>' + ("" if compact_people else "".join(f'<option value="{_text(pid)}">{_text(person_name(pid))}</option>' for pid in people))
     browse_people = (f'<p>All {len(people):,} people are listed in the <a href="catalogue.html">catalogue</a>; each has a page of their own.</p>'
                      if compact_people else empty([f'<li>{ref(pid)}</li>' for pid in people]))
+    def catalogue_kin(pid: str) -> dict[str, list[tuple[dict[str, Any], str, str]]]:
+        """Spouses, fathers and mothers as (link, relative, role): rejected links left out, each relative once, in name order.
+        A parent is placed by their recorded sex; a parent without one is listed as "Parent" under Father."""
+        order = lambda item: (person_name(item[1]), item[0]["id"])
+        found: dict[str, list[tuple[dict[str, Any], str, str]]] = {"spouses": [], "fathers": [], "mothers": []}
+        seen: set[str] = set()
+        for row, other in sorted(((r, o) for r, o in partners_of[pid] if o in people and o != pid and not rejected(r)), key=order):
+            if other not in seen:
+                seen.add(other)
+                found["spouses"].append((row, other, ""))
+        seen = set()
+        for row, other in sorted(((r, r["object_id"]) for r in parents_of[pid] if r["object_id"] in people and r["object_id"] != pid and not rejected(r)), key=order):
+            if other not in seen:
+                seen.add(other)
+                role = parent_role(row, sex.get(other))
+                column = "mothers" if role.casefold().endswith("mother") else "fathers"
+                found[column].append((row, other, "" if role == column[:-1].capitalize() else role))
+        return found
+
+    def catalogue_vital(pid: str, kind: str) -> tuple[str, str]:
+        """The first recorded birth or death: its date as written, and its place."""
+        found = [e for e in events_by_person[pid] if e["kind"] == kind]
+        dated = next((e["date"] for e in found if e.get("date")), "")
+        placed = next((places[e["place_id"]]["name"] for e in found if e.get("place_id") in places), "")
+        return dated, placed
+
     def catalogue_row(pid: str, prefix: str = "") -> str:
-        summary = "; ".join(f'{e["kind"]}: {event_date(e, "date unknown")}' for e in events_by_person[pid])
-        span = lifespan(pid)
-        return (f'<tr data-person-id="{_text(pid)}" data-surname="{_text(canonical_surname(pid))}" data-search-text="{_text(" ".join([person_name(pid), pid, summary, *(str(e["date"]) for e in events_by_person[pid] if e.get("date"))]))}"><td>{ref(pid, prefix)}'
-                + (f'<br><span class="meta">{_text(span)}</span>' if span else "") + f'</td><td>{_text(surname(pid) or "—")}</td><td>{_text(summary or "No events recorded.")}</td><td>{_text(pid)}</td></tr>')
+        """One person as the research table shows them; site.js's catalogueRow builds the same row from the shared data."""
+        person = people[pid]
+        shown_id = next((i["value"] for i in person.get("external_ids", []) if i.get("value")), pid)
+        kin = catalogue_kin(pid)
+        cells = [f'<td>{ref(pid, prefix)}<span class="record-id">{_text(shown_id)}</span></td>']
+        words = [n["value"] for n in person.get("names", []) if n.get("value")] + [pid] + [i["value"] for i in person.get("external_ids", []) if i.get("value")]
+        for kind in ("birth", "death"):
+            date, place = catalogue_vital(pid, kind)
+            # Shading: a bounded or estimated date, a plain one, or none recorded.
+            shade = "" if not year_of(date) else ' class="date-approx"' if APPROXIMATE_DATE.match(date) else ' class="date-exact"'
+            cells += [f'<td{shade}>{_text(display_date(date) or "—")}</td>', f'<td>{_text(place or "—")}</td>']
+        for column in ("spouses", "fathers", "mothers"):
+            links = kin[column]
+            items = "".join(f'<span class="kin">{ref(other, prefix)}' + (f'<span class="kin-role">{_text(role)}</span>' if role else "")
+                            + metadata(row, prefix, relationship=True) + "</span>" for row, other, role in links)
+            # Shading: every link shown documented or probable, or not.
+            firm = ' class="kin-firm"' if links and all(row.get("confidence") in ("documented", "probable") for row, _, _ in links) else ""
+            cells.append(f'<td{firm}>{items or "—"}</td>')
+            words += [person_name(other) for _, other, _ in links]
+        words += [f'{e["kind"]}: {e.get("date") or "date unknown"}' + (f' {places[e["place_id"]]["name"]}' if e.get("place_id") in places else "") for e in events_by_person[pid]]
+        return (f'<tr data-person-id="{_text(pid)}" data-surname="{_text(canonical_surname(pid))}" data-search-text="{_text(" ".join(words))}">'
+                + "".join(cells) + "</tr>")
 
     def catalogue_table(pids: list[str], prefix: str = "") -> str:
-        return ('<div class="table-wrap"><table><thead><tr><th>Person</th><th>Surname</th><th>Recorded events</th><th>Record ID</th></tr></thead><tbody>'
+        # The script turns each heading into a sort button; data-sort names the ?sort= value.
+        heads = "".join(f'<th scope="col" data-sort="{key}">{label}</th>' for key, label in (
+            ("name", "Individual"), ("birth", "Birth"), ("birth-place", "Birth location"), ("death", "Death"), ("death-place", "Death location"),
+            ("spouse", "Spouse(s)"), ("father", "Father"), ("mother", "Mother")))
+        return (f'<div class="table-wrap"><table class="catalogue-table"><thead><tr>{heads}</tr></thead><tbody>'
                 + "".join(catalogue_row(pid, prefix) for pid in pids) + '</tbody></table></div>')
 
     pages: dict[str, str] = {}
@@ -853,7 +908,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                   '<a href="../catalogue.html">Search the catalogue</a>.</p>' + catalogue_table(chunk, "../") + catalogue_pages("../", n))
             extra_titles[page_url(n)] = ("people", f"People catalogue, page {n}")
     else:
-        pages["catalogue.html"] = catalogue_search + '<div data-catalogue>' + (catalogue_table(list(people)) if people else '<p class="empty-state">No public people are available.</p>') + '</div>'
+        pages["catalogue.html"] = catalogue_search + '<div data-catalogue>' + (catalogue_table(sorted(people, key=lambda pid: (person_name(pid).casefold(), pid))) if people else '<p class="empty-state">No public people are available.</p>') + '</div>'
     pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + (
         f'<p>{len(project["relationships"]):,} recorded family connections. Each person\'s page lists their parents, partners, children and siblings with these labels, and <a href="branches.html">Families &amp; branches</a> groups them.</p>'
         if compact_relationships else empty([relationship(r) for r in project["relationships"]], "No public family connections recorded."))

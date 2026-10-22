@@ -109,6 +109,17 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual([], self.errors, 'Browser runtime errors')
         self.assertEqual([], self.external, 'Public site must work without outside requests')
 
+    def filter(self, control):
+        """A catalogue filter control, its filter group (a details pill) opened first."""
+        group = self.page.locator('details.filter-group', has=control)
+        if group.count() and not group.evaluate('d => d.open'):
+            group.locator('summary').click()
+        return control
+
+    def surname_filter(self):
+        # The menu: the Group row also has a checkbox labelled Surname.
+        return self.page.get_by_label('Surname').and_(self.page.locator('select'))
+
     def evidence_dossier(self, routes):
         """A dossier whose claims show their records and assessments as a table."""
         return next(r for r in routes if r.startswith('people/') and 'class="evidence-table"' in (self.root / 'nested' / r).read_text())
@@ -149,7 +160,7 @@ class BrowserSiteTests(unittest.TestCase):
         site = self.root / 'nested'
         self.page.goto((site / 'catalogue.html').as_uri())
         self.page.locator('.pagination').wait_for()
-        surname = self.page.get_by_label('Surname')
+        surname = self.filter(self.surname_filter())
         options = surname.locator('option').all_inner_texts()
         self.assertIn('Alder (6)', options)
         surname.select_option('Alder')
@@ -165,7 +176,7 @@ class BrowserSiteTests(unittest.TestCase):
         self.page.goto((site / 'branches.html').as_uri())
         self.page.locator('a[href="catalogue.html?surname=Cairn"]').click()
         self.page.locator('.pagination').wait_for()
-        self.assertEqual('Cairn', self.page.get_by_label('Surname').input_value())
+        self.assertEqual('Cairn', self.surname_filter().input_value())
         self.assertEqual(6, self.page.locator('[data-person-id]:visible').count())
         self.page.goto((site / 'branches.html').as_uri())
         self.page.locator('a[href^="tree.html?person="]').first.click()
@@ -239,26 +250,28 @@ class BrowserSiteTests(unittest.TestCase):
         people = self.large_people
         self.page.goto(large + 'catalogue.html', wait_until='networkidle')
         rows = self.page.locator('[data-person-id]:visible')
-        self.assertEqual(40, rows.count())
-        self.assertIn(f'{people:,} of {people:,} people', self.page.locator('.result-count').inner_text())
+        self.assertEqual(50, rows.count())  # 50 a page, as site.py writes the first page
+        self.assertIn(f'Browsing all {people:,} people · 1–50 shown', self.page.locator('.result-count').inner_text())
         self.assertFalse(self.page.locator('[data-catalogue-pages]').is_visible())
-        self.assertIn(f'Page 1 of {-(-people // 40)}', self.page.locator('.pagination').inner_text())
+        self.assertIn(f'Page 1 of {-(-people // 50)}', self.page.locator('.pagination').inner_text())
         # Someone not written into the page is found, shown like the written rows, and linked.
         self.page.get_by_role('searchbox', name='Search people').fill('Person 0399')
         self.assertEqual(2, rows.count())  # the person, and their parent, whose search covers recorded relatives
         row = self.page.locator('[data-person-id="p0399"]')
-        self.assertIn('b. 1799', row.inner_text())
-        self.assertIn('birth: 1799', row.inner_text())
-        row.get_by_role('link').click()
+        # Birth, birth location, and the recorded parent with the link's badge.
+        self.assertEqual(['1799', 'Town 0399, Shire 0, Fableland'], row.locator('td').all_inner_texts()[1:3])
+        self.assertIn('Person 0199 Fable', row.locator('td').nth(6).inner_text())
+        self.assertIn('Unassessed tree link', row.locator('td').nth(6).inner_text())
+        row.get_by_role('link', name='Person 0399 Fable').click()
         self.assertEqual('Person 0399 Fable', self.page.locator('h1').inner_text())
         self.page.goto(large + 'catalogue.html?surname=Fable', wait_until='networkidle')
-        self.assertIn(f'{people:,} of {people:,} people', self.page.locator('.result-count').inner_text())
-        self.page.get_by_label('Sort by').select_option('birth')
-        self.assertIn('b. 1700', rows.first.inner_text())
+        self.assertIn(f'{people:,} matches of {people:,} people', self.page.locator('.result-count').inner_text())
+        self.page.get_by_role('button', name='Birth', exact=True).click()
+        self.assertEqual('1700', rows.first.locator('td').nth(1).inner_text())
         # One citation in five is an original record, so a fifth of the people are backed by one.
-        self.page.get_by_label('Evidence').select_option('original')
-        self.assertIn(f'{people // 5:,} of {people:,} people', self.page.locator('.result-count').inner_text())
-        self.assertIn('b. 1702', rows.first.inner_text())
+        self.filter(self.page.get_by_label('Evidence')).select_option('original')
+        self.assertIn(f'{people // 5:,} matches of {people:,} people', self.page.locator('.result-count').inner_text())
+        self.assertEqual('1702', rows.first.locator('td').nth(1).inner_text())
 
         self.page.goto(large + 'timeline.html', wait_until='networkidle')
         self.assertTrue(self.page.locator('.decade-list').first.is_visible())
@@ -318,9 +331,9 @@ class BrowserSiteTests(unittest.TestCase):
 
     def test_search_pagination_tree_compare_and_connections(self):
         self.page.goto(self.base + 'catalogue.html')
-        self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
-        self.page.get_by_role('button', name='Next').click()
-        self.assertEqual(3, self.page.locator('[data-person-id]:visible').count())  # 43 people, 40 a page
+        self.assertEqual(43, self.page.locator('[data-person-id]:visible').count())  # 43 people, 50 a page
+        self.assertIn('Page 1 of 1', self.page.locator('.pagination').inner_text())
+        self.assertTrue(self.page.get_by_role('button', name='Next').is_disabled())
         self.page.get_by_role('searchbox', name='Search people').fill('Ada Alder')
         self.assertGreater(self.page.locator('[data-person-id]:visible').count(), 0)
         self.assertLess(self.page.locator('[data-person-id]:visible').count(), 42)
@@ -329,10 +342,10 @@ class BrowserSiteTests(unittest.TestCase):
         # Eight people have supported parent claims; the seven resting on the register's original entry are
         # "backed by an original record", and the one resting on the letters is not.
         self.page.get_by_role('searchbox', name='Search people').fill('')
-        self.page.get_by_label('Evidence').select_option('supported')
-        self.assertIn('8 of 43 people', self.page.locator('.result-count').inner_text())
+        self.filter(self.page.get_by_label('Evidence')).select_option('supported')
+        self.assertIn('8 matches of 43 people', self.page.locator('.result-count').inner_text())
         self.page.get_by_label('Evidence').select_option('original')
-        self.assertIn('7 of 43 people', self.page.locator('.result-count').inner_text())
+        self.assertIn('7 matches of 43 people', self.page.locator('.result-count').inner_text())
         self.assertEqual(0, self.page.locator('[data-person-id="person:10"]:visible').count())
         self.assertEqual(1, self.page.locator('[data-person-id="person:05"]:visible').count())
         self.page.get_by_label('Evidence').select_option('')
@@ -422,33 +435,34 @@ class BrowserSiteTests(unittest.TestCase):
         self.assertEqual(0, self.page.locator('tr[data-surname="Hayle"]').count())
         row.locator('a[href="catalogue.html?surname=Hale"]').click()
         self.page.locator('.pagination').wait_for()
-        surname = self.page.get_by_label('Surname')
+        surname = self.filter(self.surname_filter())  # the options are read with the Name group open
         self.assertEqual('Hale', surname.input_value())
         self.assertIn('Hale (5, incl. Hayle)', surname.locator('option').all_inner_texts())
         self.assertEqual(5, visible.count())
         iona = self.page.locator('[data-person-id="person:43"]')
         self.assertTrue(iona.is_visible())
-        self.assertEqual('Hayle', iona.locator('td').nth(1).inner_text())  # shown as recorded
-        surname.select_option('')
+        self.assertTrue(iona.locator('td').first.inner_text().startswith('Iona Hayle'))  # shown as recorded, grouped as Hale
+        self.assertEqual('Hale', iona.get_attribute('data-surname'))
+        self.filter(surname).select_option('')
         for query in ('Iona Hale', 'Iona Hail', 'iona hayle'):  # any listed spelling finds her
             self.page.get_by_role('searchbox', name='Search people').fill(query)
             self.assertTrue(iona.is_visible(), query)
         self.page.goto(self.base + 'catalogue.html?surname=Hayle')
         self.page.locator('.pagination').wait_for()
-        self.assertEqual('Hale', self.page.get_by_label('Surname').input_value())
+        self.assertEqual('Hale', self.surname_filter().input_value())
         self.assertEqual(5, visible.count())
 
         large = self.base.replace('/nested/', '/large-variants/')
         everyone = self.large_people + 1
         self.page.goto(large + 'catalogue.html?surname=Fabel', wait_until='networkidle')
-        surname = self.page.get_by_label('Surname')
+        surname = self.filter(self.surname_filter())
         self.assertEqual('Fable', surname.input_value())
         self.assertEqual(['All surnames', f'Fable ({everyone}, incl. Fabel)'], surname.locator('option').all_inner_texts())
-        self.assertIn(f'{everyone:,} of {everyone:,} people', self.page.locator('.result-count').inner_text())
+        self.assertIn(f'{everyone:,} matches of {everyone:,} people', self.page.locator('.result-count').inner_text())
         self.page.get_by_role('searchbox', name='Search people').fill('Odo Fable')
         self.assertEqual(1, visible.count())
         odo = self.page.locator('[data-person-id="p9999"]')
-        self.assertEqual('Fabel', odo.locator('td').nth(1).inner_text())
+        self.assertTrue(odo.locator('td').first.inner_text().startswith('Odo Fabel'))  # shown as recorded, grouped as Fable
         self.assertEqual('Fable', odo.get_attribute('data-surname'))
 
     def test_family_view_draws_recorded_siblings(self):
@@ -575,7 +589,7 @@ class BrowserSiteTests(unittest.TestCase):
             self.assertIn('Browser synthetic upload', self.page.locator('h1').inner_text())
             self.page.locator('.site-sidebar a[data-group="people"]').click()
             self.page.locator('.pagination').wait_for()
-            self.assertEqual(40, self.page.locator('[data-person-id]:visible').count())
+            self.assertEqual(42, self.page.locator('[data-person-id]:visible').count())  # 50 a page
             self.assertEqual(42, len(self.page.evaluate('window.GENEALOGY_SITE_DATA')['people']))
             # The full public export sits beside the pages; the browser script carries a subset.
             payload = self.page.request.get(urljoin(self.page.url, 'data/site.json')).json()

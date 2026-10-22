@@ -122,7 +122,8 @@ class LargeSiteTests(unittest.TestCase):
         listed = re.findall(r'<tr data-person-id="([^"]+)"', catalogue + "".join(p.read_text() for p in pages))
         self.assertEqual(sorted(f"p{n:04d}" for n in range(PEOPLE)), sorted(listed))
         # Every page links to every other, in name order, and the links resolve.
-        self.assertIn('href="../catalogue/page-2.html" aria-current="page">Person 0100 Fable – Person 0199 Fable', self.text("catalogue/page-2.html"))
+        self.assertEqual(50, CATALOGUE_PER_PAGE)  # the script pages by the same number
+        self.assertIn('href="../catalogue/page-2.html" aria-current="page">Person 0050 Fable – Person 0099 Fable', self.text("catalogue/page-2.html"))
         self.assertIn('<a href="../people/', self.text("catalogue/page-2.html"))
         self.assertEqual([], check_site(self.out)["broken"])
 

@@ -108,7 +108,7 @@ class VariantSiteTests(unittest.TestCase):
         html = self.text("catalogue.html")
         row = re.search(r'<tr data-person-id="p0002" data-surname="([^"]*)".*?</tr>', html)
         self.assertEqual("Fable", row[1])
-        self.assertIn("<td>Fabel</td>", row[0])
+        self.assertIn(">Bram Fabel</a>", row[0])  # the name as recorded; the table has no surname column
         dossier = next(p for p in (self.out / "people").glob("*.html") if "<h1>Bram Fabel</h1>" in p.read_text(encoding="utf-8"))
         self.assertIn("<li>Bram Fabel — ", dossier.read_text(encoding="utf-8"))
 
