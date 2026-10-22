@@ -61,6 +61,7 @@ STUDY_MAP_DRAWN = 200  # markers on a study's locator map, so a study of a whole
 HOME_PRIORITY_PLACES = 8  # places numbered under the home page's Priority studies
 HOME_PRIORITY_STUDIES = 4  # studies listed under each of those places; the rest are counted
 HOME_QUESTION_FACTS = 4  # dated events shown under the home page's featured question
+BRANCH_STORIES = 24  # family studies as cards atop branches.html, newest first; the studies page lists them all
 PLACE_LIST_LIMIT = 200  # people, sub-places, surnames or studies listed on a place's page; the rest are counted
 PLACE_PEOPLE_BYTES = 40_000  # a place's people list also stops here, and each of its other lists at a third of it
 STATISTICS_ROWS = 25  # rows per statistics table; the rest are counted, so the page stays small on a large site
@@ -1900,6 +1901,50 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                       + findings_table(by_month(rows, "../"), len(project["findings"])) + f'<nav class="pagination" aria-label="Finding pages"><div>{newer}{older}</div></nav>' + archive_nav("../"))
         extra_titles[archive_url(number)] = ("findings", f"Findings, page {number}")
 
+    # A branch's story is a public study of kind "family" (or "family study", the kind the docs' example uses)
+    # naming people of the branch in its related_ids.
+    family_studies = sorted(sorted((sid for sid, s in studies.items() if " ".join(str(s.get("kind") or "").replace("-", " ").replace("_", " ").casefold().split()) in ("family", "family study")
+                                    and any(rid in people for rid in s.get("related_ids", []))), key=lambda sid: (str(studies[sid]["title"]).casefold(), sid)),
+                            key=lambda sid: str(studies[sid].get("updated_on") or ""), reverse=True)
+    story_rank = {sid: n for n, sid in enumerate(family_studies)}
+    stories_of: dict[str, list[str]] = defaultdict(list)
+    for sid in family_studies:
+        for pid in dict.fromkeys(rid for rid in studies[sid].get("related_ids", []) if rid in people):
+            stories_of[pid].append(sid)
+
+    def story_kicker(row: dict[str, Any]) -> str:
+        return f'<p class="eyebrow story-kicker">{_text(str(row["kind"]).replace("-", " ").replace("_", " ").strip().capitalize())}</p>'
+
+    def story_read(sid: str) -> str:
+        # The study's title is in the link's name, so every "Read the study" link says where it goes.
+        return f'<a href="{study_urls[sid]}">Read the study<span class="sr-only">: {_text(studies[sid]["title"])}</span> →</a>'
+
+    def branch_story(members: list[str]) -> str:
+        """Under a branch's name: the family study naming most of its people in full, any others by title."""
+        named = Counter(sid for pid in members for sid in stories_of.get(pid, ()))
+        if not named:
+            return ""
+        found = sorted(named, key=lambda sid: (-named[sid], story_rank[sid]))
+        first, row = found[0], studies[found[0]]
+        others = [f'<a href="{study_urls[sid]}">{_text(studies[sid]["title"])}</a>' for sid in found[1:4]]
+        more = len(found) - 1 - len(others)
+        return (f'<div class="branch-story" data-study-id="{_text(first)}">{story_kicker(row)}<p class="branch-story-title">{_text(row["title"])}</p>'
+                + (f'<p>{_text(row["summary"])}</p>' if row.get("summary") else "") + f'<p>{story_read(first)}</p>'
+                + (f'<p class="meta">Also: {", ".join(others)}' + (f" and {more:,} more" if more > 0 else "") + ".</p>" if others else "") + "</div>")
+
+    def family_stories() -> str:
+        """The lead section of branches.html: the family studies as cards, newest first."""
+        if not family_studies:
+            return ""
+        shown = family_studies[:BRANCH_STORIES]
+        cards = "".join(f'<article class="card story-card" data-study-id="{_text(sid)}">{story_kicker(studies[sid])}<h3><a href="{study_urls[sid]}">{_text(studies[sid]["title"])}</a></h3>'
+                        + (f'<p>{_text(studies[sid]["summary"])}</p>' if studies[sid].get("summary") else "")
+                        + f'<p class="meta">{plural(len(set(studies[sid].get("related_ids", [])) & set(people)), "person")}</p><p>{story_read(sid)}</p></article>' for sid in shown)
+        return ('<section class="family-stories" aria-labelledby="family-studies"><h2 id="family-studies">Family studies</h2>'
+                '<p>Written accounts of a family: who belonged to it, what the records show and what is still open. Each is also shown beside the surnames and groups below that include its people.</p>'
+                + (f'<p class="meta">The {len(shown)} most recently updated of {len(family_studies):,} family studies. <a href="studies.html">All studies →</a></p>' if len(family_studies) > len(shown) else "")
+                + f'<div class="card-grid">{cards}</div></section>')
+
     # Families and branches: surname groups and connected groups of recorded relatives.
     groups: dict[str, list[str]] = defaultdict(list)
     for pid in people:
@@ -1915,7 +1960,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         spellings = Counter(surname(pid) for pid in members)
         recorded_as = ("" if set(spellings) <= {name} else '<br><span class="meta">Recorded as '
                        + _text(", ".join(f"{s} ({n})" for s, n in sorted(spellings.items(), key=lambda item: (-item[1], item[0].casefold())))) + "</span>")
-        branch_rows.append(f'<tr data-surname="{_text(name)}"><td><a href="{_text(link)}">{_text(label)}</a>{recorded_as}</td><td>{len(members)}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{pills([ref(pl, label=places[pl]["name"]) for pl, _ in where.most_common(3)]) or "—"}</td><td>' + ", ".join(ref(pid) for pid in founders[:3]) + "</td></tr>")
+        branch_rows.append(f'<tr data-surname="{_text(name)}"><td><a href="{_text(link)}">{_text(label)}</a>{recorded_as}{branch_story(members)}</td><td>{len(members)}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{pills([ref(pl, label=places[pl]["name"]) for pl, _ in where.most_common(3)]) or "—"}</td><td>' + ", ".join(ref(pid) for pid in founders[:3]) + "</td></tr>")
     parent_of = {pid: pid for pid in people}
 
     def find(pid: str) -> str:
@@ -1945,10 +1990,11 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         names = Counter(canonical_surname(pid) for pid in members if surname(pid))
         years = sorted(y for pid in members for e in events_by_person[pid] if e["kind"] == "birth" and (y := year_of(e.get("date"))))
         earliest = min(members, key=lambda pid: (date_sort_key(next((e.get("date") for e in events_by_person[pid] if e["kind"] == "birth"), None)), person_name(pid)))
-        component_rows.append(f'<tr><td><a href="tree.html?person={quote(earliest)}">{_text(group_name(members))}</a></td><td>{len(members)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{ref(earliest)}</td></tr>')
+        component_rows.append(f'<tr><td><a href="tree.html?person={quote(earliest)}">{_text(group_name(members))}</a>{branch_story(members)}</td><td>{len(members)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{ref(earliest)}</td></tr>')
     pages["branches.html"] = ('<h1>Families and branches</h1><p>Surname groups use each person\'s first recorded surname'
                               + ("; spellings this project lists as variants of one surname are grouped under it" if name_variants else "")
                               + '. Connected groups are people joined by recorded relationships; separate groups may still be related through records not yet found.</p>'
+                              + family_stories()
                               + '<h2>Surnames</h2>' + ('<div class="table-wrap"><table><thead><tr><th>Surname</th><th>People</th><th>Recorded years</th><th>Most recorded places</th><th>Earliest recorded</th></tr></thead><tbody>' + "".join(branch_rows) + '</tbody></table></div>' if branch_rows else '<p class="empty-state">No public people are available.</p>')
                               + '<h2>Connected groups</h2>' + ('<div class="table-wrap"><table><thead><tr><th>Group</th><th>People</th><th>Main surnames</th><th>Births</th><th>Earliest born</th></tr></thead><tbody>' + "".join(component_rows) + '</tbody></table></div>' if component_rows else '<p class="empty-state">No recorded relationships connect public people yet.</p>')
                               + (f'<p class="meta">{plural(len(connected) - 60, "smaller group")} {"is" if len(connected) == 61 else "are"} not listed.</p>' if len(connected) > 60 else "") + (f'<p class="meta">{plural(singles, "person")} {"has" if singles == 1 else "have"} no public recorded relatives.</p>' if singles else ""))
