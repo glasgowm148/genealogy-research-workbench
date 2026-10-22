@@ -2,7 +2,7 @@
 
 <img src="docs/images/banner.svg" alt="Genealogy Research Workbench — your tree, your sources, your own site" width="100%">
 
-**Turn a GEDCOM or OneTree export into a searchable family-history website.**
+**Your family tree, the evidence behind it, and a website of your own.**
 
 [![CI](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml/badge.svg)](https://github.com/glasgowm148/genealogy-research-workbench/actions/workflows/ci.yml) · [Releases](https://github.com/glasgowm148/genealogy-research-workbench/releases) · [MIT](LICENSE)
 
@@ -10,38 +10,46 @@
 
 </div>
 
-Bring your own family tree. Build a site with people pages, an interactive whole tree, family branches, timelines, places, sources, research studies, a findings log, comparisons and connection paths. Keep the underlying research in portable, source-aware records that distinguish an imported assertion from an assessed conclusion.
+Genealogy Research Workbench turns a GEDCOM or WikiTree OneTree export into a searchable family-history website, with a workspace for developing the research behind the tree. It grew out of the [Glasgow One Name Study](https://glasgow.phenotype.dev/) and is reusable for your own family, surname or historical research project.
 
-Run everything on your own computer. The toolkit has **no runtime dependencies**, makes **no network requests during import or builds**, and generates ordinary HTML, CSS, JavaScript and data files. You choose whether and where to publish them.
+- **Explore your tree:** searchable people, family dossiers, interactive trees, branches, timelines and places.
+- **Show your reasoning:** connect sources and citations to claims, competing hypotheses, open questions, written studies and dated findings. Keep imported assertions distinct from assessed conclusions.
+- **Keep control:** work locally, review what becomes public, and host the generated static site wherever you choose.
+
+### A companion to WikiTree
+
+OneTree imports retain WikiTree identifiers, so your local research stays connected to the profiles it concerns. Use the workbench to investigate questions and prepare sourced updates to make manually on WikiTree. You can also link a published research study from a WikiTree profile. The toolkit does not automatically synchronize with or write back to WikiTree.
+
+Imports and builds run on your computer with **no runtime dependencies or network requests**. The output is ordinary HTML, CSS, JavaScript and data files; publishing is your choice.
 
 ## What you can build
 
 ![The fictional Alderwick family research website](docs/images/overview.webp)
 
-<table>
-<tr>
-<td width="50%" valign="top"><h3>Explore the whole tree</h3><img src="docs/images/tree.webp" alt="Family focus view showing four generations, with descendants to the right of the selected ancestor" width="100%"><p>Pan and zoom through every public person, focus on a family or browse branch cards. Uncertain links are dashed, and every link keeps its recorded label.</p></td>
-<td width="50%" valign="top"><h3>Find the person behind a name</h3><img src="docs/images/people.webp" alt="Searchable catalogue filtered to one surname, with life dates" width="100%"><p>Search names, relatives, events and places; filter by surname, year and evidence; sort and paginate.</p></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><h3>Read a family at a glance</h3><img src="docs/images/dossier.webp" alt="Person dossier with parents, spouse and marriage, children and siblings" width="100%"><p>Each dossier lists parents, partners with their marriages, children and siblings. Step, adoptive and other recorded roles stay visible. When more parents are recorded than one person can have by birth, the dossier flags them as competing parent records.</p></td>
-<td width="50%" valign="top"><h3>Follow lives through time and place</h3><img src="docs/images/places.webp" alt="Offline overview of places using coordinates supplied in the imported data" width="100%"><p>Browse a filterable event timeline and an offline coordinate map. Places without coordinates stay in the place list; the toolkit never guesses their positions.</p></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><h3>Write up what you found</h3><img src="docs/images/study.webp" alt="A research study page with rationale, linked people and a current conclusion" width="100%"><p>Studies set out why a question was investigated, what the records show and the current conclusion. They link to the people and records they concern, and those pages link back. A dated <b>Latest findings</b> log and an Atom feed follow your conclusions over time.</p></td>
-<td width="50%" valign="top"><h3>See the families at a glance</h3><img src="docs/images/branches.webp" alt="Surname groups and connected groups of recorded relatives" width="100%"><p>Surname groups show their recorded years, places and earliest people. Connected groups show who is joined by recorded relationships, with links into the catalogue and the family tree.</p></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><h3>Keep the evidence in view</h3><img src="docs/images/research.webp" alt="Research notebook with claims, citations, assessments, hypotheses and open questions" width="100%"><p>Sources, claims, evidence assessments, hypotheses, questions and findings stay distinct, with outstanding work listed first.</p></td>
-<td width="50%" valign="top"><h3>Say exactly how sure you are</h3><img src="docs/images/evidence.webp" alt="Reader's guide to confidence, claim status and relationship-role labels" width="100%"><p>One vocabulary covers every page. An imported link reads "Unassessed tree link", and a tree's own mark reads "tree-marked uncertain". Every label links to a reader's guide.</p></td>
-</tr>
-</table>
+| Explore the tree | Follow the evidence |
+| --- | --- |
+| ![Interactive family tree with recorded relationship labels](docs/images/tree.webp) | ![Research notebook with claims, citations, hypotheses and questions](docs/images/research.webp) |
+| Pan, zoom and focus on a family. Uncertain links stay visible. | Keep sources, assessments and outstanding questions in view. |
+| ![Person dossier showing parents, partners, children and siblings](docs/images/dossier.webp) | ![Written study with linked people and a current conclusion](docs/images/study.webp) |
+| Read a family at a glance, including recorded step and adoptive roles. | Explain what you investigated, what the records show and what you conclude. |
+
+<details>
+<summary><b>More views: people, places, branches and evidence</b></summary>
+
+| Find and explore | Read with context |
+| --- | --- |
+| ![Searchable people catalogue with surname filters and life dates](docs/images/people.webp) | ![Surname groups and connected families](docs/images/branches.webp) |
+| Search names, relatives, events and places; filter, sort and paginate. | Browse surname groups and recorded family connections. |
+| ![Offline map using coordinates supplied in the imported data](docs/images/places.webp) | ![Reader's guide to confidence, status and relationship labels](docs/images/evidence.webp) |
+| Explore a timeline and place list, with a map where coordinates are supplied. | See what confidence labels mean, including “Unassessed tree link”. |
+
+</details>
 
 The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md), captured on 19 October 2026 at 1440 × 1000. They contain no real family data. Core people, source, and research content remains readable with JavaScript disabled; interactive tools use local JavaScript.
 
 ## Get started
 
-You need **Python 3.11 or later**. Install the toolkit from [PyPI](https://pypi.org/project/genealogy-research-workbench/):
+You need **Python 3.11 or later**. No database, account or API key is required. Install the toolkit from [PyPI](https://pypi.org/project/genealogy-research-workbench/):
 
 ```sh
 python3 -m venv .venv
@@ -49,7 +57,7 @@ source .venv/bin/activate
 python -m pip install genealogy-research-workbench
 ```
 
-On Windows, activate with `.venv\Scripts\activate` instead. No Node.js, database, account, browser automation, or API key is required to use the toolkit. To work on the toolkit itself, or to run the fictional demo, clone this repository and see [installation](docs/development.md#install-and-test). New here? [Your first site](docs/first-site.md) walks through every step.
+On Windows, activate with `.venv\Scripts\activate` instead. To work on the toolkit itself, or to run the fictional demo, clone this repository and see [installation](docs/development.md#install-and-test). New here? [Your first site](docs/first-site.md) walks through every step.
 
 ### Choose a file in your browser
 
@@ -103,7 +111,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory examples/demo/dist
 
 The demo has 42 invented people, four generations, sources, uncertainty, and research questions. The [matching GEDCOM and OneTree files](examples/demo/input/) let you exercise the complete import workflow.
 
-## How much of a research site can an export recreate?
+## What comes from your export—and what you add
 
 | From a GEDCOM or OneTree export | With additional research |
 | --- | --- |
@@ -117,7 +125,7 @@ The demo has 42 invented people, four generations, sources, uncertainty, and res
 
 An export supplies recorded tree assertions. It cannot manufacture missing sources, prove parentage, recover photographs, or infer DNA results. OneTree biography text is retained privately; arbitrary WikiTree markup is not converted into independently verified citations. [Supported formats and limitations](docs/imports.md) describe exactly what is imported.
 
-This toolkit grew out of the Glasgow Surname Project. The reusable package includes the research model, adapters, local upload workflow, and general website. Glasgow’s historical research, surname rules, private records, custom editorial pages, and DNA studies remain in that project.
+The reusable package includes the research model, adapters, local upload workflow and general website. The Glasgow study’s historical research, surname rules, private records, custom editorial pages and DNA studies remain in that project.
 
 ## Continue the research
 
