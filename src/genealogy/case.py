@@ -15,6 +15,7 @@ from .models import (
     Confidence, Evidence, ExternalIdentifier, Finding, Hypothesis, ImportProvenance, LivingStatus, Name, PLACE_PRECISIONS,
     Person, Place, Record, ResearchQuestion, Study, access_level, is_raw_dna, record_from_dict,
 )
+from .models import Haplogroup
 
 
 def _reject_raw_dna(record: Record) -> None:
@@ -155,7 +156,8 @@ def validate_case(case: ResearchCase) -> list[str]:
     }
     references: dict[str, dict[str, str | tuple[str, ...] | None]] = {
         "Event": {"place_id": "Place", "participant_ids": "Person"},
-        "Person": {"event_ids": "Event"},
+        "Person": {"event_ids": "Event", "haplogroup_id": "Haplogroup"},
+        "Haplogroup": {"parent_id": "Haplogroup"},
         "Place": {"parent_id": "Place"},
         "Relationship": {"subject_id": "Person", "object_id": "Person", "claim_ids": "Claim"},
         "Citation": {"source_id": "Source"},
@@ -227,6 +229,7 @@ def validate_case(case: ResearchCase) -> list[str]:
                     elif not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
                         errors.append(f"{record.id} coordinates are outside valid ranges")
             errors.extend(_validate_record_fields(record))
+    errors.extend(_haplogroup_tree_errors(case))
     for index_name, record_type in (("question_ids", "ResearchQuestion"), ("finding_ids", "Finding")):
         ids = getattr(case, index_name)
         if not _string_list(ids):
@@ -436,6 +439,7 @@ def _validate_record_fields(record: Record) -> list[str]:
                     errors.append(f"{record.id}.changes[{index}].significance must be a whole number from 0 to 100, or null")
     if type(record).__name__ == "Study":
         errors.extend(_study_group_errors(record))
+    errors.extend(_haplogroup_field_errors(record))
     if isinstance(record, Hypothesis):
         for field_name in ("supports", "objections"):
             points = getattr(record, field_name)
@@ -444,6 +448,41 @@ def _validate_record_fields(record: Record) -> list[str]:
     if isinstance(record, ImportProvenance):
         if not isinstance(record.observations, list) or not all(isinstance(item, dict) for item in record.observations):
             errors.append(f"{record.id}.observations must be a list of objects")
+    return errors
+
+
+def _haplogroup_field_errors(record: Record) -> list[str]:
+    """A DNA branch's name, date and note, and a person's place on a branch."""
+    errors: list[str] = []
+    if isinstance(record, Haplogroup):
+        if not (_string(record.name) and record.name.strip()):
+            errors.append(f"{record.id}.name must be a non-empty string")
+        for field_name in ("parent_id", "date", "note"):
+            if not _string(getattr(record, field_name), optional=True):
+                errors.append(f"{record.id}.{field_name} must be a string or null")
+    if isinstance(record, Person):
+        for field_name in ("haplogroup_id", "haplogroup_note"):
+            if not _string(getattr(record, field_name), optional=True):
+                errors.append(f"{record.id}.{field_name} must be a string or null")
+        if record.haplogroup_note is not None and not record.haplogroup_id:
+            errors.append(f"{record.id}.haplogroup_note needs a haplogroup_id: it says how the person is attached to that branch")
+    return errors
+
+
+def _haplogroup_tree_errors(case: ResearchCase) -> list[str]:
+    """Each branch descends from at most one branch, and never, through its parents, from itself."""
+    listed = case.records(Haplogroup)
+    parent = {h.id: h.parent_id for h in (listed if isinstance(listed, list) else []) if isinstance(h, Haplogroup) and isinstance(h.parent_id, str)}
+    errors, reported = [], set()
+    for start in sorted(parent):
+        path, current = [start], parent[start]
+        while current in parent and current not in path:
+            path.append(current)
+            current = parent[current]
+        if current in path and current not in reported:
+            loop = path[path.index(current):]
+            reported.update(loop)
+            errors.append(f"{current}.parent_id makes a cycle of branches: {' -> '.join(loop + [current])}")
     return errors
 
 

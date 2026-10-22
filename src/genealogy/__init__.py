@@ -14,6 +14,7 @@ from .models import (
     Hypothesis, ImportProvenance, LivingStatus, Name, Person, Place, Relationship,
     ResearchQuestion, Search, Source, Study,
 )
+from .models import Haplogroup
 from .privacy import PrivacyPolicy, PrivacyViolation
 from .research import EvidenceCompleteness, ResearchService, SearchResult, UnresolvedWork
 from .site import build_site
@@ -27,3 +28,4 @@ __all__ = [
     "ResearchQuestion", "safe_output_path", "Search", "Source", "Study", "write_case_artifact_bundle", "write_public_export",
     "EvidenceCompleteness", "ResearchService", "SearchResult", "UnresolvedWork",
 ]
+__all__.append("Haplogroup")

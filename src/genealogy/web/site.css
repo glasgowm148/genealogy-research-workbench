@@ -293,3 +293,9 @@ ul.glance-list{list-style:none;padding-left:0}.glance-meaning{color:var(--muted)
 .catalogue-table .update-line{display:block;margin-top:.45rem;font-size:.74rem;font-weight:700;line-height:1.35;color:#7a4a12}.catalogue-table .update-chips{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.3rem}.catalogue-table .update-chip{margin:0;font-weight:700}
 /* The selected tab is styled by the script after load; no colour transition, so the state is never half-painted when it is measured. */
 .view-toggle [role=tab]{transition:none}
+.dna-structure{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:1rem 3rem;align-items:start}.dna-chain-figure{margin:0 0 1rem;padding:1rem 1.2rem;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow-x:auto;max-width:100%}
+.dna-chain{display:block;font-size:13px}.dna-chain .dna-links{fill:none;stroke:#b3bba7;stroke-width:1.5}.dna-chain circle{fill:var(--surface);stroke:var(--forest);stroke-width:2}.dna-chain .placed circle{fill:var(--gold);stroke:var(--gold-text)}
+.dna-chain text{fill:var(--forest);font-weight:600}.dna-chain .dna-date{fill:var(--muted);font-weight:400}.dna-chain a:hover text,.dna-chain a:focus text{text-decoration:underline}.dna-chain .current circle{stroke-width:4}.dna-chain .current text{fill:var(--ink);font-weight:700}
+.dna-chain-figure figcaption{margin-top:.6rem;font-size:.78rem}.dna-tree,.dna-tree ul{list-style:none;margin:0;padding:0}.dna-tree ul{margin-left:.45rem;padding-left:1.1rem;border-left:2px solid var(--line)}.dna-branch{margin:.45rem 0 .1rem}.dna-note{margin:0 0 .5rem;color:var(--muted);font-size:.88rem;max-width:46rem}
+.dna-line{margin:.3rem 0}.dna-study .eyebrow{margin:0 0 .4rem}.dna-lines td:first-child{min-width:9rem}
+@media(max-width:860px){.dna-structure{grid-template-columns:minmax(0,1fr)}}

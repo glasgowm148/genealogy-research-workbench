@@ -161,6 +161,11 @@ class Person(Record):
     # a page at each old address that sends readers to this one; references in
     # the case must still use the current id.
     former_ids: list[str] = field(default_factory=list)
+    # The DNA branch (a Haplogroup id) the person is placed on, and how they are
+    # attached to it in the project's words ("reported root", "tested
+    # descendant line"). Never a test result: raw DNA stays out of the case.
+    haplogroup_id: str | None = None
+    haplogroup_note: str | None = None
 
 
 @dataclass(slots=True)
@@ -366,6 +371,23 @@ class Search(Record):
 
 
 @dataclass(slots=True)
+class Haplogroup(Record):
+    """A named DNA branch (e.g. a Y-DNA haplogroup) and the branch it descends from.
+
+    Only the branch's name, its date as reported ("c. 1044 CE", text, never
+    calculated here) and a note are modelled; test results, kits and raw
+    genetic data are not. People are placed on a branch with
+    ``Person.haplogroup_id``.
+    """
+
+    name: str
+    parent_id: str | None = None
+    date: str | None = None
+    note: str | None = None
+    sensitivity: Sensitivity = Sensitivity.PRIVATE
+
+
+@dataclass(slots=True)
 class ImportProvenance(Record):
     """Durable, non-raw audit metadata for one adapter ingestion batch."""
 
@@ -380,6 +402,7 @@ MODEL_TYPES: dict[str, type[Record]] = {
     for cls in (Place, Event, Person, Relationship, Source, Citation, Claim,
                 Evidence, Hypothesis, ResearchQuestion, Finding, Study, Search, ImportProvenance)
 }
+MODEL_TYPES["Haplogroup"] = Haplogroup
 # Evidence Explained terms: an original record, a derivative (copy, transcript,
 # abstract or index) or an authored work; primary information from someone with
 # first-hand knowledge, secondary information from hearsay, or undetermined.

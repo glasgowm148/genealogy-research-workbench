@@ -15,6 +15,7 @@ from xml.sax.saxutils import escape as xml_escape
 
 from . import exports
 from . import shell
+from . import haplogroups
 from .case import ResearchCase
 from .config import ProjectConfig, site_contact
 from .dates import DISPLAY_PRECISIONS, SHORT_MONTHS, date_sort_key, display_date, machine_date, year_of
@@ -87,6 +88,7 @@ ROUTES = {
 # off, so a rebuild removes them.
 OPTIONAL_ROUTES = {"corrections.html": ("corrections", "Corrections")}
 OPTIONAL_ROUTES["duplicates.html"] = ("duplicates", "Possible duplicates")  # [research] duplicates = true
+OPTIONAL_ROUTES["dna.html"] = ("dna", "DNA")  # built when the case has public Haplogroup records; titled by [site] dna_heading
 DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
               "data/public-tree.ged", "sitemap.xml", "findings.xml", "data/redirects.json", "_redirects"}
 DATA_FILES.add("data/progress-history.json")  # kept between builds: the progress page appends to it
@@ -208,6 +210,7 @@ def _owned(name: str) -> bool:
             or bool(re.fullmatch(r"(?:people/p|studies/s|places/pl)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources|studies)/page-[1-9][0-9]*\.html"
                                  r"|duplicates/page-[1-9][0-9]*\.html"
                                  r"|records/page-[1-9][0-9]*\.html"
+                                 r"|dna/[a-z0-9-]+\.html"
                                  r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html|sources/type-[a-z0-9-]+\.html", name)))
 
 
@@ -245,6 +248,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     routes = {**ROUTES, **({"corrections.html": OPTIONAL_ROUTES["corrections.html"]} if contact.keys() & {"email", "url"} else {})}
     if config.boolean("research", "duplicates", False):
         routes["duplicates.html"] = OPTIONAL_ROUTES["duplicates.html"]
+    if project.get("haplogroups"):
+        routes["dna.html"] = (OPTIONAL_ROUTES["dna.html"][0], config.dna_heading)
     directory = Path(directory)
     people = {p["id"]: p for p in project["people"]}
     # Only the surname groups some public person is recorded under are
@@ -437,6 +442,14 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     for row in searches_newest:
         home = next((people_urls[rid] for rid in row.get("related_ids", []) if rid in people_urls), None)
         record_routes[row["id"]] = (home or "research.html") + ("#" + _anchor(row["id"]) if home or row["id"] in searches_logged else "")
+    # DNA branches: one page each under dna/, named from the branch, with dna.html over them all.
+    dna_branches = {h["id"]: h for h in project.get("haplogroups", [])}
+    dna_urls = haplogroups.branch_urls(dna_branches)
+    record_routes.update(dna_urls)
+    dna_people: dict[str, list[str]] = defaultdict(list)  # the public people on each branch, in name order
+    for who in sorted(people.values(), key=lambda row: (next((n["value"] for n in row.get("names", []) if n.get("value")), row["id"]).casefold(), row["id"])):
+        if who.get("haplogroup_id") in dna_branches:
+            dna_people[who["haplogroup_id"]].append(who["id"])
 
     def person_name(pid: str) -> str:
         p = people.get(pid, {})
@@ -530,7 +543,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         if collection == "evidence":
             return "Evidence assessment"
         field = {"places": "name", "sources": "title", "studies": "title", "findings": "conclusion", "questions": "question",
-                 "hypotheses": "statement", "searches": "search"}.get(collection)
+                 "hypotheses": "statement", "searches": "search", "haplogroups": "name"}.get(collection)
         return str(row[field]) if field and row.get(field) else "Linked record"
 
     def ref(rid: str, prefix: str = "", label: str | None = None) -> str:
@@ -2100,6 +2113,15 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             rows.append(f"<div><dt>{heading}</dt><dd>{value}</dd></div>")
         return '<dl class="vitals">' + "".join(rows) + "</dl>" if recorded else ""
 
+    def dna_line(pid: str) -> str:
+        """The hero's line naming the person's DNA branch, its reported date and how they are attached to it."""
+        bid = people[pid].get("haplogroup_id")
+        if bid not in dna_branches:
+            return ""
+        details = ([str(people[pid]["haplogroup_note"])] if people[pid].get("haplogroup_note") else []) + ([f'branch dated {dna_branches[bid]["date"]}'] if dna_branches[bid].get("date") else [])
+        return (f'<p class="dna-line"><span class="meta">{_text(config.dna_heading)}:</span> {ref(bid, "../", dna_branches[bid]["name"])}'
+                + (f' <span class="meta">· {_text(" · ".join(details))}</span>' if details else "") + "</p>")
+
     def dossier_hero(pid: str, span: str, recorded_sex: str | None, explore: list[tuple[str, str]], opening: str) -> str:
         """The dossier's opening card: who, when, where, what to do next, and the latest finding beside it."""
         actions = '<p class="explore"><span class="meta">Explore:</span> ' + " ".join(f'<a href="../{_text(url)}">{_text(label)}</a>' for url, label in explore) + "</p>"
@@ -2107,6 +2129,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             actions += '<p class="suggest-correction">' + (f'<a href="{_text(correction_mailto(pid))}">Suggest a correction</a> · <a href="../corrections.html">What to include</a>'
                                                            if "email" in contact else '<a href="../corrections.html">Suggest a correction</a>') + "</p>"
         sex_line = f'<p class="meta">Recorded sex: {_text(recorded_sex)} {badge("Unassessed tree assertion", "status-asserted", "../")}</p>' if recorded_sex else ""
+        sex_line += dna_line(pid)
         return ('<header class="dossier-hero"><div class="dossier-hero-main"><p class="eyebrow">Person dossier</p>'
                 f'<h1>{_text(person_name(pid))}</h1>' + (f'<p class="lifespan">{_text(span)}</p>' if span else "") + f'<p class="record-id meta">Record ID: {_text(pid)}</p>'
                 + opening + vitals(pid) + sex_line + f'<div class="dossier-actions">{actions}</div></div>' + latest_finding(pid) + "</header>")
@@ -3346,6 +3369,122 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             row.update({key: value for key, value in facets.items() if value})
         if used:
             shared["site"]["source_type_labels"] = {slug: type_label(slug) for slug in sorted(used)}
+
+    def dna_pages() -> None:
+        """dna.html and one page per branch under dna/: the genetic structure (the branch tree as nested
+        lists and as a chain), the documentary lines (the public people placed on each branch, with how
+        they are attached) and the interpretation (studies of kind "dna"). Lists stop at a size budget,
+        and each branch's page lists its own people and child branches, so a large tree stays small."""
+        heading = config.dna_heading
+        below = haplogroups.children(dna_branches)
+        order = haplogroups.reading_order(below)
+        under: dict[str, int] = {}  # people on a branch or on any branch below it
+        for bid, _ in reversed(order):
+            under[bid] = len(dna_people[bid]) + sum(under[c] for c in below.get(bid, []))
+        placed = {bid: len(dna_people[bid]) for bid in dna_branches}
+        people_count = lambda n: f'{n:,} {"person" if n == 1 else "people"}'
+
+        def branch_label(bid: str, prefix: str, counted: bool = True) -> str:
+            row, own, n = dna_branches[bid], placed[bid], under[bid]
+            count = people_count(n) if n == own else f"{people_count(n)} on the branches below" if not own else f"{people_count(own)} · {n:,} with the branches below"
+            return (f'<a href="{prefix}{dna_urls[bid]}"><strong>{_text(row["name"])}</strong></a>'
+                    + (f' <span class="meta">{_text(row["date"])}</span>' if row.get("date") else "")
+                    + (f' <span class="meta">· {count}</span>' if n and counted else ""))
+
+        def glance(counts: list[tuple[int, str, str]], label: str) -> str:
+            return study_stats(counts).replace('aria-label="This study at a glance"', f'aria-label="{_text(label)}"', 1)
+
+        def attached(pid: str) -> str:
+            note = people[pid].get("haplogroup_note")
+            return _text(note) if note else '<span class="meta">Not stated</span>'
+
+        def person_cell(pid: str, prefix: str) -> str:
+            return ref(pid, prefix) + (f' <span class="meta">{_text(lifespan(pid))}</span>' if lifespan(pid) else "")
+
+        def lines_table(rows: list[str], head: tuple[str, ...]) -> str:
+            return ('<div class="table-wrap"><table class="dna-lines"><thead><tr>' + "".join(f'<th scope="col">{h}</th>' for h in head)
+                    + "</tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
+
+        def capped_rows(cells: list[str], noun: str, budget: int) -> tuple[list[str], str]:
+            """Rows up to INLINE_LIMIT and ``budget`` bytes; the rest counted, with where to find them."""
+            kept, size = [], 0
+            for cell in cells:
+                if len(kept) >= INLINE_LIMIT or size > budget:
+                    break
+                kept.append(cell)
+                size += len(cell)
+            more = len(cells) - len(kept)
+            return kept, (f'<p class="meta">and {more:,} more {noun}: each person\'s page names their branch.</p>' if more > 0 else "")
+
+        def kicker(row: dict[str, Any]) -> str:
+            kind = str(row.get("kind") or "")
+            return f"{heading} study" if kind.casefold() == "dna" else kind.replace("-", " ").replace("_", " ").capitalize() or "Study"
+
+        def study_cards(sids: list[str], prefix: str) -> str:
+            return '<div class="card-grid dna-studies">' + "".join(
+                f'<article class="card dna-study"><p class="eyebrow">{_text(kicker(studies[sid]))}</p><h3><a href="{prefix}{study_urls[sid]}">{_text(studies[sid]["title"])}</a></h3>'
+                f'<p>{study_meta(studies[sid], prefix)}</p>' + (f'<p>{_text(studies[sid]["summary"])}</p>' if studies[sid].get("summary") else "")
+                + f'<p><a href="{prefix}{study_urls[sid]}">Read the study <span aria-hidden="true">→</span></a></p></article>' for sid in sids) + "</div>"
+
+        # The nested list: every root, and below them branches in reading order until the budget is spent.
+        tree, depth, size, hidden = [], -1, 0, 0
+        for bid, level in order:
+            if level and size > haplogroups.LIST_BYTES:
+                hidden += 1
+                continue
+            item = f'<p class="dna-branch">{branch_label(bid, "")}</p>' + (f'<p class="dna-note">{_text(dna_branches[bid]["note"])}</p>' if dna_branches[bid].get("note") else "")
+            tree.append(('<ul class="dna-tree">' if depth < 0 else "<ul>") + "<li>" + item if level > depth else "</li>" + "</ul></li>" * (depth - level) + "<li>" + item)
+            depth, size = level, size + len(item)
+        tree.append("</li>" + "</ul></li>" * depth + "</ul>")
+        chain = haplogroups.chain_svg(order, dna_branches, {bid: dna_urls[bid] for bid in dna_branches}, placed, "Branch chain: each branch under the one it descends from")
+        drawn_note = (f' The first {haplogroups.CHAIN_DRAWN} of {len(order):,} branches are drawn; the list names them all.' if len(order) > haplogroups.CHAIN_DRAWN else "")
+        lines = [f'<tr><td>{person_cell(pid, "")}</td><td>{branch_label(bid, "", False)}</td><td>{attached(pid)}</td></tr>' for bid, _ in order for pid in dna_people[bid]]
+        kept, more = capped_rows(lines, "people", haplogroups.LIST_BYTES)
+        dna_studies = [sid for sid in studies_newest if str(studies[sid].get("kind") or "").casefold() == "dna"]
+        pages["dna.html"] = (
+            '<p class="eyebrow">Genetic branches · documentary lines · interpretation</p>' f'<h1>{_text(heading)}</h1>'
+            '<p class="lead">Three ways of reading the same line of descent: the branch tree gives the genetic structure, the records identify the people '
+            'placed on each branch, and the studies interpret the two together.</p>'
+            '<p class="note dna-limits">A shared branch shows a common line of descent; it does not by itself name the ancestor who links two families. '
+            'Branch dates are given as reported, not calculated here, and no test results or raw DNA are published.</p>'
+            + glance([(len(order), "branch", "branches"), (len(lines), "person placed", "people placed"), (len(dna_studies), "study", "studies")], f"{heading} at a glance")
+            + '<nav class="page-sections" aria-label="On this page"><ol><li><a href="#dna-structure">The genetic structure</a></li>'
+            '<li><a href="#dna-lines">Documentary lines</a></li><li><a href="#dna-interpretation">Interpretation</a></li></ol></nav>'
+            '<h2 id="dna-structure">The genetic structure</h2><p>Each branch descends from the one above it. Open a branch for its people and the branches below it.</p>'
+            f'<div class="dna-structure"><figure class="dna-chain-figure">{chain}<figcaption class="meta">A filled mark is a branch with people placed on it.{drawn_note}</figcaption></figure>'
+            '<div class="dna-tree-list">' + "".join(tree) + (f'<p class="meta">and {hidden:,} more branches, listed on the pages of the branches above them.</p>' if hidden else "") + "</div></div>"
+            '<h2 id="dna-lines">Documentary lines</h2><p>The people the records place on each branch, and how each is attached to it: a reported root, a tested descendant line.</p>'
+            + (lines_table(kept, ("Person", "Branch", "How attached")) + more if kept else '<p class="empty-state">No public person is placed on a branch yet.</p>')
+            + '<h2 id="dna-interpretation">Interpretation</h2><p>Written studies that read the branches and the records together.</p>'
+            + (study_cards(dna_studies[:12], "") + (f'<p><a href="studies.html">All {len(studies):,} studies →</a></p>' if len(dna_studies) > 12 else "")
+               if dna_studies else '<p class="empty-state">No interpretation has been published yet. A study with the kind “dna” appears here.</p>'))
+        for bid, row in dna_branches.items():
+            url, prefix = dna_urls[bid], "../"
+            lineage = haplogroups.ancestors(dna_branches, bid)
+            path = [(a, n) for n, a in enumerate(lineage)] + [(bid, len(lineage))] + [(c, len(lineage) + 1) for c in below.get(bid, [])]
+            chain = haplogroups.chain_svg(path, dna_branches, {b: "../" + dna_urls[b] for b in dna_branches}, placed, f"Line of descent of {row['name']}", current=bid)
+            rows, more = capped_rows([f'<tr><td>{person_cell(pid, prefix)}</td><td>{attached(pid)}</td></tr>' for pid in dna_people[bid]], "people on this branch", PLACE_PEOPLE_BYTES)
+            elsewhere = under[bid] - placed[bid]
+            named = list(dict.fromkeys(s["id"] for rid in [bid, *dna_people[bid]] for s in studies_by_subject.get(rid, [])))
+            pages[url] = (
+                f'<p class="back-link"><a href="../dna.html">← {_text(heading)}</a></p><p class="eyebrow">{_text(heading)} branch</p><h1>{_text(row["name"])}</h1>'
+                + (f'<p class="lead">Reported date: {_text(row["date"])}</p>' if row.get("date") else "")
+                + (f'<p class="dna-note">{_text(row["note"])}</p>' if row.get("note") else "")
+                + glance([(placed[bid], "person on this branch", "people on this branch"), (elsewhere, "person on the branches below", "people on the branches below"),
+                          (len(below.get(bid, [])), "branch below", "branches below")], f"{row['name']} at a glance")
+                + '<h2 id="lineage">Line of descent</h2>'
+                + (f'<p>Descends from {" › ".join(branch_label(a, prefix, False) for a in lineage)}.</p>' if lineage else "<p>A root branch: no branch above it is recorded.</p>")
+                + f'<figure class="dna-chain-figure">{chain}</figure>'
+                + '<h2 id="people">People on this branch</h2>'
+                + (lines_table(rows, ("Person", "How attached")) + more if rows else '<p class="empty-state">No public person is placed on this branch itself.</p>')
+                + '<h2 id="below">Branches below</h2>'
+                + empty([f'<li>{branch_label(c, prefix)}</li>' for c in below.get(bid, [])], "No branch below this one is recorded.")
+                + '<h2 id="studies">Studies</h2>'
+                + (study_cards(named[:12], prefix) + (f'<p class="meta">and {len(named) - 12:,} more, listed on each person\'s page.</p>' if len(named) > 12 else "") if named else '<p class="empty-state">No public study names this branch or the people on it.</p>'))
+            extra_titles[url] = ("dna", f"{heading}: {row['name']}")
+
+    if "dna.html" in routes:
+        dna_pages()
 
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]

@@ -23,6 +23,8 @@ CASE_COLLECTIONS = {
     "ResearchQuestion": "questions", "Finding": "findings", "Study": "studies",
     "Search": "searches",
 }
+COLLECTIONS += ("haplogroups",)
+CASE_COLLECTIONS["Haplogroup"] = "haplogroups"  # DNA branches: names, reported dates and notes only
 
 
 def to_json(project: Mapping[str, Any]) -> str:

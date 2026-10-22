@@ -110,6 +110,11 @@ class PrivacyPolicy:
             ]
             if allowed:
                 result[kind] = allowed
+        # A person stays public when their DNA branch is withheld; only their
+        # place on it is dropped, so the branch's id and the note never leave.
+        for row in result.get("Person", []):
+            if row.get("haplogroup_id") and row["haplogroup_id"] not in visible_ids:
+                row["haplogroup_id"] = row["haplogroup_note"] = None
         return result
 
     def reject_raw_dna(self, records: Iterable[Record]) -> None:

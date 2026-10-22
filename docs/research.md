@@ -348,6 +348,27 @@ The places page and the catalogue's **Country or region** menu file each place u
 
 To say that a place lies within another, set the smaller place's `parent_id` to the larger place's ID: a town's parent is its parish, the parish's its county, the county's its country. Each place with a public event or a place within it gets a page of its own, which names the places it lies within (broadest first, each linked), the places recorded within it, and the events (with their people and the sources their claims cite), surnames, years and studies recorded there. The places page shows each place as a card with its counts, years and main surnames. Nothing is inferred from a place's name; a place with no `parent_id` stands alone. A place whose parent is withheld is withheld with it, so record the hierarchy with public places.
 
+## Record DNA branches
+
+A project with DNA results can publish the branch structure they point to, without the results themselves. Record each branch (a Y-DNA or mtDNA haplogroup, a named block of a testing company's tree) as a `Haplogroup`: its `name` as the tree words it, `parent_id` for the branch it descends from, its `date` as reported ("c. 1044 CE", text, never calculated) and a `note`:
+
+```json
+{"id": "hg:fable3", "name": "R-FABLE3", "parent_id": "hg:fable1", "date": "c. 1580 CE",
+ "note": "The branch the two tested Fable lines share.", "sensitivity": "public"}
+```
+
+```sh
+genealogy --project my-family record add Haplogroup --input branch.json
+```
+
+Add the root branch (`hg:fable1`, with no `parent_id`) first.
+
+Place a person on a branch with `Person.haplogroup_id`, and say how they are attached in `haplogroup_note`, in the project's words: "reported root" for an ancestor a tester's pedigree reaches, "tested descendant line" for a line represented by a living tester. Validation rejects a parent or a person's branch that does not exist, a branch that descends from itself, and a note without a branch.
+
+Only names, reported dates and notes are modelled. Kits, test results, STR values, SNP calls and raw DNA stay out of the case (see the DNA adapter), and a tester who is living stays private: place the documented ancestor on the branch, not the tester. A branch is `private` until you mark it public; a branch whose parent is withheld is withheld with it, so publish a tree from its root down. A public person placed on a withheld branch keeps their page without the branch, and a withheld person's placement is withheld with them. A study about the branches with `kind = "dna"` is the page's interpretation; a study can name a branch in `related_ids` or in its prose as `[[hg:fable3]]`, and is then withheld if the branch is.
+
+The site gains a **DNA** page (`dna.html`; title from `[site] dna_heading`) and a page per branch. See [Build and deployment](deployment.md#build-and-inspect).
+
 ## Python API
 
 ```python

@@ -13,7 +13,7 @@ NAV_GROUPS = (
     ("family", "Family", ("tree.html", "timeline.html", "connections.html", "compare.html")),
     ("places", "Places", ("places.html", "statistics.html")),
     ("records", "Records", ("records.html", "sources.html", "evidence.html")),
-    ("research", "Research", ("research.html", "studies.html", "findings.html", "progress.html")),
+    ("research", "Research", ("research.html", "studies.html", "findings.html", "progress.html", "dna.html")),
     ("about", "About", ("sitemap.html", "about-data.html", "changes.html", "corrections.html")),
 )
 # Sidebar wording where a page's own title would only repeat its section's name.

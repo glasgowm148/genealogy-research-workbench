@@ -138,6 +138,7 @@ class ProjectConfig:
     def validate(self) -> None:
         safe_relative_path(self.case_directory, setting="project.case_directory")
         site_contact(self.raw.get("site", {}))
+        self.dna_heading  # validates [site] dna_heading
         for key in ("allow_living", "allow_licensed", "allow_restricted"):
             if key in self.privacy:
                 exact_bool(self.privacy[key], setting=f"privacy.{key}")
@@ -230,6 +231,14 @@ class ProjectConfig:
         """``[site] tree_name``: the online tree the people's external identifiers belong to, e.g. "WikiTree"."""
         value = (self.raw.get("site") or {}).get("tree_name")
         return value.strip() if isinstance(value, str) and value.strip() else None
+
+    @property
+    def dna_heading(self) -> str:
+        """``[site] dna_heading``: the DNA page's title in the project's words ("Y-DNA"); "DNA" when unset."""
+        value = (self.raw.get("site") or {}).get("dna_heading")
+        if value is not None and (not isinstance(value, str) or not value.strip() or _control(value) or len(value.strip()) > 60):
+            raise ValueError("site.dna_heading must be a non-empty string of at most 60 characters")
+        return value.strip() if value is not None else "DNA"
 
     def to_dict(self) -> dict[str, Any]:
         # Preserve project-defined extension sections so a toolkit upgrade does
