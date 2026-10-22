@@ -109,8 +109,10 @@ class PlacePageTests(unittest.TestCase):
 
     def test_people_surnames_years_coordinates_and_studies(self):
         parish = main(self.text(page("parish")))
-        people = re.findall(r'<li><a href="\.\./people/[^"]+">([^<]+)</a> <span class="meta">— ([^<]+)</span></li>', parish)
-        self.assertEqual([("Bram Fable", "birth: 1799"), ("Ada Fable", "birth: ABT 1801; burial: 1870")], people)
+        people = [(who, "; ".join(re.sub(r"<[^>]+>", "", item) for item in re.findall(r"<li>(.*?)</li>", events)))
+                  for who, events in re.findall(r'<li><a href="\.\./people/[^"]+">([^<]+)</a><ul class="pills">(.*?)</ul></li>', parish)]
+        self.assertEqual([("Bram Fable", "birth 1799"), ("Ada Fable", "birth c. 1801; burial 1870")], people)
+        self.assertIn('<span class="date" data-date="ABT 1801">c. 1801</span>', parish)
         self.assertIn("Three public events are recorded here, involving two people; recorded years 1799–1870.", parish)
         self.assertIn('<a href="../catalogue.html?surname=Fable">Fable</a> <span class="meta">(2)</span>', parish)
         self.assertIn("55.9, -4.2 · located to parish level", parish)

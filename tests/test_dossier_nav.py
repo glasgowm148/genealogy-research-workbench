@@ -62,7 +62,7 @@ class DossierNavTests(unittest.TestCase):
         for key in ALL:
             self.assertRegex(page, rf'<h2 id="{key}">')
         # The menu follows the heading block directly, so the dossier opening stays one insertion point.
-        self.assertRegex(page, r'<p class="record-id">ada:fable 1</p><nav class="page-sections"')
+        self.assertRegex(page, r'<p class="record-id meta">Record ID: ada:fable 1</p><nav class="page-sections"')
 
     def test_menu_skips_sections_showing_only_their_empty_state(self):
         page = self.dossier("p0003")

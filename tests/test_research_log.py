@@ -109,8 +109,9 @@ class SiteTests(unittest.TestCase):
         page = page_for(self.out, "ada")
         section = page[page.index('<h2 id="research-log">'):page.index('<h2 id="relationships">')]
         self.assertLess(page.index('<h2 id="research">'), page.index('<h2 id="research-log">Research log</h2>'))
-        dates = re.findall(r'<p class="search-date"><strong>([^<]+)</strong>', section)
-        self.assertEqual(["2026-05-10", "2026-03-02", "Date not recorded"], dates)
+        dates = re.findall(r'<p class="search-date"><strong>(?:<time[^>]*>)?([^<]+)', section)
+        self.assertEqual(["10 May 2026", "2 Mar 2026", "Date not recorded"], dates)
+        self.assertIn('<time datetime="2026-05-10">10 May 2026</time>', section)
         self.assertIn("<dt>Result</dt><dd>Nothing found for Ada.</dd>", section)
         self.assertIn("<dt>Limits</dt><dd>Pages for 1799 are missing from the film.</dd>", section)
         self.assertRegex(section, r'<dt>Records found</dt><dd><ul class="finding-records"><li><a href="\.\./sources\.html#r-[0-9a-f]+">'

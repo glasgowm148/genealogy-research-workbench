@@ -95,7 +95,7 @@ class SourceSupportTests(unittest.TestCase):
         self.assertEqual(["Ada Fable", "Dan Fable"], re.findall(r'<li><a href="people/[^"]+">([^<]+)</a> <span class="meta">— date</span>', banns))
         self.assertIn(f'<dt>Findings</dt><dd><ul><li><a href="research.html#{_anchor("banns-finding")}">The banns name Ada and Dan.</a></li>', banns)
         letters = card(self.sources, "letters")
-        self.assertIn(f'<dt>Family links</dt><dd><ul><li><a href="tree.html#{_anchor("ada-parent")}">Ada Fable — parent → Bram Fable</a></li>', letters)
+        self.assertIn(f'<dt>Family links</dt><dd><ul><li><a href="tree.html#{_anchor("ada-parent")}">Bram Fable is a parent of Ada Fable</a></li>', letters)
         self.assertNotIn("Cited for", card(self.sources, "uncited"))
         self.assertEqual([], check_site(self.out)["broken"])
 

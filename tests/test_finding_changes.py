@@ -132,19 +132,19 @@ class RenderingTests(unittest.TestCase):
         out = self.build(case(history()))
         ada = dossier(out, "ada")
         late, early = f'../research.html#{_anchor("f-late")}', f'../research.html#{_anchor("f-early")}'
-        self.assertIn(f'<a href="{early}">Changed from Unassessed to Possible, 2026-03-01</a>', ada)
-        self.assertIn(f'<a href="{late}">Changed from Possible to Documented, 2026-09-08</a>', ada)
-        self.assertLess(ada.index("to Possible, 2026-03-01"), ada.index("to Documented, 2026-09-08"))
-        self.assertIn(f'<a href="{late}">Changed from Possible to Strongly supported, 2026-09-08</a>', ada)  # partner, project wording
-        self.assertIn(f'<a href="{late}">Recorded as Probable, 2026-09-08</a>', ada)  # child
+        self.assertIn(f'<a href="{early}">Changed from Unassessed to Possible, 1 Mar 2026</a>', ada)
+        self.assertIn(f'<a href="{late}">Changed from Possible to Documented, 8 Sep 2026</a>', ada)
+        self.assertLess(ada.index("to Possible, 1 Mar 2026"), ada.index("to Documented, 8 Sep 2026"))
+        self.assertIn(f'<a href="{late}">Changed from Possible to Strongly supported, 8 Sep 2026</a>', ada)  # partner, project wording
+        self.assertIn(f'<a href="{late}">Recorded as Probable, 8 Sep 2026</a>', ada)  # child
         family = ada[ada.index('id="family-heading"'):ada.index("</section>", ada.index('id="family-heading"'))]
-        for words in ("Possible to Documented", "Possible to Strongly supported", "Recorded as Probable", "Unassessed to Possible, 2026-09-08"):
+        for words in ("Possible to Documented", "Possible to Strongly supported", "Recorded as Probable", "Unassessed to Possible, 8 Sep 2026"):
             self.assertIn(words, family)  # parent, partner, child and recorded sibling rows
         claim = ada[ada.index(f'id="{_anchor("ada-born")}"'):]
-        self.assertIn("Changed from Probable to Documented, 2026-09-08", claim[:claim.index("</article>")])
-        self.assertIn("Changed from Probable to Documented, 2026-09-08", (out / "research.html").read_text())
+        self.assertIn("Changed from Probable to Documented, 8 Sep 2026", claim[:claim.index("</article>")])
+        self.assertIn("Changed from Probable to Documented, 8 Sep 2026", (out / "research.html").read_text())
         eli = dossier(out, "eli")
-        self.assertIn(f'<a href="{late}">Changed from Unassessed to Possible, 2026-09-08</a>', eli[eli.index('id="family-heading"'):eli.index("</section>")])
+        self.assertIn(f'<a href="{late}">Changed from Unassessed to Possible, 8 Sep 2026</a>', eli[eli.index('id="family-heading"'):eli.index("</section>")])
         self.assertNotIn("Changed from", dossier(out, "cara").replace("Changed from Possible to Strongly supported", ""))
 
     def test_findings_log_research_page_and_feed_carry_a_chip_per_change(self):
@@ -155,10 +155,10 @@ class RenderingTests(unittest.TestCase):
             self.assertIn(chip, text)
             self.assertIn('<span class="badge change" data-after="strongly_supported" data-before="possible">Possible → Strongly supported</span>', text)
             self.assertIn('<span class="badge change" data-after="probable">Recorded as Probable</span>', text)
-            self.assertIn(f'<a href="tree.html#{_anchor("ada-parent")}">Ada Fable — parent → Bram Fable</a> {chip} <span class="meta">Baptism entry found.</span>', text)
+            self.assertIn(f'<a href="tree.html#{_anchor("ada-parent")}">Bram Fable is a parent of Ada Fable</a> {chip} <span class="meta">Baptism entry found.</span>', text)
         feed = (out / "findings.xml").read_text()
-        self.assertIn("Changed: Ada Fable — parent → Bram Fable: Possible → Documented; Ada Fable — spouse → Cara Fable: "
-                      "Possible → Strongly supported; Dora Fable — parent → Ada Fable: Recorded as Probable;", feed)
+        self.assertIn("Changed: Bram Fable is a parent of Ada Fable: Possible → Documented; Ada Fable and Cara Fable are spouses: "
+                      "Possible → Strongly supported; Ada Fable is a parent of Dora Fable: Recorded as Probable;", feed)
         self.assertIn("birth: 1801: Probable → Documented.", feed)
         self.assertEqual([change("ada-parent", "unknown", "possible")],
                          next(f for f in json.loads((out / "data/site.json").read_text())["findings"] if f["id"] == "f-early")["changes"])

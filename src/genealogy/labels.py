@@ -176,3 +176,13 @@ def guide_entries(grades: Mapping[str, Mapping[str, str]] | None = None) -> list
     rows.append(("alternatives", "Competing parent records", "More recorded parents than one person can have by birth. Each is kept with its own label until research resolves it.", "Relationship roles"))
     rows.append(("for-and-against", "For and against", "The researcher's recorded points for and against a hypothesis, printed as written. They are not a tally: one strong point can outweigh several weak ones, and the number on each side says nothing about which hypothesis is right. Open hypotheses about the same people are set side by side, in no order of merit; the site never picks between them, and a hypothesis's own label says how far it has been assessed.", "Hypotheses"))
     return rows
+
+
+# Plurals the "add s" rule gets wrong, for every count the site prints.
+PLURALS = {"person": "people", "study": "studies", "family": "families", "child": "children", "search": "searches",
+           "match": "matches", "spouse or partner": "spouses or partners", "is": "are", "has": "have"}
+
+
+def plural(n: int, word: str, many: str | None = None) -> str:
+    """ "1 person", "2 people", "1,204 evidence assessments": the count and the right form of the word."""
+    return f"{n:,} {word if n == 1 else many or PLURALS.get(word) or word + 's'}"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from html import escape
 import json
 from typing import Any, Mapping
-from .dates import date_sort_key
+from .dates import date_sort_key, display_date, machine_date
 
 
 def timeline_items(project: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -30,6 +30,16 @@ def render_timeline(project: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _date_cell(item: Mapping[str, Any]) -> str:
+    """The date as a reader writes it, with the recorded value kept in the markup."""
+    raw = str(item.get("date") or "")
+    if not raw:
+        return "undated"
+    words, machine = display_date(raw, item.get("date_precision")), machine_date(raw, item.get("date_precision"))
+    stored = f' data-date="{escape(raw, quote=True)}"'
+    return (f'<time datetime="{machine}"{stored}>{escape(words)}</time>' if machine else f'<span{stored}>{escape(words)}</span>')
+
+
 def render_timeline_html(project: Mapping[str, Any]) -> str:
     """Render an accessible offline timeline with kind and text filters."""
     items = timeline_items(project)
@@ -44,7 +54,7 @@ def render_timeline_html(project: Mapping[str, Any]) -> str:
         search = escape(" ".join((kind, participants, description, str(item.get("place_name") or ""))).casefold(), quote=True)
         rows.append(
             f'<tr data-kind="{escape(kind, quote=True)}" data-search="{search}">'
-            f'<td><time>{escape(str(item.get("date") or "undated"))}</time></td>'
+            f'<td>{_date_cell(item)}</td>'
             f'<td>{escape(kind)}</td><td>{escape(str(item.get("place_name") or "—"))}</td>'
             f'<td>{escape(participants) or "—"}</td><td>{escape(description) or "—"}</td></tr>'
         )

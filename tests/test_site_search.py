@@ -71,11 +71,11 @@ class SiteSearchTests(unittest.TestCase):
         self.assertTrue(ada["u"].startswith("people/p-"))
         # A place is its name as recorded, which already ends with its region.
         self.assertEqual({"t": "Invented Town, Fableshire, Fableland", "k": "place"}, {k: v for k, v in self.by_kind["place"][0].items() if k != "u"})
-        self.assertEqual(("Who were Ada Fable's parents?", "2026-09-01"), (self.by_kind["study"][0]["t"], self.by_kind["study"][0]["s"]))
+        self.assertEqual(("Who were Ada Fable's parents?", "1 Sep 2026"), (self.by_kind["study"][0]["t"], self.by_kind["study"][0]["s"]))
         self.assertEqual(("Invented parish register", "Parish-register"), (self.by_kind["source"][0]["t"], self.by_kind["source"][0]["s"]))
         self.assertEqual(("Where was Bram Fable buried?", "Open"), (self.by_kind["question"][0]["t"], self.by_kind["question"][0]["s"]))
         finding = self.by_kind["finding"][0]
-        self.assertEqual("2026-09-02", finding["s"])
+        self.assertEqual("2 Sep 2026", finding["s"])
         # A long conclusion is shortened to one line, at a word break.
         self.assertEqual("Ada Fable and Bram Fable are the couple married at Invented Parish in 1822…", finding["t"])
 

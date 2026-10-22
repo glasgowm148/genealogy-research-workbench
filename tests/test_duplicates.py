@@ -108,7 +108,7 @@ class DuplicatesPageTests(unittest.TestCase):
         self.assertIn("<td>None in common</td>", ada)
         self.assertIn('aria-label="Compare Ada Fable (p9001) with ÁDA Fable (p9002)">Compare</a>', ada)
         tobin = unescape(rows[2])
-        self.assertIn("<td>Town 0010, Shire 3, Inventia</td>", tobin)
+        self.assertIn('<td><ul class="pills"><li>Town 0010, Shire 3, Inventia</li></ul></td>', tobin)
         self.assertIn("b. 1850 · p9007", tobin)
         for href in re.findall(r'href="(people/[^"]+)"', self.page):
             self.assertTrue((self.out / href).is_file(), href)

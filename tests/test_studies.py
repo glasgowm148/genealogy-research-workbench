@@ -113,8 +113,8 @@ class StudySiteTests(unittest.TestCase):
         branches = self.text("branches.html")
         self.assertRegex(branches, r"Fable 2 1801–1801 Invented Parish Ada Fable")
         self.assertIn('catalogue.html?surname=Fable', self.paths["branches.html"].read_text())
-        self.assertIn("Group 1 2 Fable", branches)
-        self.assertIn("1 people have no public recorded relatives", branches)
+        self.assertIn("Group of 2 people around Ada Fable 2 Fable", branches)
+        self.assertIn("1 person has no public recorded relatives", branches)
         places = self.paths["places.html"].read_text()
         self.assertIn("located to parish level", places)
         self.assertIn('class="broad"', places)
@@ -192,12 +192,12 @@ class ChronologyTests(unittest.TestCase):
         self.assertIn('<g role="img" aria-label="Chronology of 2 people, 1800s–1890s">', svg)
         self.assertIn('<a href="../people/p-', svg)
         self.assertIn('<circle class="k-union"', svg)
-        self.assertIn("<title>12 MAR 1825 · marriage · Invented Parish</title>", svg)
+        self.assertIn("<title>12 Mar 1825 · marriage · Invented Parish</title>", svg)
         # The axis is padded to whole decades; approximate and bounded dates sit at their year.
         ticks = dict((int(year), x) for x, year in re.findall(r'<text x="([\d.]+)" y="\d+" text-anchor="middle">(\d{4})</text>', svg))
         self.assertEqual((1800, 1900), (min(ticks), max(ticks)))
         per_year = (float(ticks[1900]) - float(ticks[1800])) / 100
-        for date, year in (("about 1830", 1830), ("BEF 1890", 1890), ("1842", 1842)):
+        for date, year in (("c. 1830", 1830), ("before 1890", 1890), ("1842", 1842)):
             cx = float(re.search(rf'cx="([\d.]+)" cy="\d+" r="4.5"><title>{date} ·', svg)[1])
             self.assertAlmostEqual(cx, float(ticks[1800]) + (year - 1800) * per_year, delta=0.2, msg=date)
         self.assertIn('<figure class="chronology">', page)
@@ -205,7 +205,7 @@ class ChronologyTests(unittest.TestCase):
         self.assertIn("3 undated events are not shown.", page)
         text = page[page.index('<details class="chronology-text">'):page.index("</details>")]
         self.assertIn("<summary>Chronology of 2 people, 1800s–1890s, as text</summary>", text)
-        self.assertIn("about 1830 · birth · Invented Parish", text)
+        self.assertIn("c. 1830 · birth · Invented Parish", text)
         self.assertIn(">Rowan Fable</a>", text)
         everything = "\n".join(path.read_text() for path in paths.values() if path.suffix in (".html", ".json", ".js", ".csv", ".xml", ".ged"))
         for secret in ("SECRET-PERSON", "SECRET-EVENT", "SECRET-PLACE"):

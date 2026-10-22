@@ -105,9 +105,9 @@ class ProgressPageTests(unittest.TestCase):
         self.assertIn('href="evidence.html#grade-strongly_supported">Strongly supported</a></th><td>1</td><td>16.7%</td>', links)
         groups = section(html, "connected-groups")
         # The Fables hold together at worst Possible; the Cairns only by an unassessed link. Ivo and Hal are not joined.
-        self.assertIn('<th scope="row">Group 1</th><td>5</td><td>4</td><td>Fable</td><td><a href="evidence.html#confidence-documented">Documented</a></td>'
+        self.assertIn('<th scope="row">Group of 5 people around Ada Fable</th><td>5</td><td>4</td><td>Fable</td><td><a href="evidence.html#confidence-documented">Documented</a></td>'
                       '<td><a href="evidence.html#confidence-possible">Possible</a></td>', groups)
-        self.assertIn('<th scope="row">Group 2</th><td>2</td><td>1</td><td>Cairn</td>', groups)
+        self.assertIn('<th scope="row">Group of 2 people around Finn Cairn</th><td>2</td><td>1</td><td>Cairn</td>', groups)
         self.assertIn('Possible</a></th><td>1</td></tr><tr><th scope="row"><a href="evidence.html#confidence-tree-link">Unassessed tree link</a></th><td>1</td>', groups)
         heads = section(html, "family-heads")
         self.assertLess(heads.index(">Ada Fable</a>"), heads.index(">Finn Cairn</a>"))
@@ -152,8 +152,8 @@ class ProgressPageTests(unittest.TestCase):
         self.assertEqual({"date", "people", "with_assessed_parent", "parent_links", "assessed_parent_links", "connected_groups",
                           "family_heads", "open_questions", "draft_findings"}, set(snapshots[-1]))
         self.assertIn('<svg class="progress-chart"', html)
-        self.assertIn('aria-label="Share of people with an assessed parent link over 2 snapshots, from 66.7% on 2026-06-01 to 66.7% on 2026-10-02"', html)
-        self.assertIn('<th scope="row">2026-10-02</th><td>9</td><td>6</td><td>66.7%</td>', html)  # the table alternative
+        self.assertIn('aria-label="Share of people with an assessed parent link over 2 snapshots, from 66.7% on 1 Jun 2026 to 66.7% on 2 Oct 2026"', html)
+        self.assertIn('<th scope="row"><time datetime="2026-10-02">2 Oct 2026</time></th><td>9</td><td>6</td><td>66.7%</td>', html)  # the table alternative
         build(self.out, newer)
         self.assertEqual(2, len(history(self.out)))
 

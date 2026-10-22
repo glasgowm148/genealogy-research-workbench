@@ -140,7 +140,7 @@ class FamilyReasonTests(unittest.TestCase):
         family = self.dossier("ada").split('<h2 id="family-heading">Family</h2>', 1)[1].split("</section>", 1)[0]
         self.assertEqual(["Parents", "Spouses and partners", "Children", "Siblings", "Rejected and superseded links"], re.findall(r"<h3>(.*?)</h3>", family))
         # Every link is still listed under "All recorded relationships".
-        self.assertRegex(text(self.dossier("ada").split('<h2 id="relationships">All recorded relationships</h2>', 1)[1]), r"Ada Fable — parent → Corin Vale Disproved")
+        self.assertRegex(text(self.dossier("ada").split('<h2 id="relationships">All recorded relationships</h2>', 1)[1]), r"Corin Vale is the father of Ada Fable Disproved")
 
     def test_a_grade_counting_as_disproved_is_set_apart_with_its_wording(self):
         self.assertNotIn("Fen Fable", self.section("ada", "Children"))
@@ -153,13 +153,13 @@ class FamilyReasonTests(unittest.TestCase):
         def intro(pid):
             found = re.search(r'<p class="lead intro">(.*?)</p>', self.dossier(pid))
             return text(found[1]) if found else None
-        self.assertEqual("Ada Fable was born ABT 1801 in Invented Parish, and died 12 MAR 1870 in Invented Town. "
+        self.assertEqual("Ada Fable was born c. 1801 in Invented Parish, and died on 12 Mar 1870 in Invented Town. "
                          "This page lists Tobin Fable and Wren Fable as parents, one spouse or partner and two children.", intro("ada"))
-        self.assertEqual("Iris Fable was born 1802. This page lists Tobin Fable as a parent.", intro("iris"))
-        self.assertEqual("Pip Vale was baptised 3 MAY 1804 in Invented Parish, and buried 1880.", intro("pip"))
-        self.assertEqual("Bram Fable died 1871. This page lists one spouse or partner.", intro("bram"))
+        self.assertEqual("Iris Fable was born in 1802. This page lists Tobin Fable as a parent.", intro("iris"))
+        self.assertEqual("Pip Vale was baptised on 3 May 1804 in Invented Parish, and buried in 1880.", intro("pip"))
+        self.assertEqual("Bram Fable died in 1871. This page lists one spouse or partner.", intro("bram"))
         # Only rejected links: no relatives are listed.
-        self.assertEqual("Corin Vale was born 1770.", intro("corin"))
+        self.assertEqual("Corin Vale was born in 1770.", intro("corin"))
         self.assertIsNone(intro("quill"))  # no events and no current links: nothing is written
         self.assertIn('<a href="../places/pl-' + _key("parish") + '.html">Invented Parish</a>', self.dossier("ada"))
 
@@ -175,16 +175,16 @@ class FamilyReasonTests(unittest.TestCase):
         self.assertIn('<h2 id="latest-finding-heading">Latest finding</h2>', box)
         self.assertIn(f'<a href="../research.html#{_anchor("f-new")}">Ada Fable&#x27;s father is Tobin Fable.</a>', box)
         self.assertIn('data-status="reviewed" data-confidence="documented">Reviewed · Documented</a>', box)
-        self.assertIn('<p class="meta">Recorded 2026-09-08</p>', box)
+        self.assertIn('<p class="meta">Recorded <time datetime="2026-09-08">8 Sep 2026</time></p>', box)
         # The related study was updated after the newest finding.
-        self.assertIn('<p class="meta research-date">Research last recorded 2026-10-01</p>', box)
+        self.assertIn('<p class="meta research-date">Research last recorded <time datetime="2026-10-01">1 Oct 2026</time></p>', box)
         self.assertNotIn("earlier of two entries", box)
         # After the header and before the names and the family section.
-        self.assertLess(ada.index('class="record-id"'), ada.index('class="lead intro"'))
+        self.assertLess(ada.index('class="record-id meta"'), ada.index('class="lead intro"'))
         self.assertLess(ada.index('class="lead intro"'), ada.index('class="latest-finding"'))
         self.assertLess(ada.index('class="latest-finding"'), ada.index('<h2 id="names">Names</h2>'))
         self.assertLess(ada.index('<h2 id="names">Names</h2>'), ada.index('id="family-heading"'))
-        self.assertIn('<p class="meta research-date">Research last recorded 2025-05</p>', self.dossier("tobin"))
+        self.assertIn('<p class="meta research-date">Research last recorded <time datetime="2025-05">May 2025</time></p>', self.dossier("tobin"))
         self.assertNotIn("latest-finding", self.dossier("iris"))  # no dated finding about her
 
     def test_withheld_records_never_appear(self):

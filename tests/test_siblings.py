@@ -101,7 +101,7 @@ class RecordedSiblingTests(unittest.TestCase):
             self.assertRegex(re.sub(r"<[^>]+>", " ", rejected), rf"Recorded sibling\s+{other}\s+b\. \d+\s+Disproved")
         for name in ("Ada Fable", "Nell Fable"):
             recorded = re.sub(r"<[^>]+>", " ", self.dossier(name).split('<h2 id="relationships">All recorded relationships</h2>', 1)[1])
-            self.assertRegex(recorded, r"Ada Fable\s+— sister\s+→\s+Nell Fable\s+Disproved")
+            self.assertRegex(recorded, r"Nell Fable\s+is a sister of\s+Ada Fable\s+Disproved")
 
     def test_guide_explains_recorded_siblings_once(self):
         guide = self.paths["evidence.html"].read_text()

@@ -120,3 +120,7 @@ body[data-view=progress] .table-wrap+.table-wrap{margin-top:1rem}.progress-table
 .downloads td:first-child{min-width:12rem}
 .downloads td:nth-child(3){white-space:nowrap}.home-studies{grid-template-columns:repeat(auto-fill,minmax(min(100%,19rem),1fr))}
 @media(max-width:640px){.downloads thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.downloads tr,.downloads td{display:block}.downloads tbody tr{padding:.6rem 0;border-top:1px solid var(--line)}.downloads td,.downloads tbody tr:last-child td{border:0;padding:.15rem .85rem;min-width:0!important}.downloads td:not(:first-child):before{content:attr(data-label);display:block;font-size:.62rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}}
+/* Short lists (places, events, names, relatives) as pills instead of a semicolon-joined string. */
+.pills{list-style:none;display:flex;flex-wrap:wrap;gap:.3rem;margin:.3rem 0;padding:0}.pills li{margin:0;padding:.1rem .55rem;border:1px solid var(--line);border-radius:999px;background:var(--soft);font-size:.8rem;line-height:1.5;overflow-wrap:anywhere}td .pills{margin:0}
+.record-id.meta{font-family:inherit;font-size:.76rem;letter-spacing:.02em}.connection-sentences{margin:.6rem 0;padding-left:1.4rem;font-size:.86rem}
+li>a+.pills{display:inline-flex;margin:0 0 0 .5rem;vertical-align:baseline}

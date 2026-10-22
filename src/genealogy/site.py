@@ -15,7 +15,7 @@ from xml.sax.saxutils import escape as xml_escape
 from . import exports
 from .case import ResearchCase
 from .config import ProjectConfig, site_contact
-from .dates import date_sort_key, year_of
+from .dates import DISPLAY_PRECISIONS, SHORT_MONTHS, date_sort_key, display_date, machine_date, year_of
 from . import duplicates as duplicate_leads
 from .feeds import FeedEntry, atom_feed
 from .markup import references as prose_references, render as render_prose
@@ -24,6 +24,7 @@ from .labels import (assessment_label, child_role, confidence_label, grade_label
 from .maps import geojson
 from .home import SUN_SLICES, file_size, rings as sun_rings, sun_svg, sun_tree  # the home page's tree preview
 from .labels import CLAIM_STATUS, guide_basis  # the evidence guide's basis and example lines
+from .labels import plural  # one rule for every printed count
 
 # Lists longer than this are not written out in full: the interactive views
 # load them from the shared data script, and readers without JavaScript
@@ -71,7 +72,7 @@ DATA_FILES |= {"data/search-index.json", "data/search-index.js"}  # the sidebar 
 # and parse on a large site.
 BROWSER_FIELDS = {
     "people": ("id", "names", "event_ids", "notes"),
-    "events": ("id", "kind", "date", "place_id", "participant_ids", "description"),
+    "events": ("id", "kind", "date", "date_precision", "place_id", "participant_ids", "description"),
     "places": ("id", "name", "latitude", "longitude", "precision"),
     "relationships": ("id", "subject_id", "object_id", "kind", "confidence", "grade", "estimate", "tree_status", "pedigree"),
     # A claim's citations, with each record's stated quality, let the catalogue
@@ -135,6 +136,10 @@ def browser_data(project: dict[str, Any], people_urls: dict[str, str], source_ur
     # A citation stating neither term tells the script nothing; an imported tree
     # can hold tens of thousands of them.
     data["citations"] = [row for row in data["citations"] if row.get("quality") or row.get("information")]
+    # A precision that changes no printed date ("unknown", "supplied") is not shipped.
+    for row in data["events"]:
+        if row.get("date_precision") not in DISPLAY_PRECISIONS or not row.get("date"):
+            row.pop("date_precision", None)
     data["project"] = project["project"]
     data["site"] = {"people_urls": people_urls}
     if source_urls:
@@ -414,8 +419,78 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 parts.append(f"{label} {marker}{year}")
         return " – ".join(parts)
 
+    # Readable dates and labels. A date is printed as a reader writes it, honouring
+    # the event's date_precision, with the recorded value kept in data-date (or
+    # <time datetime>); a record is named in words, never by its id alone.
+    records_by_id = {row["id"]: (collection, row) for collection, rows in project.items() if isinstance(rows, list)
+                     for row in rows if isinstance(row, dict) and "id" in row}
+
+    def event_date(row: dict[str, Any], missing: str = "Date unknown") -> str:
+        """An event's date as words, for text contexts such as titles and search text."""
+        return display_date(row.get("date"), row.get("date_precision")) or missing
+
+    def when(value: Any, precision: str | None = None, missing: str = "Date unknown") -> str:
+        """A date as HTML: <time datetime> for a plain date, otherwise a span keeping the recorded value."""
+        if not value:
+            return _text(missing)
+        words, machine = display_date(str(value), precision), machine_date(str(value), precision)
+        if machine:
+            return f'<time datetime="{machine}"' + ("" if machine == value else f' data-date="{_text(value)}"') + f">{_text(words)}</time>"
+        return f'<span class="date" data-date="{_text(value)}">{_text(words)}</span>' if words != value else _text(value)
+
+    def pills(items: list[str]) -> str:
+        """Short items, already escaped, as a row of pills rather than a semicolon-joined string."""
+        return '<ul class="pills">' + "".join(f"<li>{item}</li>" for item in items) + "</ul>" if items else ""
+
+    def relation_words(row: dict[str, Any]) -> tuple[str, str, str]:
+        """A family link as a sentence that reads the right way round: ("{a} is the mother of {b}", a, b).
+
+        A parent link points from child (subject) to parent (object), and so do
+        "father", "mother", "brother", "sister", "husband" and "wife": the object
+        is what the kind names. Kinds the site does not know keep their arrow."""
+        kind, a, b = str(row["kind"]).casefold(), row["subject_id"], row["object_id"]
+        if kind in PARENT_KINDS:
+            role = parent_role(row, {"father": "m", "mother": "f"}.get(kind) or sex.get(b)).lower()
+            article = "the" if role in ("father", "mother") else "an" if role[:1] in "aeiou" else "a"
+            return f"{{a}} is {article} {role} of {{b}}", b, a
+        half = "half" in kind or "half" in str(row.get("pedigree") or "").casefold()
+        if kind in ("husband", "wife", "brother", "sister"):
+            return f"{{a}} is {'the' if kind in ('husband', 'wife') else 'a'} {'half-' if half and kind in ('brother', 'sister') else ''}{kind} of {{b}}", b, a
+        if kind in PARTNER_KINDS:
+            return "{a} and {b} are " + ("partners" if kind == "partner" else "spouses"), a, b
+        if kind in SIBLING_KINDS:
+            return "{a} and {b} are " + ("half-siblings" if half else "siblings"), a, b
+        return f"{{a}} — {row['kind']} → {{b}}", a, b
+
+    def relation_text(row: dict[str, Any]) -> str:
+        words, a, b = relation_words(row)
+        return words.replace("{a}", person_name(a)).replace("{b}", person_name(b))
+
+    def readable(rid: str) -> str:
+        """Words for any record a page names: a person's name, a place's name, an event as "Birth of Ada Fable, 1801"."""
+        if rid in people:
+            return person_name(rid)
+        collection, row = records_by_id.get(rid, ("", {}))
+        if collection == "events":
+            who = [person_name(pid) for pid in dict.fromkeys([*row.get("participant_ids", []), *sorted(event_owners.get(rid, ()))]) if pid in people]
+            kind = str(row["kind"]).replace("_", " ").capitalize()
+            label = (f"{kind} of " + (who[0] if len(who) == 1 else ", ".join(who[:-1]) + " and " + who[-1]) if who else kind)
+            return label + (f", {event_date(row)}" if row.get("date") else "")
+        if collection == "relationships":
+            return relation_text(row)
+        if collection == "citations":
+            title = str(sources.get(row["source_id"], {}).get("title") or "Cited record")
+            return title + (f' ({row["locator"]})' if row.get("locator") else "")
+        if collection == "claims":
+            return (f"{person_name(row['subject_id'])} — " if row.get("subject_id") in people else "") + f'{row["predicate"]}: {row.get("value", "")}'
+        if collection == "evidence":
+            return "Evidence assessment"
+        field = {"places": "name", "sources": "title", "studies": "title", "findings": "conclusion", "questions": "question",
+                 "hypotheses": "statement", "searches": "search"}.get(collection)
+        return str(row[field]) if field and row.get(field) else "Linked record"
+
     def ref(rid: str, prefix: str = "", label: str | None = None) -> str:
-        title = label or person_name(rid)
+        title = label or readable(rid)
         route = record_routes.get(rid)
         return f'<a href="{prefix}{_text(route)}">{_text(title)}</a>' if route else _text(title)
 
@@ -430,14 +505,13 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         for finding, change in changes_of.get(rid, []):
             after = assessment_label(change["after"], config.grades)
             words = f'Changed from {assessment_label(change["before"], config.grades)} to {after}' if change.get("before") else f"Recorded as {after}"
-            words += f', {finding["recorded_on"]}' if finding.get("recorded_on") else ""
+            words += f', {display_date(finding["recorded_on"])}' if finding.get("recorded_on") else ""
             notes.append(f'<p class="meta assessment-change"><a href="{prefix}{_text(record_routes[finding["id"]])}">{_text(words)}</a></p>')
         return "".join(notes)
 
     def changed_label(rid: str) -> str:
         if rid in relationships_by_id:
-            r = relationships_by_id[rid]
-            return f'{person_name(r["subject_id"])} — {r["kind"]} → {person_name(r["object_id"])}'
+            return relation_text(relationships_by_id[rid])
         c = claims_by_id.get(rid, {})
         return f'{c.get("predicate", "")}: {c.get("value", "")}' if c else rid
 
@@ -474,7 +548,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             parts.append(f'<p class="record-quality">{record_quality(row, prefix)}</p>')
         for key in ("locator", "abstract", "quotation", "transcription", "accessed_on"):
             if row.get(key):
-                parts.append(f'<p><strong>{_text(key.replace("_", " ").capitalize())}:</strong> {_text(row[key])}</p>')
+                parts.append(f'<p><strong>{_text(key.replace("_", " ").capitalize())}:</strong> {when(row[key]) if key == "accessed_on" else _text(row[key])}</p>')
         return ('<article id="' + _anchor(row["id"]) + '">' if canonical else "<article>") + "".join(parts) + "</article>"
 
     def record_link(cid: str, prefix: str = "") -> str:
@@ -577,11 +651,14 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
 
     def event(row: dict[str, Any], prefix: str = "", *, canonical: bool = True) -> str:
         place = places.get(row.get("place_id"), {})
-        return (f'<li id="{_anchor(row["id"])}" data-event-id="{_text(row["id"])}">' if canonical else "<li>") + f'<strong>{_text(row.get("date") or "Date unknown")} · {_text(row["kind"])}</strong>' + (f' — {ref(place["id"], prefix, place["name"])}' if place else "") + (f'<p>{_text(row["description"])}</p>' if row.get("description") else "") + '<p>' + ", ".join(ref(pid, prefix) for pid in row.get("participant_ids", [])) + "</p></li>"
+        return (f'<li id="{_anchor(row["id"])}" data-event-id="{_text(row["id"])}">' if canonical else "<li>") + f'<strong>{when(row.get("date"), row.get("date_precision"))} · {_text(row["kind"])}</strong>' + (f' — {ref(place["id"], prefix, place["name"])}' if place else "") + (f'<p>{_text(row["description"])}</p>' if row.get("description") else "") + '<p>' + ", ".join(ref(pid, prefix) for pid in row.get("participant_ids", [])) + "</p></li>"
 
     def relationship(row: dict[str, Any], prefix: str = "") -> str:
-        role = f' <span class="meta">({_text(row["pedigree"])})</span>' if row.get("pedigree") else ""
-        return f'<li id="{_anchor(row["id"])}">{ref(row["subject_id"], prefix)} — {_text(row["kind"])}{role} → {ref(row["object_id"], prefix)}{metadata(row, prefix, relationship=True)}{change_notes(row["id"], prefix)}' + ("<p>Claims: " + ", ".join(ref(cid, prefix) for cid in row["claim_ids"]) + "</p>" if row.get("claim_ids") else "") + "</li>"
+        # The sentence already names a parent's or sibling's pedigree ("an adoptive father", "half-siblings").
+        named = str(row["kind"]).casefold() in PARENT_KINDS or "half" in str(row.get("pedigree") or "").casefold()
+        role = f' <span class="meta">({_text(row["pedigree"])})</span>' if row.get("pedigree") and not named else ""
+        words, a, b = relation_words(row)
+        return f'<li id="{_anchor(row["id"])}">{_text(words).replace("{a}", ref(a, prefix)).replace("{b}", ref(b, prefix))}{role}{metadata(row, prefix, relationship=True)}{change_notes(row["id"], prefix)}' + ("<p>Claims: " + ", ".join(ref(cid, prefix) for cid in row["claim_ids"]) + "</p>" if row.get("claim_ids") else "") + "</li>"
 
     def claim(row: dict[str, Any], prefix: str = "") -> str:
         supporting = evidence_by_claim[row["id"]]
@@ -662,7 +739,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         partner_items = []
         for row, other in all_partners:
             shared = [e for e in events_by_person[pid] if e["kind"] in FAMILY_EVENTS and other in e.get("participant_ids", [])]
-            extra = "".join(f'<p class="meta">{_text(e["kind"].capitalize())}: {_text(e.get("date") or "date unknown")}' + (f' · {_text(places[e["place_id"]]["name"])}' if e.get("place_id") in places else "") + "</p>" for e in shared)
+            extra = "".join(f'<p class="meta">{_text(e["kind"].capitalize())}: {when(e.get("date"), e.get("date_precision"), "date unknown")}' + (f' · {_text(places[e["place_id"]]["name"])}' if e.get("place_id") in places else "") + "</p>" for e in shared)
             (set_apart if rejected(row) else partner_items).append(person_item(other, "Spouse or partner", row, prefix, extra))
         sections.append("<h3>Spouses and partners</h3>" + empty(partner_items, "No public spouses or partners recorded."))
         child_items = []
@@ -705,9 +782,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     browse_people = (f'<p>All {len(people):,} people are listed in the <a href="catalogue.html">catalogue</a>; each has a page of their own.</p>'
                      if compact_people else empty([f'<li>{ref(pid)}</li>' for pid in people]))
     def catalogue_row(pid: str, prefix: str = "") -> str:
-        summary = "; ".join(f'{e["kind"]}: {e.get("date") or "date unknown"}' for e in events_by_person[pid])
+        summary = "; ".join(f'{e["kind"]}: {event_date(e, "date unknown")}' for e in events_by_person[pid])
         span = lifespan(pid)
-        return (f'<tr data-person-id="{_text(pid)}" data-surname="{_text(canonical_surname(pid))}" data-search-text="{_text(person_name(pid) + " " + pid + " " + summary)}"><td>{ref(pid, prefix)}'
+        return (f'<tr data-person-id="{_text(pid)}" data-surname="{_text(canonical_surname(pid))}" data-search-text="{_text(" ".join([person_name(pid), pid, summary, *(str(e["date"]) for e in events_by_person[pid] if e.get("date"))]))}"><td>{ref(pid, prefix)}'
                 + (f'<br><span class="meta">{_text(span)}</span>' if span else "") + f'</td><td>{_text(surname(pid) or "—")}</td><td>{_text(summary or "No events recorded.")}</td><td>{_text(pid)}</td></tr>')
 
     def catalogue_table(pids: list[str], prefix: str = "") -> str:
@@ -865,7 +942,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         if found:
             uses.append("<dt>Findings</dt><dd>" + capped([f'<li>{ref(f["id"], prefix, f["conclusion"])}</li>' for f in found], "findings") + "</dd>")
         if links:
-            uses.append("<dt>Family links</dt><dd>" + capped([f'<li>{ref(r["id"], prefix, person_name(r["subject_id"]) + " — " + str(r["kind"]) + " → " + person_name(r["object_id"]))}</li>' for r in links], "family links") + "</dd>")
+            uses.append("<dt>Family links</dt><dd>" + capped([f'<li>{ref(r["id"], prefix, relation_text(r))}</li>' for r in links], "family links") + "</dd>")
         sub = f"h{level + 1}"
         return (f'<article class="record-card card" data-source-id="{_text(src["id"])}" id="{_anchor(src["id"])}"><h{level}>{_text(src["title"])}</h{level}>{fields}' + (f'<p><a href="{_text(link)}" rel="noreferrer">Open original source</a></p>' if link else "")
                 + (f'<{sub}>Cited for</{sub}><dl class="cited-for">' + "".join(uses) + "</dl>" if uses else "")
@@ -957,16 +1034,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     for route, heading, hook in (("compare.html", "Compare people", "compare"), ("connections.html", "Find a connection", "connection")):
         pages[route] = f'<h1>{heading}</h1><p>Select two people to explore this public collection. Interactive results require JavaScript.</p><div class="tool-controls"><label>First person <select data-{hook}-a>{options}</select></label><label>Second person <select data-{hook}-b>{options}</select></label></div><div id="{hook}-result" role="status"></div><h2>Browse dossiers</h2>' + browse_people
     def record_label(rid: str) -> str:
-        if rid in people:
-            return person_name(rid)
-        if rid in studies:
-            return studies[rid]["title"]
-        for collection, field in (("places", "name"), ("sources", "title"), ("findings", "conclusion"), ("questions", "question"), ("hypotheses", "statement")):
-            row = next((r for r in project[collection] if r["id"] == rid), None) if rid in record_routes else None
-            if row:
-                text = str(row[field])
-                return text if len(text) <= 90 else text[:87].rstrip() + "…"
-        return "record"
+        text = readable(rid)
+        return text if len(text) <= 90 else text[:87].rstrip() + "…"
 
     def prose(text: str | None, prefix: str = "") -> str:
         return render_prose(text, lambda rid: (prefix + record_routes[rid], record_label(rid)) if rid in record_routes else None, heading_offset=2)
@@ -978,7 +1047,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def study_meta(row: dict[str, Any], prefix: str = "") -> str:
         parts = [f'<span class="badge" data-status="{_text(row.get("status", ""))}">{_text(status_label(row.get("status")) or "Draft")}</span>']
         if row.get("updated_on"):
-            parts.append(f'<span class="meta">Updated {_text(row["updated_on"])}</span>')
+            parts.append(f'<span class="meta">Updated {when(row["updated_on"])}</span>')
         return " ".join(parts)
 
     # Studies: a written account with its rationale, conclusion and linked subjects.
@@ -987,7 +1056,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         subjects = [rid for rid in row.get("related_ids", []) if rid in record_routes]
         return (f'<article class="card study-card" data-study-id="{_text(sid)}"><h2><a href="{prefix}{study_urls[sid]}">{_text(row["title"])}</a></h2><p>{study_meta(row, prefix)}</p>'
                 + (f'<p>{_text(row["summary"])}</p>' if row.get("summary") else "")
-                + f'<p class="meta">{len([r for r in subjects if r in people])} people · {len(subjects)} linked records</p></article>')
+                + f'<p class="meta">{plural(len([r for r in subjects if r in people]), "person")} · {plural(len(subjects), "linked record")}</p></article>')
 
     studies_newest = sorted(studies, key=lambda sid: (str(studies[sid].get("updated_on") or ""), studies[sid]["title"]), reverse=True)
     studies_intro = '<h1>Studies</h1><p>Written research accounts: why each question was investigated, what the records show and the current conclusion. Each study links the people and records it concerns, and their pages link back.</p>'
@@ -1021,9 +1090,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 else "k-union" if kind in FAMILY_EVENTS else "k-other")
 
     def event_line(e: dict[str, Any]) -> str:
-        """E.g. "about 1850 · birth · Invented Parish": the date as recorded, not the year it is drawn at."""
+        """E.g. "c. 1850 · birth · Invented Parish": the date as written, not the year it is drawn at."""
         place = places.get(e.get("place_id"), {}).get("name")
-        return " · ".join(str(part) for part in (e.get("date"), e["kind"], place) if part)
+        return " · ".join(str(part) for part in (event_date(e, ""), e["kind"], place) if part)
 
     def chronology(row: dict[str, Any], prefix: str) -> str:
         """A static drawing of a study's people over time: a lane per person, a marker per dated event.
@@ -1209,10 +1278,10 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def finding_item(row: dict[str, Any], prefix: str = "") -> str:
         subjects = ", ".join(ref(rid, prefix, record_label(rid)) for rid in row.get("related_ids", []) if rid in record_routes)
         in_studies = ", ".join(f'<a href="{prefix}{study_urls[s["id"]]}">{_text(s["title"])}</a>' for s in studies_by_subject[row["id"]])
-        return (f'<li class="finding-entry" id="{_anchor(row["id"])}" data-recorded-on="{_text(row.get("recorded_on") or "")}"><p class="meta">{_text(row.get("recorded_on") or "Undated")}</p>'
+        return (f'<li class="finding-entry" id="{_anchor(row["id"])}" data-recorded-on="{_text(row.get("recorded_on") or "")}"><p class="meta">{when(row.get("recorded_on"), missing="Undated")}</p>'
                 f'<h3><a href="{prefix}{record_routes[row["id"]]}">{_text(row["conclusion"])}</a></h3>{metadata(row, prefix)}{finding_kind(row)}'
                 + finding_details(row, prefix) + (f'<p>About: {subjects}</p>' if subjects else "") + (f'<p>Studies: {in_studies}</p>' if in_studies else "")
-                + (f'<p class="meta">{len(row.get("evidence_ids", []))} evidence assessments</p>' if row.get("evidence_ids") else "") + "</li>")
+                + (f'<p class="meta">{plural(len(row.get("evidence_ids", [])), "evidence assessment")}</p>' if row.get("evidence_ids") else "") + "</li>")
 
     def by_month(rows: list[dict[str, Any]], prefix: str = "") -> str:
         out, current = [], None
@@ -1257,7 +1326,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     branch_rows = []
     for name, members in sorted(groups.items(), key=lambda item: (-len(item[1]), item[0].casefold())):
         years = sorted(y for pid in members for e in events_by_person[pid] if e["kind"] in ("birth", "death", "baptism", "christening", "burial") and (y := year_of(e.get("date"))))
-        where = Counter(places[e["place_id"]]["name"] for pid in members for e in events_by_person[pid] if e.get("place_id") in places)
+        where = Counter(e["place_id"] for pid in members for e in events_by_person[pid] if e.get("place_id") in places)
         founders = [pid for pid in members if not any(canonical_surname(r["object_id"]) == name for r in parents_of[pid])]
         founders.sort(key=lambda pid: (date_sort_key(next((e.get("date") for e in events_by_person[pid] if e["kind"] == "birth"), None)), person_name(pid)))
         label = name or "No surname recorded"
@@ -1265,7 +1334,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         spellings = Counter(surname(pid) for pid in members)
         recorded_as = ("" if set(spellings) <= {name} else '<br><span class="meta">Recorded as '
                        + _text(", ".join(f"{s} ({n})" for s, n in sorted(spellings.items(), key=lambda item: (-item[1], item[0].casefold())))) + "</span>")
-        branch_rows.append(f'<tr data-surname="{_text(name)}"><td><a href="{_text(link)}">{_text(label)}</a>{recorded_as}</td><td>{len(members)}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{_text("; ".join(place for place, _ in where.most_common(3)) or "—")}</td><td>' + ", ".join(ref(pid) for pid in founders[:3]) + "</td></tr>")
+        branch_rows.append(f'<tr data-surname="{_text(name)}"><td><a href="{_text(link)}">{_text(label)}</a>{recorded_as}</td><td>{len(members)}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{pills([ref(pl, label=places[pl]["name"]) for pl, _ in where.most_common(3)]) or "—"}</td><td>' + ", ".join(ref(pid) for pid in founders[:3]) + "</td></tr>")
     parent_of = {pid: pid for pid in people}
 
     def find(pid: str) -> str:
@@ -1283,18 +1352,25 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         components[find(pid)].append(pid)
     connected = sorted((members for members in components.values() if len(members) > 1), key=lambda m: (-len(m), min(m)))
     singles = sum(1 for members in components.values() if len(members) == 1)
+    def earliest_of(members: list[str]) -> str:
+        return min(members, key=lambda pid: (date_sort_key(next((e.get("date") for e in events_by_person[pid] if e["kind"] == "birth"), None)), person_name(pid)))
+
+    def group_name(members: list[str]) -> str:
+        """A connected group named for what it is, e.g. "Group of 42 people around Ada Fable", on branches and progress alike."""
+        return f"Group of {plural(len(members), 'person')} around {person_name(earliest_of(members))}"
+
     component_rows = []
     for number, members in enumerate(connected[:60], 1):
         names = Counter(canonical_surname(pid) for pid in members if surname(pid))
         years = sorted(y for pid in members for e in events_by_person[pid] if e["kind"] == "birth" and (y := year_of(e.get("date"))))
         earliest = min(members, key=lambda pid: (date_sort_key(next((e.get("date") for e in events_by_person[pid] if e["kind"] == "birth"), None)), person_name(pid)))
-        component_rows.append(f'<tr><td>Group {number}</td><td>{len(members)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{ref(earliest)} · <a href="tree.html?person={quote(earliest)}">tree</a></td></tr>')
+        component_rows.append(f'<tr><td><a href="tree.html?person={quote(earliest)}">{_text(group_name(members))}</a></td><td>{len(members)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td><td>{_text(f"{years[0]}–{years[-1]}" if years else "—")}</td><td>{ref(earliest)}</td></tr>')
     pages["branches.html"] = ('<h1>Families and branches</h1><p>Surname groups use each person\'s first recorded surname'
                               + ("; spellings this project lists as variants of one surname are grouped under it" if name_variants else "")
                               + '. Connected groups are people joined by recorded relationships; separate groups may still be related through records not yet found.</p>'
                               + '<h2>Surnames</h2>' + ('<div class="table-wrap"><table><thead><tr><th>Surname</th><th>People</th><th>Recorded years</th><th>Most recorded places</th><th>Earliest recorded</th></tr></thead><tbody>' + "".join(branch_rows) + '</tbody></table></div>' if branch_rows else '<p class="empty-state">No public people are available.</p>')
                               + '<h2>Connected groups</h2>' + ('<div class="table-wrap"><table><thead><tr><th>Group</th><th>People</th><th>Main surnames</th><th>Births</th><th>Earliest born</th></tr></thead><tbody>' + "".join(component_rows) + '</tbody></table></div>' if component_rows else '<p class="empty-state">No recorded relationships connect public people yet.</p>')
-                              + (f'<p class="meta">{len(connected) - 60} smaller groups are not listed. </p>' if len(connected) > 60 else "") + (f'<p class="meta">{singles} people have no public recorded relatives.</p>' if singles else ""))
+                              + (f'<p class="meta">{plural(len(connected) - 60, "smaller group")} {"is" if len(connected) == 61 else "are"} not listed.</p>' if len(connected) > 60 else "") + (f'<p class="meta">{plural(singles, "person")} {"has" if singles == 1 else "have"} no public recorded relatives.</p>' if singles else ""))
 
     def guide_examples() -> dict[str, str]:
         """One example from the site per guide entry: the first family link, by
@@ -1376,6 +1452,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     listed = lambda items: items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
     finding_ids = {f["id"] for f in project["findings"]}
 
+    def on_date(e: dict[str, Any]) -> str:
+        """A date inside a sentence: "on 12 Mar 1870", "in 1802", "c. 1801", or free text as recorded."""
+        words, machine = display_date(e["date"], e.get("date_precision")), machine_date(e["date"], e.get("date_precision"))
+        preposition = ("on " if machine and len(machine) == 10 else "in ") if words[:1].isdigit() or words[:3] in SHORT_MONTHS else ""
+        return preposition + when(e["date"], e.get("date_precision"))
+
     def introduction(pid: str) -> str:
         """Plain sentences from the public record only: a missing event or relative means a missing clause."""
         prefix = "../"
@@ -1385,7 +1467,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             for kind, alone, joined in kinds:
                 found = next((e for e in events_by_person[pid] if str(e["kind"]).casefold() == kind and (e.get("date") or e.get("place_id") in places)), None)
                 if found:
-                    words = (f' {_text(found["date"])}' if found.get("date") else "") + (
+                    words = (f' {on_date(found)}' if found.get("date") else "") + (
                         f' in {ref(found["place_id"], prefix, places[found["place_id"]]["name"])}' if found.get("place_id") in places else "")
                     return alone + words, joined + words
             return None
@@ -1412,8 +1494,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         newest = max(found, key=lambda f: (f["recorded_on"], f["id"]))
         last = max([f["recorded_on"] for f in found] + [s["updated_on"] for s in studies_by_subject[pid] if s.get("updated_on")])
         return ('<aside class="latest-finding" aria-labelledby="latest-finding-heading"><h2 id="latest-finding-heading">Latest finding</h2>'
-                f'<p>{ref(newest["id"], "../", newest["conclusion"])}{metadata(newest, "../")}</p><p class="meta">Recorded {_text(newest["recorded_on"])}</p>'
-                f'<p class="meta research-date">Research last recorded {_text(last)}</p></aside>')
+                f'<p>{ref(newest["id"], "../", newest["conclusion"])}{metadata(newest, "../")}</p><p class="meta">Recorded {when(newest["recorded_on"])}</p>'
+                f'<p class="meta research-date">Research last recorded {when(last)}</p></aside>')
 
     def search_item(row: dict[str, Any], prefix: str = "", *, omit: str | None = None) -> str:
         """One search: when, where it looked, what it found (often nothing), what it could not cover and the records found."""
@@ -1423,7 +1505,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         details += [("Limits", _text(row["limitation"]))] if row.get("limitation") else []
         details += [("Records found", '<ul class="finding-records">' + "".join(found) + "</ul>")] if found else []
         details += [("Also for" if omit else "For", ", ".join(others))] if others else []
-        return (f'<li id="{_anchor(row["id"])}"><p class="search-date"><strong>{_text(row.get("searched_on") or "Date not recorded")}</strong></p>'
+        return (f'<li id="{_anchor(row["id"])}"><p class="search-date"><strong>{when(row.get("searched_on"), missing="Date not recorded")}</strong></p>'
                 '<dl class="search-details">' + "".join(f"<dt>{label}</dt><dd>{value}</dd>" for label, value in details) + "</dl></li>")
 
     def research_log(pid: str) -> str:
@@ -1451,7 +1533,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             external.append("<li>" + (f'<a href="{_text(url)}" rel="noreferrer">{label}</a>' if url else label) + "</li>")
         span = lifespan(pid)
         recorded_sex = sex.get(pid)
-        content = f'<p class="eyebrow">Person dossier</p><h1>{_text(person_name(pid))}</h1>' + (f'<p class="lifespan">{_text(span)}</p>' if span else "") + f'<p class="record-id">{_text(pid)}</p>'
+        content = f'<p class="eyebrow">Person dossier</p><h1>{_text(person_name(pid))}</h1>' + (f'<p class="lifespan">{_text(span)}</p>' if span else "") + f'<p class="record-id meta">Record ID: {_text(pid)}</p>'
         # Jump links are judged from the lists the sections below are built from, so a
         # section showing only its empty-state line is never linked.
         family_rows = parents_of[pid] or partners_of[pid] or children_of[pid] or [r for r, _ in siblings_of[pid] if r.get("confidence") != "disproved"]
@@ -1522,7 +1604,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         chain = place_chain(pid)
         if chain:
             content += '<p class="place-chain"><span class="meta">Within</span> ' + " › ".join(ref(c, prefix, places[c]["name"]) for c in chain) + "</p>"
-        content += f'<p class="record-id">{_text(pid)}</p>'
+        content += f'<p class="record-id meta">Record ID: {_text(pid)}</p>'
         coords = p.get("latitude") is not None and p.get("longitude") is not None
         details = f'{p["latitude"]}, {p["longitude"]}' if coords else "Coordinates not supplied"
         if coords and p.get("precision"):
@@ -1545,7 +1627,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + ([count(len(sub_places[c["id"]]), "place", "places") + " within"] if sub_places.get(c["id"]) else []))) else "") + "</li>"
             for c in sub_places.get(pid, [])], "places") if sub_places.get(pid) else '<p class="empty-state">No public places are recorded within this one.</p>')
         content += '<h2>People recorded here</h2>' + (place_list([
-            f'<li>{ref(person_id, prefix)} <span class="meta">— ' + _text("; ".join(f'{e["kind"]}: {e.get("date") or "date unknown"}' for e in evs)) + "</span></li>"
+            f'<li>{ref(person_id, prefix)}' + pills([f'{_text(e["kind"])} {when(e.get("date"), e.get("date_precision"), "date unknown")}' for e in evs]) + "</li>"
             for person_id, evs in who.items()], "people", PLACE_PEOPLE_BYTES) if who else '<p class="empty-state">No public people have events recorded here.</p>')
         names = Counter(canonical_surname(person_id) for person_id in who if canonical_surname(person_id))
         content += '<h2>Surnames recorded here</h2>' + (place_list([
@@ -1680,7 +1762,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     def progress_chart(snapshots: list[dict[str, Any]]) -> str:
         """A static line of the share of people with an assessed parent link, one point per snapshot, with the figures as a table."""
         share = lambda s: 100 * s["with_assessed_parent"] / s["people"] if s["people"] else 0.0
-        rows = [f'<tr><th scope="row">{_text(s["date"])}</th><td>{s["people"]:,}</td><td>{s["with_assessed_parent"]:,}</td><td>{share(s):.1f}%</td></tr>'
+        rows = [f'<tr><th scope="row">{when(s["date"])}</th><td>{s["people"]:,}</td><td>{s["with_assessed_parent"]:,}</td><td>{share(s):.1f}%</td></tr>'
                 for s in reversed(snapshots)]
         table = ('<details class="progress-history-text"><summary>Snapshots as a table</summary>'
                  + progress_table("Share of people with an assessed parent link, newest first", ("Newest finding", "People", "With an assessed parent", "Share"), rows) + "</details>")
@@ -1691,12 +1773,12 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         y = lambda value: bottom - (bottom - top) * value / 100
         grid = "".join(f'<path class="grid" d="M{left} {y(v):.1f}H{right}"/><text x="{left - 8}" y="{y(v) + 4:.1f}" text-anchor="end">{v}%</text>' for v in (0, 25, 50, 75, 100))
         line = '<path class="share-line" d="' + "".join(f'{"M" if i == 0 else "L"}{x(i):.1f} {y(share(s)):.1f}' for i, s in enumerate(snapshots)) + '"/>'
-        points = "".join(f'<circle cx="{x(i):.1f}" cy="{y(share(s)):.1f}" r="4.5"><title>{_text(s["date"])}: {share(s):.1f}% of {s["people"]:,} people</title></circle>'
+        points = "".join(f'<circle cx="{x(i):.1f}" cy="{y(share(s)):.1f}" r="4.5"><title>{_text(display_date(s["date"]))}: {share(s):.1f}% of {plural(s["people"], "person")}</title></circle>'
                          for i, s in enumerate(snapshots))
-        dates = (f'<text x="{left}" y="{bottom + 20}" text-anchor="start">{_text(snapshots[0]["date"])}</text>'
-                 f'<text x="{right}" y="{bottom + 20}" text-anchor="end">{_text(snapshots[-1]["date"])}</text>')
-        summary = (f"Share of people with an assessed parent link over {len(snapshots)} snapshots, from {share(snapshots[0]):.1f}% on {snapshots[0]['date']}"
-                   f" to {share(snapshots[-1]):.1f}% on {snapshots[-1]['date']}")
+        dates = (f'<text x="{left}" y="{bottom + 20}" text-anchor="start">{_text(display_date(snapshots[0]["date"]))}</text>'
+                 f'<text x="{right}" y="{bottom + 20}" text-anchor="end">{_text(display_date(snapshots[-1]["date"]))}</text>')
+        summary = (f"Share of people with an assessed parent link over {len(snapshots)} snapshots, from {share(snapshots[0]):.1f}% on {display_date(snapshots[0]['date'])}"
+                   f" to {share(snapshots[-1]):.1f}% on {display_date(snapshots[-1]['date'])}")
         return (f'<figure class="progress-history"><svg class="progress-chart" viewBox="0 0 {width} {bottom + 28}" role="img" aria-label="{_text(summary)}">'
                 f'{grid}{line}{points}{dates}</svg><figcaption>{_text(summary)}. Snapshots are evenly spaced, not drawn to scale in time.</figcaption></figure>' + table)
 
@@ -1726,7 +1808,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         weakest[link_grades[-1]] += 1
         if number <= 60:
             names = Counter(canonical_surname(pid) for pid in members if surname(pid))
-            group_rows.append(f'<tr><th scope="row">Group {number}</th><td>{len(members)}</td><td>{len(link_grades)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td>'
+            group_rows.append(f'<tr><th scope="row">{_text(group_name(members))}</th><td>{len(members)}</td><td>{len(link_grades)}</td><td>{_text(", ".join(n for n, _ in names.most_common(3)) or "—")}</td>'
                               f'<td>{assessed_words(link_grades[0])}</td><td>{assessed_words(link_grades[-1])}</td></tr>')
     children_by_parent: dict[str, set[str]] = defaultdict(set)
     for r in parent_links:
@@ -1757,7 +1839,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     percent = lambda n, total: f"{100 * n / total:.1f}%" if total else "—"
     stat = lambda value, words: f'<div class="stat"><strong>{value}</strong><small>{_text(words)}</small></div>'
     changed = [f for f in dated if f.get("changes")][:20]
-    recent = [f'<li><p class="meta">{_text(f["recorded_on"])}</p><p>{ref(f["id"], "", f["conclusion"])}</p><ul class="finding-changes">'
+    recent = [f'<li><p class="meta">{when(f["recorded_on"])}</p><p>{ref(f["id"], "", f["conclusion"])}</p><ul class="finding-changes">'
               + "".join(f'<li>{ref(c["record_id"], "", changed_label(c["record_id"]))} <span class="badge change">{_text(shift(c))}</span></li>' for c in f["changes"])
               + "</ul></li>" for f in changed]
     pages["progress.html"] = (
@@ -1773,7 +1855,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                           [f'<tr><th scope="row">{assessed_words(k)}</th><td>{by_assessment[k]:,}</td><td>{percent(by_assessment[k], len(parent_links))}</td></tr>'
                            for k in progress_order if by_assessment[k]]) if parent_links else '<p class="empty-state">No public parent links recorded yet.</p>')
         + '<h2 id="connected-groups">Connected groups by grade</h2>'
-        + ('<p>A group holds together only as well as its weakest link. Groups are numbered as on <a href="branches.html">Families and branches</a>; '
+        + ('<p>A group holds together only as well as its weakest link. Groups are named, as on <a href="branches.html">Families and branches</a>, after their earliest-born person; '
            'disproved links join nothing.</p>'
            + progress_table("Groups by their weakest link", ("Weakest link", "Groups"),
                             [f'<tr><th scope="row">{assessed_words(k)}</th><td>{weakest[k]:,}</td></tr>' for k in progress_order if weakest[k]])
@@ -1822,9 +1904,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             return f'<td>{ref(pid, prefix)}<br><span class="meta">{_text(" · ".join(part for part in (lifespan(pid), pid) if part))}</span></td>'
 
         def row(a: str, b: str, prefix: str) -> str:
-            shared = "; ".join(sorted((str(places[pl]["name"]) for pl in places_of[a] & places_of[b]), key=str.casefold)) or "None in common"
+            shared = pills([_text(name) for name in sorted((str(places[pl]["name"]) for pl in places_of[a] & places_of[b]), key=str.casefold)]) or "None in common"
             label = f"Compare {person_name(a)} ({a}) with {person_name(b)} ({b})"
-            return (f'<tr>{cell(a, prefix)}{cell(b, prefix)}<td>{_text(shared)}</td>'
+            return (f'<tr>{cell(a, prefix)}{cell(b, prefix)}<td>{shared}</td>'
                     f'<td><a href="{prefix}compare.html?a={_text(quote(a, safe=""))}&amp;b={_text(quote(b, safe=""))}" aria-label="{_text(label)}">Compare</a></td></tr>')
 
         def table(chunk: list[tuple[str, str]], prefix: str) -> str:
@@ -1881,9 +1963,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         # A place's name as recorded already ends with its region ("Town, County, Country"),
         # so it has no line of its own; the script shows the jurisdictions under the town.
         rows += [(p["id"], p["name"], "place", "") for p in project["places"]]
-        rows += [(sid, s["title"], "study", s.get("updated_on") or status_label(s.get("status")) or "Draft") for sid, s in studies.items()]
+        rows += [(sid, s["title"], "study", display_date(s.get("updated_on")) or status_label(s.get("status")) or "Draft") for sid, s in studies.items()]
         rows += [(sid, s["title"], "source", source_labels.get(_slug(str(s.get("source_type") or "")), "")) for sid, s in sources.items()]
-        rows += [(f["id"], f["conclusion"], "finding", f.get("recorded_on") or "Undated") for f in project["findings"]]
+        rows += [(f["id"], f["conclusion"], "finding", display_date(f.get("recorded_on")) or "Undated") for f in project["findings"]]
         rows += [(q["id"], q["question"], "question", status_label(q.get("status", "open"))) for q in project["questions"]]
         index = []
         for rid, title, kind, line in rows:

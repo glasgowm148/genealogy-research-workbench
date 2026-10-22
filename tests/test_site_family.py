@@ -82,7 +82,7 @@ class FamilySiteTests(unittest.TestCase):
         self.assertIn("Pip Vale", siblings)
         self.assertRegex(siblings, r"Shares a recorded parent\s+Pip Vale")
         mother = next(path for name, path in self.paths.items() if name.startswith("people/") and "<h1>Wren Fable</h1>" in path.read_text()).read_text()
-        self.assertIn("Marriage: 1795 · Invented Chapel", re.sub(r"<[^>]+>", " ", mother))
+        self.assertRegex(re.sub(r"<[^>]+>", " ", mother), r"Marriage:\s+1795\s+· Invented Chapel")
         self.assertIn("Daughter", re.sub(r"<[^>]+>", " ", mother))
 
     def test_evidence_guide_resolves_every_badge(self):
