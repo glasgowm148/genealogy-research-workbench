@@ -169,12 +169,13 @@ class SiteIndexTests(unittest.TestCase):
             self.assertEqual(["catalogue.html", "tree.html", "branches.html", "connections.html", "timeline.html", "places.html"], [h for h, _, _ in tiles])
             rows = re.findall(r'<tr><td data-label="File"><a href="([^"]+)">[^<]+</a><br><span class="record-id">[^<]+</span></td><td data-label="Format">([^<]*)</td><td data-label="Size">([^<]*)</td><td data-label="What it holds">([^<]*)</td></tr>', html)
             paths = [path for path, *_ in rows]
-            self.assertEqual(["data/site.json", "data/site.csv", "data/places.geojson", "data/public-tree.ged", "data/routes.json", "sitemap.xml", "findings.xml"], paths)
+            # The progress history is listed once a dated finding has produced a snapshot.
+            self.assertEqual(["data/site.json", "data/site.csv", "data/places.geojson", "data/public-tree.ged", "data/routes.json", "sitemap.xml", "findings.xml", "data/progress-history.json"], paths)
             for path, form, size, holds in rows:
                 self.assertTrue(form and holds, path)
                 self.assertEqual(file_size((root / path).stat().st_size), size, path)
             self.assertIn("GEDCOM 5.5.1", dict((p, f) for p, f, _, _ in rows)["data/public-tree.ged"])
-            self.assertLess(html.index("<h2>Machine-readable data</h2>"), html.index("<h2>People</h2>"))
+            self.assertLess(html.index('<h2 id="downloads">Machine-readable data</h2>'), html.index("<h2>People</h2>"))
             self.assertNotIn("<!--size:", html)
             self.assertEqual([], check_site(root)["broken"])
 

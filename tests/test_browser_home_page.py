@@ -94,7 +94,7 @@ class BrowserHomePageTests(unittest.TestCase):
             self.assertIn('has the most recorded descendants', page.locator('.home-preview figcaption').inner_text())
             page.goto(self.base + 'demo/sitemap.html')
             self.assertEqual(6, page.locator('.way-in > li').count())
-            self.assertEqual(5, page.locator('table.downloads tbody tr').count())
+            self.assertEqual(6, page.locator('table.downloads tbody tr').count())  # includes the progress history
         finally:
             context.close()
 

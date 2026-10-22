@@ -14,7 +14,7 @@ NAV_GROUPS = (
     ("places", "Places", ("places.html", "statistics.html")),
     ("records", "Records", ("sources.html", "evidence.html")),
     ("research", "Research", ("research.html", "studies.html", "findings.html", "progress.html")),
-    ("about", "About", ("sitemap.html", "corrections.html")),
+    ("about", "About", ("sitemap.html", "about-data.html", "changes.html", "corrections.html")),
 )
 # Sidebar wording where a page's own title would only repeat its section's name.
 NAV_LABELS = {"catalogue.html": "People catalogue", "places.html": "Map and places", "research.html": "Research notebook",

@@ -145,7 +145,7 @@ class CorrectionsPageTests(unittest.TestCase):
                 # The sidebar lists the pages of the current section only: Corrections sits under About.
                 nav = text.split('<nav aria-label="Main navigation">', 1)[1].split("</nav>", 1)[0]
                 self.assertIn((f"{prefix}sitemap.html", "About"), anchors(nav), name)
-                self.assertEqual(name in {"sitemap.html", "corrections.html"}, (f"{prefix}corrections.html", "Corrections") in anchors(nav), name)
+                self.assertEqual(name in {"sitemap.html", "about-data.html", "changes.html", "corrections.html"}, (f"{prefix}corrections.html", "Corrections") in anchors(nav), name)
             self.assertIn(("corrections.html", "Corrections"), anchors(pages["sitemap.html"].split("<h2>Explore</h2>", 1)[1]))
 
             dossier = self.dossier(pages, "p0001")

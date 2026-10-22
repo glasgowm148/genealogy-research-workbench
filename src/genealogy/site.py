@@ -59,6 +59,8 @@ ROUTES = {
     "connections.html": ("connections", "Connections"), "evidence.html": ("evidence", "Reading the evidence"),
     "sitemap.html": ("sitemap", "Site index"),
     "statistics.html": ("statistics", "Statistics"),
+    "about-data.html": ("about-data", "About the data"),
+    "changes.html": ("changes", "Change log"),
 }
 # Pages built only when the project configures them; still owned when switched
 # off, so a rebuild removes them.
@@ -1459,7 +1461,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             guide.append(("</dl>" if current_group else "") + f'<h2>{_text(group)}</h2><dl class="evidence-guide">')
             current_group = group
         guide.append(f'<dt id="{_text(anchor)}">{_text(label)}</dt><dd>{_text(meaning)}</dd>' + guide_more(anchor))
-    guide.append('</dl><h2>Privacy</h2><p>Living people, people whose status is unknown, and restricted, licensed or private material are withheld from every page, search index, map and download. A missing person or record is therefore not evidence that they did not exist.</p>')
+    guide.append('</dl><h2 id="privacy">Privacy</h2><p>Living people, people whose status is unknown, and restricted, licensed or private material are withheld from every page, search index, map and download. A missing person or record is therefore not evidence that they did not exist.</p>')
     pages["evidence.html"] = "".join(guide)
 
     def correction_mailto(pid: str) -> str:
@@ -2098,7 +2100,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                      'Wondering how two people are related? <a href="connections.html">Find a connection</a> or <a href="compare.html">compare them side by side</a>.')
         steps = ('<a href="catalogue.html">Search for a name</a>, or start from a <a href="branches.html">family</a> or <a href="places.html">place</a> you know.',
                  "On a person's page, read the summary first: dates, family and the label on each family link. Each fact lists the records behind it.",
-                 'A label such as “Documented” or “Possible” says how well the records support a link or claim. <a href="evidence.html">Reading the evidence</a> explains every label.',
+                 'A label such as “Documented” or “Possible” says how well the records support a link or claim. <a href="evidence.html">Reading the evidence</a> explains every label; <a href="about-data.html">About the data</a> says where the records came from, and the <a href="changes.html">change log</a> what has changed since.',
                  last_step)
         featured = studies_newest[:3]
         study_cards = "".join(
@@ -2139,6 +2141,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         "data/places.geojson": ("GeoJSON", "The places with supplied coordinates, as points for mapping software."),
         "data/public-tree.ged": ("GEDCOM 5.5.1", "The public people and family links, to import into family-tree software."),
         "data/routes.json": ("JSON", "The address of every page on this site."),
+        "data/progress-history.json": ("JSON", "The research progress counts, one snapshot per date of the newest finding."),
         "sitemap.xml": ("XML sitemap", "Every page's full address, for search engines."),
         "findings.xml": ("Atom feed", "The 50 newest dated findings, for a feed reader."),
     }
@@ -2149,13 +2152,171 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + "".join(f'<tr><td data-label="File"><a href="{path}">{_text(label)}</a><br><span class="record-id">{_text(path)}</span></td><td data-label="Format">{_text(download_notes.get(path, ("", ""))[0])}</td>'
                           f'<td data-label="Size"><!--size:{path}--></td><td data-label="What it holds">{_text(download_notes.get(path, ("", ""))[1])}</td></tr>' for path, label in rows)
                 + '</tbody></table></div>')
+    def long_date(value: Any) -> str:
+        """An ISO date as a reader writes it ("7 Oct 2026", "Oct 2026", "2026"); anything else as recorded."""
+        match = re.fullmatch(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", str(value or ""))
+        months = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        if not match or (match[2] and not 1 <= int(match[2]) <= 12):
+            return str(value or "")
+        return " ".join(part for part in (str(int(match[3])) if match[3] else "", months[int(match[2]) - 1] if match[2] else "", match[1]) if part)
+
+    def dated_tag(value: str) -> str:
+        return f'<time datetime="{_text(value)}">{_text(long_date(value))}</time>'
+
+    # The date the public research was last added to: the newest finding or study
+    # update, never the clock, so a rebuild of the same research prints the same stamp.
+    stamps = [d for d in [*(f["recorded_on"] for f in dated[:1]), *(s.get("updated_on") for s in studies.values())]
+              if isinstance(d, str) and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", d)]
+    research_stamp = max(stamps, default=None)
+
+    def legend_badge(anchor: str) -> str:
+        """The badge a guide entry describes, drawn by the same helpers as every page; "" for an entry that is not a badge."""
+        family, _, key = anchor.partition("-")
+        if anchor == "confidence-tree-link":
+            return metadata({}, relationship=True)
+        if anchor == "estimate":
+            return metadata({"confidence": "probable", "estimate": 70}, relationship=True)
+        if anchor == "tree-marked":
+            return metadata({"tree_status": "uncertain"}, relationship=True)
+        if family == "confidence":
+            return metadata({"confidence": key})
+        if family == "grade" and key in config.grades:
+            return metadata({"grade": key, "confidence": config.grades[key]["confidence"]})
+        if family == "status":
+            return metadata({"status": key})
+        if family in ("quality", "information"):
+            return f' <span class="record-quality">{record_quality({family: key})}</span>'
+        return ""
+
+    def about_data(downloads: list[tuple[str, str]]) -> str:
+        """What the site counts, why its pages count differently, what its labels and lines mean, and what it leaves out."""
+        as_of = f'as of {dated_tag(research_stamp)}' if research_stamp else "Undated"
+        stat = lambda n, words, href: (f'<div class="stat"><strong>{n:,}</strong><small><a href="{href}">{_text(words)}</a></small>'
+                                        f'<small class="stat-date">{as_of}</small></div>')
+        counts = ('<div class="stats about-counts">' + stat(len(people), "People in the catalogue", "catalogue.html")
+                  + stat(len(project["events"]), "Events", "timeline.html") + stat(len(project["places"]), "Places", "places.html")
+                  + stat(len(sources), "Sources", "sources.html") + "</div>"
+                  + (f'<p class="meta">Counted at the date of the newest public finding or study update, {dated_tag(research_stamp)}, not the date the site was built.</p>'
+                     if research_stamp else '<p class="meta">No public finding or study is dated yet, so these counts carry no date.</p>'))
+        # The tree draws every link but a disproved one between two public people.
+        in_tree = {pid for r in project["relationships"] if r.get("confidence") != "disproved" and r["subject_id"] != r["object_id"]
+                   and r["subject_id"] in people and r["object_id"] in people for pid in (r["subject_id"], r["object_id"])}
+        def mapped(pid: str) -> bool:
+            birth = next((e for e in events_by_person[pid] if str(e["kind"]).casefold() == "birth" and e.get("place_id")), None)
+            place = places.get(birth["place_id"]) if birth else None
+            return bool(place) and place.get("latitude") is not None and place.get("longitude") is not None
+        with_finding = {rid for f in dated for rid in f.get("related_ids", []) if rid in people}
+        total = len(people)
+        share = lambda n: f"{100 * n / total:.0f}%" if total else "—"
+        rows = [("catalogue.html", "In the catalogue", total, "Every public person. Search, the site index and Statistics count the same people."),
+                ("tree.html", "In the family tree", len(in_tree), "People with at least one recorded relationship to another public person; a disproved link is not drawn."),
+                ("places.html", "On the map", sum(1 for pid in people if mapped(pid)),
+                 "People whose recorded birthplace has supplied coordinates. No pin is made from a place name alone."),
+                ("findings.html", "With a dated finding", len(with_finding), "People a dated public finding names; most records have not yet been written up as a finding.")]
+        table = ('<div class="table-wrap"><table class="about-totals"><caption>People counted by each view</caption><thead><tr>'
+                 '<th scope="col">View</th><th scope="col">People</th><th scope="col">Share</th><th scope="col">Why the total differs</th></tr></thead><tbody>'
+                 + "".join(f'<tr><th scope="row"><a href="{href}">{_text(label)}</a></th><td>{n:,}</td><td>{share(n)}</td><td>{_text(why)}</td></tr>'
+                           for href, label, n, why in rows) + "</tbody></table></div>")
+        # Record-quality terms appear only as public citations state them, as on every
+        # other page: listing an unused one here could hint at a withheld record's.
+        stated = {f"{name}-{c[name]}" for c in project["citations"] for name in ("quality", "information") if c.get(name)}
+        families: dict[str, list[tuple[str, str, str]]] = {}
+        for anchor, label, _meaning, group in guide_entries(config.grades):
+            if anchor.startswith(("quality-", "information-")) and anchor not in stated:
+                continue
+            families.setdefault(group, []).append((anchor, label, legend_badge(anchor)))
+        legend = "".join(
+            f'<h3>{_text(group)}</h3>'
+            + (f'<p class="legend-badges">{"".join(b for _, _, b in entries if b)}</p>' if any(b for _, _, b in entries) else "")
+            # An entry whose badge links elsewhere (a percentage, a tree's own mark) is linked by name.
+            + (f'<p class="meta">Also explained: ' + ", ".join(f'<a href="evidence.html#{_text(a)}">{_text(l)}</a>' for a, l, b in entries if f'#{a}"' not in b) + "</p>"
+               if any(f'#{a}"' not in b for a, _, b in entries) else "")
+            for group, entries in families.items())
+        legend += ('<h3>Changes of grade</h3><p class="legend-badges"><span class="badge change">'
+                   + _text(shift({"before": "possible", "after": "documented"})) + '</span></p><p class="meta">A finding that reassessed a family link or claim, '
+                   'shown beside the record and in <a href="findings.html">Latest findings</a>.</p>')
+        sample = lambda cls: (f'<svg class="line-sample" viewBox="0 0 48 12" width="48" height="12" aria-hidden="true" focusable="false">'
+                              f'<path class="{cls}" d="M2 6H46"/></svg>')
+        lines = ('<h3>Lines in the tree and study diagrams</h3><ul class="line-legend">'
+                 f'<li>{sample("tree-edge")} <span>Solid: a link assessed as documented or probable.</span></li>'
+                 f'<li>{sample("tree-edge uncertain")} <span>Dashed: a possible or unassessed link; a dashed card outline in the hourglass means the same.</span></li>'
+                 f'<li>{sample("tree-edge uncertain candidate")} <span>Dashed and brown: a candidate parent, one of more parents than a person can have by birth, kept until research decides.</span></li>'
+                 f'<li>{sample("tree-edge partner")} <span>Gold: a spouse or partner.</span></li>'
+                 '</ul><p class="meta">A disproved link is never drawn as a line; it is listed under <strong>Rejected and superseded links</strong> on the dossier. '
+                 'A line is a recorded connection, not proof of kinship.</p>')
+        buttons = '<p class="about-downloads">' + "".join(f'<a class="button" href="{path}">{_text(label)}</a>' for path, label in downloads) + "</p>"
+        return ('<p class="eyebrow">Coverage and method</p><h1>About the data</h1>'
+                '<p class="lead">What this site counts, why its pages count differently, what its labels and lines mean, and what it leaves out.</p>'
+                + counts + '<h2 id="totals">Why the page totals differ</h2><p>Each view counts the people it can show, so the totals differ. '
+                'None of them is the size of the family: people withheld for privacy are counted nowhere.</p>' + table
+                + '<h2 id="legend">Labels and lines</h2><p>Every badge on the site links to its entry in <a href="evidence.html">Reading the evidence</a>; '
+                'evidence is always stated in words and line styles, never by colour alone.</p>' + legend + lines
+                + '<h2 id="method">Method</h2><p>Every page and download is built from one privacy-filtered copy of the research. '
+                'Living people, people whose status is unknown, and restricted, licensed or private material are withheld from every page, search index, map and download, '
+                'and so is anything that depends on them; a missing person is not evidence that they did not exist. See <a href="evidence.html#privacy">Privacy</a>.</p>'
+                '<p>Imported tree links are shown as unassessed until they are compared with records. Missing information stays missing: '
+                'no date is filled in, no relationship is inferred and no coordinates are looked up. How each label is decided is set out in '
+                '<a href="evidence.html">Reading the evidence</a>; what changed and when is in the <a href="changes.html">Change log</a>.</p>'
+                + '<h2 id="downloads">Data downloads</h2><p>The same public records as data. The <a href="sitemap.html#downloads">site index</a> gives the format, contents and size of each file; <a href="about-data.html">About the data</a> explains how it was gathered and graded, and the <a href="changes.html">change log</a> what has changed.</p>'
+                + buttons)
+
+    def change_log() -> str:
+        """Dated cards: a progress snapshot's counts and what changed since the one before, and each month's findings."""
+        words = {"people": ("person", "people"), "with_assessed_parent": ("person with an assessed parent", "people with an assessed parent"),
+                 "parent_links": ("parent link", "parent links"), "assessed_parent_links": ("assessed link", "assessed links"),
+                 "connected_groups": ("connected group", "connected groups"), "family_heads": ("family head", "family heads"),
+                 "open_questions": ("open question", "open questions"), "draft_findings": ("draft finding", "draft findings")}
+        shown = ("people", "assessed_parent_links", "connected_groups", "open_questions")
+        card = lambda date, title, rows, summary, href, link: (
+            f'<li><article class="card change-card"><p class="eyebrow">{dated_tag(date)}</p><h2>{_text(title)}</h2>'
+            '<dl class="change-rows">' + "".join(f"<dt>{_text(k)}</dt><dd>{v}</dd>" for k, v in rows) + "</dl>"
+            + f'<p>{summary}</p><p class="change-link"><a href="{href}">{_text(link)} →</a></p></article></li>')
+        month_names = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+        entries: list[tuple[str, int, str]] = []
+        for index, snap in enumerate(history):
+            before = history[index - 1] if index else None
+            delta = lambda key: snap[key] - before[key] if before and key in snap and key in before else 0
+            changes = [f'{"+" if delta(k) > 0 else "−"}{abs(delta(k)):,} {words[k][abs(delta(k)) != 1]}' for k in PROGRESS_COUNTS if delta(k)]
+            rows = [(words[k][1].capitalize(), f"{snap[k]:,}" + (f' <span class="meta">({"+" if delta(k) > 0 else "−"}{abs(delta(k)):,})</span>' if delta(k) else ""))
+                    for k in shown if k in snap]
+            summary = (_text(", ".join(changes)) + " since " + dated_tag(before["date"]) + "." if changes else
+                       "No counted figure changed since " + dated_tag(before["date"]) + "." if before else "The first snapshot kept.")
+            entries.append((snap["date"], 1, card(snap["date"], "Catalogue snapshot", rows, summary, "progress.html#history", "Research progress")))
+        months: dict[str, list[dict[str, Any]]] = {}
+        for f in dated:  # newest first, so each month's first finding is its newest
+            if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2]).*", f["recorded_on"]):
+                months.setdefault(f["recorded_on"][:7], []).append(f)
+        for month, rows_ in list(months.items())[:12]:
+            named = list(dict.fromkeys(rid for f in rows_ for rid in f.get("related_ids", []) if rid in people))
+            regraded = sum(len(f.get("changes", [])) for f in rows_)
+            rows = [("Findings", f"{len(rows_):,}"),
+                    ("People", (", ".join(ref(pid) for pid in named[:3]) + (f" and {len(named) - 3:,} more" if len(named) > 3 else "")) if named else "None named")]
+            if regraded:
+                rows.append(("Grades changed", f"{regraded:,}"))
+            newest = rows_[0]
+            conclusion = " ".join(str(newest["conclusion"]).split())
+            conclusion = conclusion if len(conclusion) <= 160 else conclusion[:159].rsplit(" ", 1)[0] + "…"
+            entries.append((newest["recorded_on"], 0, card(newest["recorded_on"], f"Research, {month_names[int(month[5:7]) - 1]} {month[:4]}", rows,
+                                                           "Newest: " + _text(conclusion), record_routes[newest["id"]], "Read the finding")))
+        entries.sort(key=lambda e: (e[0], e[1]), reverse=True)
+        return ('<p class="eyebrow">Release history</p><h1>Change log</h1>'
+                '<p class="lead">Looking for new facts? <a href="findings.html">Latest findings →</a></p>'
+                '<p>What changed in the public research, newest first: a snapshot of the research counts each time the date of the newest finding moves'
+                + (' (kept in <a href="data/progress-history.json">data/progress-history.json</a>)' if history else "")
+                + ', and the findings recorded in each of the latest twelve months with any.</p>'
+                + ('<ol class="change-grid">' + "".join(html for _, _, html in entries) + "</ol>" if entries
+                   else '<p class="empty-state">No public finding is dated yet; the change log starts with the first.</p>'))
 
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if base_url:
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
+    if progress_history:
+        downloads.append(("data/progress-history.json", "Research progress history"))
     pages["sitemap.html"] = '<h1>Site index and downloads</h1>' + way_in() + '<h2>Explore</h2><ul>' + "".join(f'<li><a href="{path}">{title}</a></li>' for path, (_, title) in routes.items()) + '</ul>' + ('<h2>Studies</h2>' + (f'<p>All {len(studies):,} studies are listed on the <a href="studies.html">studies page</a>, newest first, and <a href="studies/page-1.html">by title</a>.</p>'
-                                                  if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2>Machine-readable data</h2>' + download_table(downloads) + '<p>Downloads contain only the public records shown on this site.</p>' + '<h2>People</h2>' + browse_people
+                                                  if compact_studies else empty([f'<li><a href="{study_urls[sid]}">{_text(row["title"])}</a></li>' for sid, row in studies.items()])) if studies else "") + '<h2 id="downloads">Machine-readable data</h2>' + download_table(downloads) + '<p>Downloads contain only the public records shown on this site.</p>' + '<h2>People</h2>' + browse_people
+    pages["about-data.html"] = about_data(downloads)
+    pages["changes.html"] = change_log()
     shared = browser_data(project, people_urls, {sid: route for sid, route in record_routes.items() if sid in sources} if compact_sources else None,
                           config.grades, study_urls if compact_studies else None, name_variants)
     # The map lists the places in a cluster with links to where each one is shown.
