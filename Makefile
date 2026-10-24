@@ -6,7 +6,7 @@ test:
 	$(PYTHON) -m unittest discover -s tests -v
 
 check:
-	$(PYTHON) -m ruff check src tests
+	$(PYTHON) -m ruff check src tests tools
 	$(MAKE) test
 
 example:
@@ -16,4 +16,4 @@ package:
 	$(PYTHON) -m build
 
 browser-check:
-	GENEALOGY_BROWSER_TESTS=1 $(PYTHON) -m unittest discover -s tests -p 'test_browser*.py' -v
+	$(PYTHON) tools/browser_check.py

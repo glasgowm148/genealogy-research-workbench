@@ -626,6 +626,7 @@ class BrowserSiteTests(unittest.TestCase):
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
 
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'Set GENEALOGY_AXE_PATH for accessibility checks')
     def test_place_pages_pass_axe(self):
         from test_place_pages import case as places_case, page as place_page
         build_site(places_case(), ProjectConfig(name='Fictional places'), self.root / 'place-pages')
@@ -647,6 +648,7 @@ class BrowserSiteTests(unittest.TestCase):
                         ".map(v => `${v.id}: ${v.nodes[0].target.join(' ')}`)")
                     self.assertEqual([], violations)
 
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'Set GENEALOGY_AXE_PATH for accessibility checks')
     def test_guide_basis_and_examples_line_up_and_pass_axe(self):
         from test_guide_examples import case as guide_case, config as guide_config
         (self.root / 'guide-project').mkdir(exist_ok=True)
@@ -735,6 +737,7 @@ class BrowserSiteTests(unittest.TestCase):
         finally:
             nojs.close()
 
+    @unittest.skipUnless(os.environ.get('GENEALOGY_AXE_PATH'), 'Set GENEALOGY_AXE_PATH for accessibility checks')
     def test_competing_hypotheses_pass_axe(self):
         from test_hypotheses_compare import case as hypotheses_case
         build_site(hypotheses_case(), ProjectConfig(name='Fictional hypotheses'), self.root / 'hypotheses')

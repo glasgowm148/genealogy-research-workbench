@@ -234,7 +234,7 @@ class CatalogueFilterBrowserTests(unittest.TestCase):
         self.assertEqual({'q': 'Cairn', 'last': 'cairn', 'date_type': 'birth', 'year_from': '1784', 'place': 'Willowmere', 'no_spouse': '1',
                           'evidence': 'unassessed', 'sort': 'birth'}, self.query())
         # Shared or reloaded, the address restores the same view, each menu's pill counting its filters on.
-        other = self.context.new_page()
+        other = self.page  # a shared address is checked in the same working tab
         other.goto(address, wait_until='networkidle')
         other.locator('.pagination').wait_for()
         self.assertEqual(shown, self.shown(other.locator('.result-count').inner_text()))
@@ -249,7 +249,6 @@ class CatalogueFilterBrowserTests(unittest.TestCase):
         self.assertEqual('Birth ↑', other.locator('th[aria-sort="ascending"]').text_content())
         self.assertEqual('Birth: oldest first', other.get_by_label('Sort results').evaluate('s => s.selectedOptions[0].textContent'))
         self.assertEqual(0, other.locator('th[aria-sort="descending"]').count())
-        other.close()
         # Clearing keeps the sort and any parameter the catalogue does not own; an older year range is read as a birth range.
         self.open('demo', '?sort=death&from=elsewhere&birth_from=1810')
         self.assertEqual('22 of 42', self.count())

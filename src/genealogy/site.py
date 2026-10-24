@@ -42,6 +42,7 @@ LATEST_FINDINGS = 30  # the findings log opens with the newest; older ones are o
 MONTHS_LISTED = 24  # a findings page's month list names this many months; past that, the older half go by year
 FINDING_GROUPS = 30  # studies, places and finding types listed by count on the findings log; the rest are counted
 LATEST_SEARCHES = 50  # research.html lists the newest searches; each dossier lists all of its own
+SEARCHES_PER_PAGE = 50  # older searches are plain HTML pages under research-log/
 QUESTION_RELATED = 4  # hypotheses and findings about a question's people shown on its card; the rest are on their pages
 FINDINGS_PER_PAGE = 50
 CATALOGUE_PER_PAGE = 50  # people per catalogue page on a large site, in name order; the script pages by the same number
@@ -97,6 +98,7 @@ OPTIONAL_ROUTES["duplicates.html"] = ("duplicates", "Possible duplicates")  # [r
 OPTIONAL_ROUTES["dna.html"] = ("dna", "DNA")  # built when the case has public Haplogroup records; titled by [site] dna_heading
 DATA_FILES = {"data/site.json", "data/site.csv", "data/places.geojson", "data/routes.json", "data/site-data.js",
               "data/public-tree.ged", "sitemap.xml", "findings.xml", "data/redirects.json", "_redirects"}
+DATA_FILES.add("data/dna-branches.csv")
 DATA_FILES.add("data/progress-history.json")  # kept between builds: the progress page appends to it
 # The counts a progress snapshot keeps; a previous build's file is read back only for these.
 PROGRESS_COUNTS = ("people", "with_assessed_parent", "parent_links", "assessed_parent_links", "connected_groups", "family_heads",
@@ -220,7 +222,7 @@ def _owned(name: str) -> bool:
     return (name in ROUTES or name in OPTIONAL_ROUTES or name in DATA_FILES or name in {f"assets/{asset}" for asset in ASSETS}
             or bool(re.fullmatch(r"(?:people/p|studies/s|places/pl)-[0-9a-f]{64}\.html|(?:findings|catalogue|sources|studies)/page-[1-9][0-9]*\.html"
                                  r"|duplicates/page-[1-9][0-9]*\.html"
-                                 r"|records/page-[1-9][0-9]*\.html"
+                                 r"|(?:records|research-log)/page-[1-9][0-9]*\.html"
                                  r"|dna/[a-z0-9-]+\.html"
                                  r"|timeline/(?:[1-9][0-9]*0s|undated)\.html|places/[a-z0-9-]+\.html|sources/type-[a-z0-9-]+\.html", name)))
 
@@ -449,10 +451,15 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     for row in searches_newest:
         for rid in dict.fromkeys(row.get("related_ids", [])):
             searches_by_subject[rid].append(row)
-    searches_logged = {row["id"] for row in searches_newest[:LATEST_SEARCHES]}
-    for row in searches_newest:
+    # Assign canonical routes before other pages render references to searches.
+    for index, row in enumerate(searches_newest):
         home = next((people_urls[rid] for rid in row.get("related_ids", []) if rid in people_urls), None)
-        record_routes[row["id"]] = (home or "research.html") + ("#" + _anchor(row["id"]) if home or row["id"] in searches_logged else "")
+        if home:
+            route = home
+        else:
+            page = index // SEARCHES_PER_PAGE + 1
+            route = "research.html" if page == 1 else f"research-log/page-{page}.html"
+        record_routes[row["id"]] = route + "#" + _anchor(row["id"])
     # DNA branches: one page each under dna/, named from the branch, with dna.html over them all.
     dna_branches = {h["id"]: h for h in project.get("haplogroups", [])}
     dna_urls = haplogroups.branch_urls(dna_branches)
@@ -780,7 +787,11 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         more = len(cited) - 5
         return ((f'<p class="meta link-reason"><strong>Reason:</strong> {_text(reason)}</p>' if reason else "")
                 + (f'<p class="meta link-records">Supporting records: ' + ", ".join(record_link(cid, prefix) for cid in cited[:5])
-                   + (f" and {more:,} more" if more > 0 else "") + "</p>" if cited else ""))
+                   + (f" and {more:,} more" if more > 0 else "") + "</p>" if cited else "")
+                + (f'<details class="link-records-more"><summary>Show {more:,} additional supporting records</summary>'
+                   f'<p class="meta">Additional supporting records: '
+                   + ", ".join(record_link(cid, prefix) for cid in cited[5:])
+                   + "</p></details>" if more > 0 else ""))
 
     def person_item(pid: str, role: str, row: dict[str, Any] | None, prefix: str, extra: str = "") -> str:
         span = lifespan(pid)
@@ -2241,10 +2252,28 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 + empty([search_item(r, "../", omit=pid) for r in rows], "No public searches recorded for this person.").replace('class="record-list"', 'class="record-list research-log"', 1))
 
     total_searches = len(searches_newest)
+    search_chunks = [searches_newest[i:i + SEARCHES_PER_PAGE] for i in range(0, total_searches, SEARCHES_PER_PAGE)]
+    def research_pager(prefix: str, current: int) -> str:
+        links = []
+        for p in range(1, len(search_chunks) + 1):
+            href = f"{prefix}research.html#research-log" if p == 1 else f"{prefix}research-log/page-{p}.html"
+            label = "Newest" if p == 1 else f"Page {p}"
+            links.append(f'<li><a href="{href}"' + (' aria-current="page"' if p == current else '') + f'>{label}</a></li>')
+        return '<nav class="research-log-pages" aria-label="Research log pages"><ol>' + "".join(links) + "</ol></nav>"
+    # Paged log pages are deliberately simple lists: they work without the
+    # browser script and keep old, unattached searches addressable forever.
+    for n, chunk in enumerate(search_chunks[1:], 2):
+        path = f"research-log/page-{n}.html"
+        extra_titles[path] = ("research", f"Research log, page {n}")
+        pager = research_pager("../", n)
+        pages[path] = (f'<h1>Research log, page {n}</h1><p>Searches {((n - 1) * SEARCHES_PER_PAGE) + 1:,}–{min(n * SEARCHES_PER_PAGE, total_searches):,}, newest first. '
+                       '<a href="../research.html">Open the newest searches</a>.</p>' + pager
+                       + empty([search_item(r, "../") for r in chunk], "No public searches recorded.").replace('class="record-list"', 'class="record-list research-log"', 1) + pager)
+    pager = research_pager("", 1) if len(search_chunks) > 1 else ""
     pages["research.html"] += ('<h2 id="research-log">Research log</h2><p>Where each search looked and what it found, including searches that found nothing, so that they need not be repeated.</p>'
                                + (f'<p class="result-count">The newest {LATEST_SEARCHES} of {total_searches:,} searches. Each person\'s page lists every search made for them.</p>' if total_searches > LATEST_SEARCHES
                                   else f'<p class="result-count">{total_searches} search{"" if total_searches == 1 else "es"}, newest first.</p>' if total_searches else "")
-                               + empty([search_item(r) for r in searches_newest[:LATEST_SEARCHES]], "No public searches recorded.").replace('class="record-list"', 'class="record-list research-log"', 1))
+                               + pager + empty([search_item(r) for r in searches_newest[:LATEST_SEARCHES]], "No public searches recorded.").replace('class="record-list"', 'class="record-list research-log"', 1) + pager)
 
     def pending_updates_section(pid: str, person: dict[str, Any]) -> str:
         """The dossier's "Pending <tree> updates": each change still to make on the online tree, as the catalogue's tree
@@ -2952,6 +2981,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         "data/site.csv": ("CSV", "The same records for a spreadsheet: one row per record, with its record type and a column per field."),
         "data/places.geojson": ("GeoJSON", "The places with supplied coordinates, as points for mapping software."),
         "data/public-tree.ged": ("GEDCOM 5.5.1", "The public people and family links, to import into family-tree software."),
+        "data/dna-branches.csv": ("CSV", "Public DNA branch names, reported dates, parent branches and public people with attachment notes; no kits, markers, results or raw DNA."),
         "data/routes.json": ("JSON", "The address of every page on this site."),
         "data/progress-history.json": ("JSON", "The research progress counts, one snapshot per date of the newest finding."),
         "sitemap.xml": ("XML sitemap", "Every page's full address, for search engines."),
@@ -3250,6 +3280,9 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                 out["y"] = r["year"]
             if r["people"]:
                 out["p"] = [[person_name(pid), people_urls[pid]] for pid in r["people"][:RECORDS_PEOPLE]]
+                # Keep the compact display capped, while retaining every public
+                # named subject for the records search index.
+                out["q"] = " ".join(person_name(pid) for pid in r["people"])
                 if len(r["people"]) > RECORDS_PEOPLE:
                     out["n"] = len(r["people"])
             out["k"] = r["type"]
@@ -3605,7 +3638,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             + (lines_table(kept, ("Person", "Branch", "How attached")) + more if kept else '<p class="empty-state">No public person is placed on a branch yet.</p>')
             + '<h2 id="dna-interpretation">Interpretation</h2><p>Written studies that read the branches and the records together.</p>'
             + (study_cards(dna_studies[:12], "") + (f'<p><a href="studies.html">All {len(studies):,} studies →</a></p>' if len(dna_studies) > 12 else "")
-               if dna_studies else '<p class="empty-state">No interpretation has been published yet. A study with the kind “dna” appears here.</p>'))
+               if dna_studies else '<p class="empty-state">No interpretation has been published yet. A study with the kind “dna” appears here.</p>')
+            + '<p class="dna-download"><a href="data/dna-branches.csv">Download the public branch model (CSV)</a> · branch structure and reviewed public placements only.</p>')
         for bid, row in dna_branches.items():
             url, prefix = dna_urls[bid], "../"
             lineage = haplogroups.ancestors(dna_branches, bid)
@@ -3739,6 +3773,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
     pages["tree.html"] = pages["tree.html"].replace('<div id="tree-output"></div>', '<div id="tree-output"></div>' + atlas_families(*atlas_layout), 1)
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
+    if dna_branches:
+        downloads.insert(2, ("data/dna-branches.csv", "Public DNA branch model CSV"))
     if base_url:
         downloads += [("sitemap.xml", "XML sitemap"), ("findings.xml", "Latest findings (Atom feed)")]
     if progress_history:
@@ -3762,6 +3798,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         # One cached script shared by every interactive page; works from file:// too.
         "data/site-data.js": "window.GENEALOGY_SITE_DATA=" + _json(shared) + ";\n",
     }
+    if dna_branches:
+        outputs["data/dna-branches.csv"] = haplogroups.public_branch_csv(dna_branches, people, dna_people)
     # The search index as data, and as a script the sidebar loads on first use (a fetch fails on file://).
     searchable = search_index()
     outputs["data/search-index.json"] = json.dumps(searchable, ensure_ascii=False, separators=(",", ":")) + "\n"

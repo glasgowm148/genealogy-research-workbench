@@ -34,6 +34,11 @@ python -m playwright install chromium
 make browser-check
 ```
 
+The browser runner owns one Chromium process and keeps only one working tab open. It runs tests sequentially, preloads the local axe script once per context, and writes `output/browser-validation.json` with test results, browser/tab counts and resource inventories. It checks resources after at most ten page navigations. On macOS it stops when memory pressure is elevated. An independent supervisor stops a stalled worker and reclaims only its dedicated process group; it does not retry or touch personal browsers.
+
+To run one contract with the same cleanup guarantees, use `python tools/browser_check.py test_browser_dna_page`. Browser CI uses Python 3.12; using that version in a separate validation environment also avoids mixing browser debugging with your normal development environment.
+
+
 They exercise desktop/mobile routes, search and surname filters, tree views, family dossiers, the evidence guide, comparisons, connections, opening the built site directly from disk, and real GEDCOM/OneTree uploads through the local server. Set `GENEALOGY_BROWSER_EXECUTABLE` to use an installed Chromium or Chrome instead of Playwright's download. Set `GENEALOGY_AXE_PATH` to an [axe-core](https://github.com/dequelabs/axe-core) `axe.min.js` (for example from `npm install axe-core`) to also check every page type against WCAG 2.1 A/AA at desktop and mobile widths; CI does this. Standard unit tests do not require a browser. CI tests Python 3.11–3.14, builds distributions, smoke-tests an installed wheel outside the source checkout, and runs the separate browser job.
 
 ## Layout

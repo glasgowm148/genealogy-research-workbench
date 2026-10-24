@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from hashlib import sha256
 from html import escape
+import csv
+import io
 import re
 from typing import Any
 import unicodedata
@@ -16,6 +18,27 @@ CHAIN_DRAWN = 80  # branches drawn in a chain; the nested list beside it names e
 LIST_BYTES = 25_000  # dna.html's branch list and its people table each stop here; every branch page lists its own
 ROW = 34  # px per branch in the chain
 INDENT = 22  # px per generation of branches
+
+
+def public_branch_csv(branches: dict[str, dict[str, Any]], people: dict[str, dict[str, Any]],
+                      people_by_branch: dict[str, list[str]]) -> str:
+    """Public reusable branch model; deliberately excludes DNA test data."""
+    out = io.StringIO(newline="")
+    fields = ("branch_id", "branch_name", "parent_branch_id", "reported_date",
+              "person_id", "person_name", "attachment_note")
+    writer = csv.DictWriter(out, fieldnames=fields, lineterminator="\n")
+    writer.writeheader()
+    for bid in sorted(branches, key=lambda key: (str(branches[key].get("name", "")).casefold(), key)):
+        branch = branches[bid]
+        ids = people_by_branch.get(bid) or [None]
+        for pid in ids:
+            person = people.get(pid, {}) if pid else {}
+            name = next((n.get("value", "") for n in person.get("names", []) if n.get("value")), "")
+            writer.writerow({"branch_id": bid, "branch_name": branch.get("name", ""),
+                             "parent_branch_id": branch.get("parent_id") if branch.get("parent_id") in branches else "",
+                             "reported_date": branch.get("date") or "", "person_id": pid or "",
+                             "person_name": name, "attachment_note": person.get("haplogroup_note") or ""})
+    return out.getvalue()
 
 
 def slug(value: str) -> str:

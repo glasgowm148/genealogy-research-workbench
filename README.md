@@ -179,6 +179,7 @@ All generated site links are relative, so the site works under a subdirectory an
 | [Import formats](docs/imports.md) | GEDCOM subset, OneTree shapes, warnings, encoding, and limitations |
 | [Privacy and publication](docs/privacy.md) | Review options, withheld content, private bundles, and local uploads |
 | [Research recipes](docs/research.md) | Cases, records, sources, claims, findings, and exports |
+| [Glasgow feature parity](docs/parity.md) | Shared features, recent ports and project-specific research |
 | [Build and deployment](docs/deployment.md) | Branding, generated routes, static hosting, and rebuilds |
 | [Developer guide](docs/development.md) | Tests, package builds, adapters, and release checklist |
 | [Changelog](CHANGELOG.md) | Changes in the reusable package |

@@ -121,6 +121,10 @@ class FamilyReasonTests(unittest.TestCase):
         self.assertEqual("Supporting records: Invented register (entry 1), Invented register (entry 2), Invented register (entry 3), "
                          "Invented register (entry 4), Invented register (entry 5) and 3 more", text(records))
         self.assertEqual(5, records.count('href="../sources.html#'))
+        more = re.search(r'<details class="link-records-more">(.*?)</details>', wren)[1]
+        self.assertIn("<summary>Show 3 additional supporting records</summary>", more)
+        self.assertIn("Additional supporting records: Invented register (entry 6), Invented register (entry 7), Invented register (household 9)", text(more))
+        self.assertEqual(3, more.count('href="../sources.html#'))
 
     def test_else_no_reason_and_no_records(self):
         bram = self.item("ada", "Spouses and partners", "Bram Fable")

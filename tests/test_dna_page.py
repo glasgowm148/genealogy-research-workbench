@@ -207,6 +207,17 @@ class DnaPageTests(unittest.TestCase):
         self.assertEqual(4, len(data["haplogroups"]))
         self.assertEqual([], check_site(self.out)["broken"])
 
+    def test_public_branch_model_download_is_reviewed_and_raw_free(self):
+        csv = self.text("data/dna-branches.csv")
+        self.assertIn("branch_id,branch_name,parent_branch_id,reported_date,person_id,person_name,attachment_note", csv)
+        self.assertIn("h-tip,R-FABLE3,h-mid,,ada,Ada Fable,reported root", csv)
+        self.assertNotIn("SECRET", csv)
+        self.assertNotIn("kit", csv.casefold())
+        self.assertNotIn("marker", csv.casefold())
+        self.assertNotIn("raw", csv.casefold())
+        self.assertIn("data/dna-branches.csv", self.text("sitemap.html"))
+        self.assertIn("data/dna-branches.csv", self.text(".genealogy-site-manifest.json"))
+
     def test_no_branches_no_page_and_a_rebuild_removes_the_old_pages(self):
         case = dna_case()
         case.record_sets["Haplogroup"] = []
@@ -219,6 +230,7 @@ class DnaPageTests(unittest.TestCase):
             self.assertTrue((out / "dna/r-fable3.html").is_file())
             build_site(case, ProjectConfig(name="Fictional DNA"), out)
             self.assertFalse((out / "dna.html").exists())
+            self.assertFalse((out / "data/dna-branches.csv").exists())
             self.assertEqual([], list((out / "dna").glob("*.html")) if (out / "dna").exists() else [])
             self.assertNotIn("dna.html", (out / "index.html").read_text())
             self.assertNotIn('class="dna-line"', (out / f"people/p-{_key('ada')}.html").read_text())

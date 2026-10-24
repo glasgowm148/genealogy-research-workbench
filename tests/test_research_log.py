@@ -19,6 +19,7 @@ from genealogy.models import (AccessLevel as A, Citation, Finding, LivingStatus 
                               record_from_dict)
 from genealogy.research import ResearchService
 from genealogy.site import build_site
+from genealogy.sitecheck import check_site
 
 
 def search(sid, text, result, *, on=None, related=("ada",), cite=(), limitation=None, sensitivity=A.PUBLIC):
@@ -154,6 +155,30 @@ class LargeLogTests(unittest.TestCase):
             # The dossier keeps every search made for the person.
             self.assertEqual(60, page_for(out, "ada").count('<p class="search-date">'))
             self.assertNotIn("year 1868", research)  # s068, older and for a place only: in data/site.json, not listed
+
+    def test_older_searches_have_paged_no_script_pages_and_stable_unattached_links(self):
+        many = [search(f"s{n:03}", f"Register year {1800 + n}", "Nothing found.", on=f"{1900 + n}-01-01",
+                       related=()) for n in range(123)]
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            c = log_case(*many)
+            c.add(Finding("review-old-search", conclusion="The earliest search still needs review.",
+                          related_ids=["s000"], sensitivity=A.PUBLIC))
+            build_site(c, ProjectConfig(name="Fictional"), out)
+            page = (out / "research-log" / "page-3.html").read_text()
+            self.assertIn('id="r-', page)
+            self.assertIn('href="../research.html"', page)
+            self.assertIn('aria-label="Research log pages"', page)
+            self.assertIn("Register year 1800", page)
+            routes = json.loads((out / "data" / "routes.json").read_text())
+            self.assertTrue(any(str(row).startswith("research-log/page-3.html") for row in routes))
+            self.assertEqual([], check_site(out)["broken"])
+            self.assertIn('href="research-log/page-3.html#', (out / "research.html").read_text())
+            self.assertIn('href="../research.html#research-log"', page)
+            build_site(log_case(many[0]), ProjectConfig(name="Fictional"), out)
+            self.assertFalse((out / "research-log" / "page-3.html").exists())
+            self.assertFalse((out / "research-log" / "page-2.html").exists())
+            self.assertEqual([], check_site(out)["broken"])
 
 
 class PrivacyTests(unittest.TestCase):

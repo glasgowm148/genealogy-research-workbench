@@ -125,7 +125,8 @@ class RecordsBrowserTests(unittest.TestCase):
         self.page.get_by_role('button', name='Next →').click()
         self.assertEqual('51–100 of 401 cited records', self.count())
         self.page.locator('.records-filters input[name=q]').fill('Person 0390')
-        self.assertEqual('1–1 of 1 matching records (of 401)', self.count())
+        # The shared record also cites this person, beyond its first three displayed names.
+        self.assertEqual('1–2 of 2 matching records (of 401)', self.count())
         self.assertIn('Invented register volume 0390 (folio 390)', self.page.locator('.records-table tbody').inner_text())
         self.assertFalse(self.page.locator('.records-table + .pagination, [data-records] + .pagination').is_visible())
         self.axe()

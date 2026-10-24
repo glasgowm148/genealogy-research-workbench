@@ -112,7 +112,7 @@ genealogy --project my-family search add search:ada-baptism \
 
 In the case JSON a `Search` record is `{"id", "search", "result", "related_ids", "searched_on", "limitation", "citation_ids", "sensitivity"}`; you can also add one with `record add Search --input search.json`. Validation requires the search text and the result, checks the date, and checks that every related ID exists and every cited ID is a citation.
 
-Each person's page has a **Research log** section after **Research**, listing every search made for them, newest first (undated searches last), with the date, the search, the result, its limits, the records found and any other people or places it was made for. **Research** (`research.html`) ends with a **Research log** of the newest 50 searches and the total. A search is withheld from every page and download when it is not public itself, or when any person, place, source or citation it names is withheld, for example a living person.
+Each person's page has a **Research log** section after **Research**, listing every search made for them, newest first (undated searches last), with the date, the search, the result, its limits, the records found and any other people or places it was made for. **Research** (`research.html`) ends with a **Research log** of the newest 50 searches and the total. When there are more searches, its page links open the complete log, 50 entries per page (`research-log/page-2.html` onwards), including searches with no linked person. These pages work without JavaScript. A search is withheld from every page and download when it is not public itself, or when any person, place, source or citation it names is withheld, for example a living person.
 ## Record a hypothesis
 
 A hypothesis is a possible answer you are still testing, such as one of two candidate fathers. Record each candidate as its own hypothesis, with the same `related_ids`, and list your points on each side in two optional fields:
@@ -405,3 +405,9 @@ genealogy --project my-family bundle --output private/handoff --verify
 ```
 
 Public exports are filtered. The checksummed bundle contains the complete private case, claim/evidence/reference indexes, unresolved work and a Markdown handoff. Store it as private research. No command publishes a website or edits a collaborative tree automatically.
+
+## Save people while browsing
+
+Choose **Save on this device** on a person’s dossier. **Saved people** in the sidebar opens your notebook on any page. Select two entries to compare their evidence, remove entries, or choose **Export notebook** to download public names, record IDs and page links as JSON.
+
+Saves belong to this browser and this site's address; another published site has its own notebook. Clearing browser storage removes them. When storage is blocked, saves last for the current page visit. The notebook shows only people still present in the current public index. It does not change research records.

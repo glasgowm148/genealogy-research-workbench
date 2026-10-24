@@ -104,7 +104,31 @@ const empty=t=>el('p',t,'empty-state');
 const field=(label,control)=>{const l=el('label',label);l.append(control);return l;};
 const option=(value,text)=>{const n=el('option',text);n.value=value;return n;};
 const select=(items)=>{const n=el('select');items.forEach(([v,t])=>n.append(option(v,t)));return n;};
-const menu=$('#menu-toggle');if(menu)menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));$('#site-sidebar')?.classList.toggle('menu-open',open);});
+const menu=$('#menu-toggle');
+const sidebar=$('#site-sidebar');
+if(menu&&sidebar){
+ const phone=window.matchMedia('(max-width: 640px)');
+ let openedBy=null;
+ const setMenu=(open,{focus=false}={})=>{
+  const value=Boolean(open&&phone.matches);
+  menu.setAttribute('aria-expanded',String(value));
+  sidebar.classList.toggle('menu-open',value);
+  if(focus&&value===false&&openedBy){openedBy.focus();openedBy=null;}
+ };
+ menu.addEventListener('click',()=>{
+  const open=menu.getAttribute('aria-expanded')!=='true';
+  if(open)openedBy=menu;
+  setMenu(open);
+ });
+ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&menu.getAttribute('aria-expanded')==='true'){event.preventDefault();setMenu(false,{focus:true});}});
+ document.addEventListener('pointerdown',event=>{
+  if(menu.getAttribute('aria-expanded')==='true'&&!sidebar.contains(event.target)&&event.target!==menu)setMenu(false);
+ });
+ sidebar.addEventListener('click',event=>{if(event.target.closest('a')&&phone.matches)setMenu(false);});
+ const sync=()=>setMenu(menu.getAttribute('aria-expanded')==='true');
+ phone.addEventListener?.('change',sync);
+ window.addEventListener('resize',sync,{passive:true});
+}
 const view=document.body.dataset.view;
 
 // Catalogue: retain the complete server-rendered table and filter its rows.
@@ -747,15 +771,21 @@ function timeline(){
  const host=$('[data-timeline]');if(!host)return;const rows=$$('[data-event-id]',host);
  // A large site lists its decades here; the search covers every event in the shared data.
  const compact=!rows.length&&Number(host.dataset.total||0)>0&&events.length>0;if(!rows.length&&!compact)return;
- const search=el('input');search.type='search';search.placeholder='Person, date, event or place';const kinds=[...new Set(events.map(e=>e.kind))].sort();const kind=select([['','All event types'],...kinds.map(k=>[k,k])]);const bar=el('div',undefined,'toolbar');bar.append(field('Search timeline',search),field('Event type',kind));host.before(bar);const status=el('p',undefined,'result-count');host.before(status);
+ const search=el('input');search.type='search';search.placeholder='Person, date, event or place';const kinds=[...new Set(events.map(e=>e.kind))].sort();const kind=select([['','All event types'],...kinds.map(k=>[k,k])]);const from=el('input');from.type='number';from.placeholder='e.g. 1750';const to=el('input');to.type='number';to.placeholder='e.g. 1850';const clear=el('button','Clear filters');clear.type='button';clear.className='timeline-clear';clear.setAttribute('aria-label','Clear timeline filters');const bar=el('div',undefined,'toolbar');bar.append(field('Search timeline',search),field('Event type',kind),field('From year',from),field('To year',to),clear);host.before(bar);const status=el('p',undefined,'result-count');status.id='timeline-filter-status';status.setAttribute('role','status');host.before(status);
+ const params=new URLSearchParams(location.search);for(const [control,key] of [[search,'q'],[kind,'kind'],[from,'from'],[to,'to']]){const value=params.get(key);if(value!==null)control.value=value;}
+ const owners=new Map(events.map(e=>[e.id,new Set(e.participant_ids||[])]));for(const p of people)for(const e of pe(p))owners.get(e.id)?.add(p.id);
+ const eventYear=e=>{const m=String(e?.date||'').match(/(?:^|[^\d])(-?\d{3,4})(?=[^\d]|$)/);return m?Number(m[1]):null;};
+ const bounds=()=>{const a=Number(from.value),b=Number(to.value);return {from:from.value.trim()&&Number.isFinite(a)?a:null,to:to.value.trim()&&Number.isFinite(b)?b:null};};
+ const matches=(e,text)=>{const words=norm(text).trim().split(/\s+/).filter(Boolean),r=bounds(),y=eventYear(e),hay=norm([e?.date,e?.kind,placeBy.get(e?.place_id)?.name,e?.description,...[...(owners.get(e?.id)||[])].map(id=>name(personBy.get(id)))].join(' '));return (!kind.value||e?.kind===kind.value)&&words.every(w=>hay.includes(w))&&(r.from===null||y!==null&&y>=r.from)&&(r.to===null||y!==null&&y<=r.to);};
+ const sync=()=>keepAddress([['q',search.value.trim()],['kind',kind.value],['from',from.value.trim()],['to',to.value.trim()]]);let refresh=()=>{};
+ clear.addEventListener('click',()=>{search.value='';kind.value='';from.value='';to.value='';sync();refresh();});
  if(compact){const index=[...host.children],results=el('ul',undefined,'record-list timeline'),LIMIT=100;results.hidden=true;host.append(results);status.setAttribute('role','status');
-  const sorted=[...events].sort(byDate),texts=new Map;const text=e=>{if(!texts.has(e.id))texts.set(e.id,norm([e.date,e.kind,placeBy.get(e.place_id)?.name,e.description,...(e.participant_ids||[]).map(id=>name(personBy.get(id)))].join(' ')));return texts.get(e.id);};
-  const item=e=>{const li=el('li'),who=el('p'),place=placeBy.get(e.place_id);const when=el('strong',`${eventDate(e)} · ${e.kind}`);if(e.date)when.dataset.date=e.date;li.append(when);if(place)li.append(` — ${place.name}`);if(e.description)li.append(el('p',e.description));(e.participant_ids||[]).forEach((id,i)=>{if(i)who.append(', ');who.append(linkTo(id,name(personBy.get(id))));});li.append(who);return li;};
-  const show=()=>{const words=norm(search.value).trim().split(/\s+/).filter(Boolean);if(!words.length&&!kind.value){results.hidden=true;index.forEach(n=>n.hidden=false);status.textContent=`${events.length.toLocaleString()} events, one page per decade. Search to find events across every decade.`;return;}
-   const found=sorted.filter(e=>(!kind.value||e.kind===kind.value)&&words.every(w=>text(e).includes(w)));results.replaceChildren(...found.slice(0,LIMIT).map(item));results.hidden=false;index.forEach(n=>n.hidden=true);
-   status.textContent=found.length>LIMIT?`The first ${LIMIT} of ${found.length.toLocaleString()} matching events, in date order. Refine the search to see the others.`:`${found.length.toLocaleString()} of ${plural(events.length,'event')} shown`;};
-  search.addEventListener('input',show);kind.addEventListener('change',show);show();return;}
- const render=()=>{let count=0;rows.forEach(row=>{const event=eventBy.get(row.dataset.eventId),text=norm([row.textContent,...(event?.participant_ids||[]).map(id=>name(personBy.get(id)))].join(' '));row.hidden=!(text.includes(norm(search.value))&&(!kind.value||event?.kind===kind.value));if(!row.hidden)count++;});status.textContent=`${count} of ${plural(rows.length,'event')} shown`;};search.addEventListener('input',render);kind.addEventListener('change',render);render();
+  const sorted=[...events].sort(byDate);
+  const item=e=>{const li=el('li'),who=el('p'),place=placeBy.get(e.place_id);const when=el('strong',`${eventDate(e)} · ${e.kind}`);if(e.date)when.dataset.date=e.date;li.append(when);if(place)li.append(` — ${place.name}`);if(e.description)li.append(el('p',e.description));[...(owners.get(e.id)||[])].forEach((id,i)=>{if(i)who.append(', ');who.append(linkTo(id,name(personBy.get(id))));});li.append(who);return li;};
+  refresh=()=>{sync();const r=bounds(),has=search.value.trim()||kind.value||r.from!==null||r.to!==null;if(!has){results.hidden=true;index.forEach(n=>n.hidden=false);status.textContent=`${events.length.toLocaleString()} events, one page per decade. Search to find events across every decade.`;return;}
+   const found=sorted.filter(e=>matches(e,search.value));results.replaceChildren(...found.slice(0,LIMIT).map(item));results.hidden=false;index.forEach(n=>n.hidden=true);status.textContent=found.length>LIMIT?`The first ${LIMIT} of ${found.length.toLocaleString()} matching events, in date order. Refine the search to see the others.`:`${found.length.toLocaleString()} of ${plural(events.length,'event')} shown${(r.from!==null||r.to!==null)?' · events without a recorded year are excluded by the year filter':''}`;};
+  search.addEventListener('input',refresh);for(const n of [kind,from,to])n.addEventListener('input',refresh);refresh();return;}
+ refresh=()=>{sync();let count=0;rows.forEach(row=>{const event=eventBy.get(row.dataset.eventId);row.hidden=!matches(event,search.value);if(!row.hidden)count++;});const r=bounds();status.textContent=`${count} of ${plural(rows.length,'event')} shown${(r.from!==null||r.to!==null)?' · events without a recorded year are excluded by the year filter':''}`;};search.addEventListener('input',refresh);for(const n of [kind,from,to])n.addEventListener('input',refresh);refresh();
 }
 function sourceSearch(){
  const host=$('[data-sources]');if(!host)return;const rows=$$('[data-source-id]',host);if(!rows.length)return;const input=el('input');input.type='search';input.placeholder='Title, repository or source type';const bar=el('div',undefined,'toolbar');bar.append(field('Search sources',input));host.before(bar);const count=el('p',undefined,'result-count');host.before(count);
@@ -803,7 +833,8 @@ function map(){
  const atPlace=new Map(located.map(p=>[p.id,[]])),surnamePlaces=new Map,spellings=new Map;
  for(const e of events){const here=atPlace.get(e.place_id);if(!here)continue;const surnames=new Set;for(const pid of who.get(e.id)||[]){const s=surnameOf(personBy.get(pid)),c=canonical(s);if(!c)continue;surnames.add(c);if(!surnamePlaces.has(c)){surnamePlaces.set(c,new Set);spellings.set(c,new Set);}surnamePlaces.get(c).add(e.place_id);if(s!==c)spellings.get(c).add(s);}here.push({e,y:year(e.date),surnames});}
  let filtered=false,version=0,listed='';const list=el('ul',undefined,'map-cluster-places');list.hidden=true;
- located.forEach(p=>{const [cx,cy]=xy(p.longitude,p.latitude),group=svgEl('g',{class:'map-marker'}),hit=svgEl('circle',{cx,cy,r:12,fill:'transparent','pointer-events':'all'}),node=svgEl('circle',{cx,cy,r:5,class:`map-point${BROAD.has(p.precision)?' broad':''}`,tabindex:0,role:'button','aria-label':p.name});const title=svgEl('title');title.textContent=p.name;node.append(title);const m={p,group,node,hit,x:cx,y:cy,on:true,text:fold(p.name),all:atPlace.get(p.id),matched:atPlace.get(p.id)};const inspect=()=>{const n=m.matched.length,total=m.all.length;listed='';list.hidden=true;list.replaceChildren();info.textContent=`${p.name} · ${filtered&&n!==total?`${n} of ${total} recorded events match the filters`:`${total} recorded event${total===1?'':'s'}`} · ${p.latitude}, ${p.longitude}${p.precision?` · located to ${p.precision} level`:''}`;};group.addEventListener('click',inspect);node.addEventListener('focus',inspect);node.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inspect();}});group.append(hit,node);svg.append(group);markers.push(m);});
+ const coordinate=v=>String(v);
+ located.forEach(p=>{const [cx,cy]=xy(p.longitude,p.latitude),coords=`${coordinate(p.latitude)}, ${coordinate(p.longitude)}`,label=`${p.name} · ${coords}${p.precision?` · located to ${p.precision} level`:''}`,group=svgEl('g',{class:'map-marker'}),hit=svgEl('circle',{cx,cy,r:12,fill:'transparent','pointer-events':'all'}),node=svgEl('circle',{cx,cy,r:5,class:`map-point${BROAD.has(p.precision)?' broad':''}`,tabindex:0,role:'button','aria-label':label});const title=svgEl('title');title.textContent=label;node.append(title);const m={p,group,node,hit,x:cx,y:cy,on:true,text:fold(p.name),all:atPlace.get(p.id),matched:atPlace.get(p.id)};const inspect=()=>{const n=m.matched.length,total=m.all.length;listed='';list.hidden=true;list.replaceChildren();info.textContent=`${p.name} · ${filtered&&n!==total?`${n} of ${total} recorded events match the filters`:`${total} recorded event${total===1?'':'s'}`} · ${coords}${p.precision?` · located to ${p.precision} level`:''}`;};group.addEventListener('click',inspect);node.addEventListener('focus',inspect);node.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inspect();}});group.append(hit,node);svg.append(group);markers.push(m);});
  // Places closer than about 12 screen pixels merge into one counted marker, regrouped whenever the zoom or the filters change.
  const layer=svgEl('g',{class:'map-clusters'});svg.append(layer);let grouping='';
  function cluster(factor){const key=`${factor}|${version}`;if(key===grouping)return;grouping=key;const active=document.activeElement,inside=active!==svg&&svg.contains(active),reach=12*factor,cells=new Map,shown=markers.filter(m=>m.on),groups=[];
@@ -842,14 +873,59 @@ function map(){
  function render(){svg.setAttribute('viewBox',`${box.x} ${box.y} ${box.w} ${box.h}`);const factor=box.w/(svg.clientWidth||900);markers.forEach(({node,hit})=>{node.setAttribute('r',(node.classList.contains('broad')?10:5)*factor);node.style.strokeWidth=String(1.5*factor);hit.setAttribute('r',12*factor);});cluster(factor);}
  const point=e=>{const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const matrix=svg.getScreenCTM();return matrix?p.matrixTransform(matrix.inverse()):{x:box.x+box.w/2,y:box.y+box.h/2};};
  function zoom(factor,center={x:box.x+box.w/2,y:box.y+box.h/2}){const w=Math.min(1800,Math.max(12.5,box.w*factor)),ratio=w/box.w;box={x:center.x-(center.x-box.x)*ratio,y:center.y-(center.y-box.y)*ratio,w,h:box.h*ratio};render();}
- const controls=el('div',undefined,'tree-controls map-controls'),minus=el('button','−'),plus=el('button','+'),fit=el('button','Fit places'),world=el('button','World');minus.setAttribute('aria-label','Zoom map out');plus.setAttribute('aria-label','Zoom map in');fit.dataset.mapFit='';world.dataset.mapWorld='';controls.append(minus,plus,fit,world);minus.addEventListener('click',()=>zoom(1.3));plus.addEventListener('click',()=>zoom(1/1.3));world.addEventListener('click',()=>{box={x:0,y:0,w:900,h:470};render();});fit.addEventListener('click',()=>{const on=markers.filter(m=>m.on),positions=(on.length?on:markers).map(m=>[m.x,m.y]),xs=positions.map(p=>p[0]),ys=positions.map(p=>p[1]),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),w=Math.min(900,Math.max(35,(maxX-minX)*1.3,(maxY-minY)*1.3*900/470));box={x:(minX+maxX-w)/2,y:(minY+maxY-w*470/900)/2,w,h:w*470/900};render();});
+ const controls=el('div',undefined,'tree-controls map-controls'),minus=el('button','−'),plus=el('button','+'),fit=el('button','Fit places'),world=el('button','World');minus.setAttribute('aria-label','Zoom map out');plus.setAttribute('aria-label','Zoom map in');fit.setAttribute('aria-label','Fit map to places shown');world.setAttribute('aria-label','Reset map to world view');world.title='Reset map to world view';fit.dataset.mapFit='';world.dataset.mapWorld='';controls.append(minus,plus,fit,world);minus.addEventListener('click',()=>zoom(1.3));plus.addEventListener('click',()=>zoom(1/1.3));world.addEventListener('click',()=>{box={x:0,y:0,w:900,h:470};render();});fit.addEventListener('click',()=>{const on=markers.filter(m=>m.on),positions=(on.length?on:markers).map(m=>[m.x,m.y]),xs=positions.map(p=>p[0]),ys=positions.map(p=>p[1]),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),w=Math.min(900,Math.max(35,(maxX-minX)*1.3,(maxY-minY)*1.3*900/470));box={x:(minX+maxX-w)/2,y:(minY+maxY-w*470/900)/2,w,h:w*470/900};render();});
  let drag;svg.addEventListener('pointerdown',e=>{if(e.target.closest('.map-marker'))return;const p=point(e);drag={p};svg.setPointerCapture(e.pointerId);});svg.addEventListener('pointermove',e=>{if(!drag)return;const p=point(e);box.x+=drag.p.x-p.x;box.y+=drag.p.y-p.y;render();});svg.addEventListener('pointerup',()=>drag=null);svg.addEventListener('pointercancel',()=>drag=null);svg.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY>0?1.15:1/1.15,point(e));},{passive:false});svg.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-','Home'].includes(e.key))return;e.preventDefault();if(e.key==='ArrowLeft')box.x-=box.w*.08;if(e.key==='ArrowRight')box.x+=box.w*.08;if(e.key==='ArrowUp')box.y-=box.h*.08;if(e.key==='ArrowDown')box.y+=box.h*.08;if(e.key==='+'||e.key==='=')zoom(1/1.3);if(e.key==='-')zoom(1.3);if(e.key==='Home')box={x:0,y:0,w:900,h:470};render();});
  const instructions=el('p','Drag to pan; use the wheel or +/− to zoom. Keyboard: arrows pan, +/− zoom, Home returns to the world. Markers keep their screen size; places closer together than a marker merge into one counted marker until you zoom in. The filters keep a place while one of its events matches; Fit places frames the places shown, keeping a minimum regional span. Coordinates are the supplied values.','hint');instructions.id='map-instructions';panel.append(svg,info,list);host.replaceChildren(bar,status,controls,panel,instructions,el('p',`${located.length} of ${places.length} places have supplied coordinates. Natural Earth overview; no geocoding or online map services. Places without coordinates remain in the list below.`,'hint'));apply();if(typeof ResizeObserver==='function')new ResizeObserver(render).observe(svg);
 }
 // The home page is written in full by the build, so it needs nothing from the shared data.
 function overview(){}
 function bookmarks(){
- if(view!=='person')return;const id=document.body.dataset.personId;if(!id)return;try{const key='genealogy-workbench-bookmarks',saved=new Set(JSON.parse(localStorage.getItem(key)||'[]'));const button=el('button');const render=()=>{button.textContent=saved.has(id)?'★ Saved on this device':'☆ Save on this device';button.setAttribute('aria-pressed',String(saved.has(id)));};render();button.addEventListener('click',()=>{saved.has(id)?saved.delete(id):saved.add(id);try{localStorage.setItem(key,JSON.stringify([...saved]));render();announce('Saved people updated on this device.');}catch(_){announce('Browser storage is unavailable.');}});($('.dossier-actions')||$('.page-header')||$('main'))?.append(button);}catch(_){} }
+ // Reuse the small public search index, loaded only when the notebook opens.
+ // Dossiers and static pages deliberately do not load the whole research case.
+ const siteUrl=new URL(root||'./',location.href);siteUrl.search='';siteUrl.hash='';
+ const key='genealogy-workbench-bookmarks:'+siteUrl.href,current=document.body.dataset.personId;
+ const currentRoute=location.pathname.slice(siteUrl.pathname.length);
+ let saved=new Set(),savedRoutes=new Map(),directory=null,loading=null,storageOK=true;
+ const read=()=>{try{const value=JSON.parse(localStorage.getItem(key)||'[]');savedRoutes=new Map((Array.isArray(value)?value:[]).filter(r=>r&&typeof r.id==='string'&&typeof r.u==='string').map(r=>[r.id,r.u]));saved=new Set(savedRoutes.keys());}catch(_){storageOK=false;}};
+ const write=()=>{try{localStorage.setItem(key,JSON.stringify([...saved].map(id=>({id,u:savedRoutes.get(id)}))));storageOK=true;}catch(_){storageOK=false;}};
+ read();
+ const toggle=el('button','Saved people','notebook-toggle');toggle.type='button';toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls','saved-people-panel');
+ const panel=el('section',undefined,'saved-people-panel');panel.id='saved-people-panel';panel.hidden=true;panel.setAttribute('role','dialog');panel.setAttribute('aria-labelledby','notebook-title');
+ const heading=el('h2','Saved people');heading.id='notebook-title';const close=el('button','Close','notebook-close');close.type='button';close.setAttribute('aria-label','Close saved people');
+ const note=el('p','Saved in this browser for this site. Select two people to compare their evidence.','hint');
+ const status=el('p',undefined,'notebook-status');status.setAttribute('role','status');
+ const listNode=el('ul',undefined,'notebook-people'),actions=el('div',undefined,'notebook-actions');
+ const compare=el('a','Compare selected','button');compare.hidden=true;
+ const exportBtn=el('button','Export notebook');exportBtn.type='button';actions.append(compare,exportBtn);panel.append(heading,close,note,status,listNode,actions);
+ const star=current?el('button'):null;if(star){star.type='button';star.dataset.bookmarkPerson='';($('.dossier-actions')||$('main'))?.append(star);}
+ const updateSelection=()=>{const ids=$$('input:checked',listNode).map(n=>n.value);compare.hidden=ids.length!==2;if(ids.length===2){const url=new URL('compare.html',siteUrl);url.searchParams.set('a',ids[0]);url.searchParams.set('b',ids[1]);compare.href=url.href;}status.textContent=(saved.size?`${saved.size} saved · ${ids.length} selected.`:'No saved people yet. Open a person’s page and choose Save on this device.')+(!storageOK?' Browser storage is unavailable; changes last only for this visit.':'');};
+ function render(){
+  if(directory)saved=new Set([...saved].filter(id=>directory.has(savedRoutes.get(id))));
+  toggle.textContent=`Saved people${saved.size?` (${saved.size})`:''}`;
+  if(star){star.textContent=saved.has(current)?(storageOK?'★ Saved on this device':'★ Saved for this visit'):'☆ Save on this device';star.setAttribute('aria-pressed',String(saved.has(current)));}
+  listNode.replaceChildren();compare.hidden=true;exportBtn.disabled=!directory||!saved.size;
+  if(directory)for(const id of saved){const person=directory.get(savedRoutes.get(id)),li=el('li'),check=el('input');check.type='checkbox';check.value=id;check.setAttribute('aria-label',`Select ${person.t} for comparison`);check.addEventListener('change',updateSelection);
+   const details=el('div'),link=el('a',person.t);link.href=new URL(person.u,siteUrl).href;details.append(link);if(person.s)details.append(el('span',person.s,'meta'));
+   const remove=el('button','Remove','notebook-remove');remove.type='button';remove.setAttribute('aria-label',`Remove ${person.t} from saved people`);remove.addEventListener('click',()=>{saved.delete(id);write();render();close.focus();});li.append(check,details,remove);listNode.append(li);}
+  updateSelection();
+ }
+ async function load(){
+  if(directory)return true;if(loading)return loading;
+  status.textContent='Loading saved people…';
+  loading=new Promise(resolve=>{const ready=()=>{directory=new Map((window.GENEALOGY_SEARCH_INDEX||[]).filter(r=>r.k==='person'&&r.u).map(r=>[r.u,r]));render();resolve(true);};
+   if(Array.isArray(window.GENEALOGY_SEARCH_INDEX)){ready();return;}
+   const script=el('script');script.src=new URL('data/search-index.js',siteUrl).href;script.onload=ready;script.onerror=()=>{loading=null;status.textContent='Saved people could not be loaded. Close and reopen to try again.';script.remove();resolve(false);};document.head.append(script);
+  });return loading;
+ }
+ const hide=()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();};
+ toggle.addEventListener('click',async()=>{if(!panel.hidden){hide();return;}panel.hidden=false;toggle.setAttribute('aria-expanded','true');close.focus();await load();});
+ close.addEventListener('click',hide);document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){e.preventDefault();hide();}});
+ document.addEventListener('pointerdown',e=>{if(!panel.hidden&&!panel.contains(e.target)&&!toggle.contains(e.target)&&e.target!==star)hide();});
+ if(star)star.addEventListener('click',()=>{if(saved.has(current))saved.delete(current);else{saved.add(current);savedRoutes.set(current,currentRoute);}write();render();announce(storageOK?'Saved people updated on this device.':'Browser storage is unavailable; saved for this visit only.');});
+ exportBtn.addEventListener('click',()=>{if(!directory)return;const payload=[...saved].filter(id=>directory.has(savedRoutes.get(id))).map(id=>{const p=directory.get(savedRoutes.get(id));return{id,name:p.t,url:new URL(p.u,siteUrl).href};});const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)+'\n'],{type:'application/json'})),a=el('a');a.href=url;a.download='saved-people.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+ window.addEventListener('storage',e=>{if(e.key===key){read();render();}});
+ ($('.site-sidebar')||$('main'))?.append(toggle);document.body.append(panel);render();
+}
 // Site search in the top bar: people, places, studies, sources, findings and questions by title.
 // The index (a title and one short line per record) loads on first use as a script, which works from file:// as well.
 const SEARCH_KINDS={person:'People',place:'Places',study:'Studies',source:'Sources',finding:'Findings',question:'Research questions'};
@@ -955,7 +1031,7 @@ function records(){
  const script=document.createElement('script');script.src=root+'data/records-index.js';script.async=true;script.addEventListener('load',ready);document.head.append(script);
  function start(index){
   const types=index.types||{},size=50,shown=3;let page=0;
-  const rows=index.rows.map((r,i)=>({...r,i,who:norm(r.p?.[0]?.[0]||''),kind:types[r.k]||r.k||'',h:fold([r.y,...(r.p||[]).map(p=>p[0]),types[r.k],r.l?.[0],r.s,r.c,r.a].filter(v=>v!=null).join(' '))}));
+  const rows=index.rows.map((r,i)=>({...r,i,who:norm(r.p?.[0]?.[0]||''),kind:types[r.k]||r.k||'',h:fold([r.y,r.q,...(r.p||[]).map(p=>p[0]),types[r.k],r.l?.[0],r.s,r.c,r.a].filter(v=>v!=null).join(' '))}));
   const f=form.elements,controls=[['q',f.q],['type',f.type],['year_from',f.year_from],['year_to',f.year_to],['evidence',f.evidence],['sort',$('[data-records-sort]',bar)]];
   const c=Object.fromEntries(controls),count=$('[data-records-count]',bar),clear=$('[data-records-clear]',form);
   const link=(label,url)=>{const a=el('a',label);a.href=root+url;return a;};

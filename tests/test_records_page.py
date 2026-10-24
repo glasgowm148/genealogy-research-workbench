@@ -154,7 +154,7 @@ class RecordsPageTests(unittest.TestCase):
         self.assertEqual({"parish-register": "Parish registers", "census": "Census"}, data["types"])
         self.assertEqual(5, len(data["rows"]))
         for row in data["rows"]:
-            self.assertLessEqual(set(row), {"y", "p", "n", "k", "l", "e", "s", "u", "c", "a"})
+            self.assertLessEqual(set(row), {"y", "p", "q", "n", "k", "l", "e", "s", "u", "c", "a"})
         first = data["rows"][0]
         self.assertEqual(1801, first["y"])
         self.assertEqual(["Documented", "confidence-documented"], first["e"])
@@ -162,6 +162,7 @@ class RecordsPageTests(unittest.TestCase):
         self.assertLessEqual(len(first["a"]), RECORDS_ABSTRACT)
         self.assertEqual(4, data["rows"][2]["n"])
         self.assertEqual(3, len(data["rows"][2]["p"]))
+        self.assertIn("Dov Fable", data["rows"][2]["q"])
         self.assertEqual(["Disproved", "confidence-disproved", 1], data["rows"][3]["e"])
         self.assertNotIn("e", data["rows"][1])
         self.assertTrue(_owned("data/records-index.js"))

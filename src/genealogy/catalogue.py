@@ -53,32 +53,66 @@ def render_catalogue(project: Mapping[str, Any]) -> str:
 
 def catalogue_data(project: Mapping[str, Any]) -> dict[str, Any]:
     """Build a stable, presentation-neutral catalogue index."""
+    # Callers pass the privacy-filtered project representation.
+    public_people = [p for p in project.get("people", []) if isinstance(p, Mapping)]
+    people_by_id = {str(p.get("id", "")): p for p in public_people}
+    people_ids = {str(p.get("id", "")) for p in public_people}
+    places = {str(p.get("id")): p for p in project.get("places", []) if isinstance(p, Mapping)}
     events_by_person: dict[str, list[Mapping[str, Any]]] = {}
+    events_by_id = {str(e.get("id")): e for e in project.get("events", []) if isinstance(e, Mapping)}
     for event in project.get("events", []):
         if not isinstance(event, Mapping):
             continue
         for person_id in event.get("participant_ids", event.get("person_ids", [])):
-            events_by_person.setdefault(str(person_id), []).append(event)
+            if str(person_id) in people_ids:
+                events_by_person.setdefault(str(person_id), []).append(event)
+    for person in public_people:
+        pid = str(person.get("id", ""))
+        for event_id in person.get("event_ids", []):
+            event = events_by_id.get(str(event_id))
+            if event is not None and event not in events_by_person.setdefault(pid, []):
+                events_by_person[pid].append(event)
+    relatives: dict[str, list[dict[str, str]]] = {pid: [] for pid in people_ids}
+    for relationship in project.get("relationships", []):
+        if not isinstance(relationship, Mapping):
+            continue
+        subject, other = str(relationship.get("subject_id", "")), str(relationship.get("object_id", ""))
+        if subject not in people_ids or other not in people_ids:
+            continue
+        kind = str(relationship.get("kind") or relationship.get("type") or "related")
+        relatives[subject].append({"id": other, "name": display_name(people_by_id[other]), "relationship": kind})
+        relatives[other].append({"id": subject, "name": display_name(people_by_id[subject]), "relationship": kind})
     claims_by_person: dict[str, list[Mapping[str, Any]]] = {}
     for claim in project.get("claims", []):
-        if isinstance(claim, Mapping):
+        if isinstance(claim, Mapping) and str(claim.get("subject_id", "")) in people_ids:
             claims_by_person.setdefault(str(claim.get("subject_id", "")), []).append(claim)
     people = []
-    for person in sorted(project.get("people", []), key=lambda item: display_name(item).casefold()):
+    for person in sorted(public_people, key=lambda item: display_name(item).casefold()):
         person_id = str(person.get("id", ""))
+        events = sorted((dict(event) for event in events_by_person.get(person_id, [])),
+                        key=lambda item: (date_sort_key(item.get("date")), str(item.get("id", ""))))
+        summary: dict[str, Any] = {}
+        for event in events:
+            kind = str(event.get("kind") or event.get("type") or "").casefold()
+            if kind in ("birth", "birt", "death", "deat"):
+                prefix = "birth" if kind in ("birth", "birt") else "death"
+                summary[f"{prefix}_date"] = event.get("date")
+                place = places.get(str(event.get("place_id", "")))
+                if place:
+                    summary[f"{prefix}_place"] = place.get("name") or place.get("title") or place.get("label")
         people.append({
             "id": person_id,
             "name": display_name(person),
-            "events": sorted(
-                (dict(event) for event in events_by_person.get(person_id, [])),
-                key=lambda item: (date_sort_key(item.get("date")), str(item.get("id", ""))),
-            ),
+            "events": events,
             "claims": [dict(claim) for claim in claims_by_person.get(person_id, [])],
             "external_ids": list(person.get("external_ids", [])),
+            "relatives": relatives.get(person_id, []),
+            **summary,
         })
     return {
         "project": dict(project.get("project", {})),
         "people": people,
+        "places": [dict(place) for place in places.values()],
         "questions": list(project.get("questions", [])),
         "findings": list(project.get("findings", [])),
         "sources": list(project.get("sources", [])),
@@ -110,11 +144,13 @@ def render_catalogue_html(project: Mapping[str, Any]) -> str:
             f'{claim.get("predicate", "claim")}: {claim.get("value", "")}'
             for claim in person["claims"]
         )
-        search = escape(" ".join((person["name"], person["id"], events, claims)).casefold(), quote=True)
+        life = "; ".join(str(person.get(key, "")) for key in ("birth_date", "birth_place", "death_date", "death_place") if person.get(key))
+        kin = "; ".join(f'{r.get("relationship", "related")}: {r.get("name", "")}' for r in person.get("relatives", []))
+        search = escape(" ".join((person["name"], person["id"], events, claims, life, kin)).casefold(), quote=True)
         people_rows.append(
             f'<tr data-search="{search}"><th scope="row">{escape(person["name"])}</th>'
-            f'<td><code>{escape(person["id"])}</code></td><td>{escape(events) or "—"}</td>'
-            f'<td>{escape(claims) or "—"}</td></tr>'
+            f'<td><code>{escape(person["id"])}</code></td><td>{escape(life + ("; " if life and events else "") + events) or "—"}</td>'
+            f'<td>{escape(claims + (("; " if claims and kin else "") + kin)) or "—"}</td></tr>'
         )
     question_items = "".join(
         f'<li>{escape(str(item.get("question") or item.get("text") or item.get("id", "")))}</li>'

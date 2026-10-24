@@ -113,6 +113,44 @@ class BrowserShellTests(unittest.TestCase):
         finally:
             context.close()
 
+    def open_phone_menu(self):
+        self.page.set_viewport_size({'width': 390, 'height': 800})
+        self.page.goto(self.dossier)
+        toggle = self.page.locator('#menu-toggle')
+        toggle.click()
+        self.assertEqual('true', toggle.get_attribute('aria-expanded'))
+        return toggle
+
+    def test_phone_menu_escape_returns_focus_to_toggle(self):
+        toggle = self.open_phone_menu()
+        self.page.locator('.site-sidebar a').first.focus()
+        self.page.keyboard.press('Escape')
+        self.assertEqual('false', toggle.get_attribute('aria-expanded'))
+        self.assertTrue(toggle.evaluate('i => i === document.activeElement'))
+
+    def test_phone_menu_closes_on_outside_interaction(self):
+        toggle = self.open_phone_menu()
+        self.page.locator('#main-content').click(position={'x': 8, 'y': 8})
+        self.assertEqual('false', toggle.get_attribute('aria-expanded'))
+        self.assertTrue(self.page.locator('.site-sidebar').evaluate("i => !i.classList.contains('menu-open')"))
+
+    def test_phone_menu_closes_when_navigation_starts(self):
+        toggle = self.open_phone_menu()
+        link = self.page.locator('.site-sidebar a').first
+        link.click()
+        self.assertEqual('false', toggle.get_attribute('aria-expanded'))
+
+    def test_phone_menu_state_syncs_across_breakpoint_resize(self):
+        toggle = self.open_phone_menu()
+        self.page.set_viewport_size({'width': 800, 'height': 800})
+        self.page.wait_for_timeout(50)
+        self.assertEqual('false', toggle.get_attribute('aria-expanded'))
+        self.page.set_viewport_size({'width': 640, 'height': 800})
+        self.page.wait_for_timeout(50)
+        self.assertEqual('false', toggle.get_attribute('aria-expanded'))
+        toggle.click()
+        self.assertEqual('true', toggle.get_attribute('aria-expanded'))
+
 
 if __name__ == '__main__':
     unittest.main()
