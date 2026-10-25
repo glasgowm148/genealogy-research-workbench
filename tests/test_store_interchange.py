@@ -196,6 +196,20 @@ class PublicationAndBuild(unittest.TestCase):
         build_from_database(self.fx.project, out, build_date="2026-10-25")
         self.assertFalse((out / "images" / "will-crop.jpg").exists())
 
+    def test_an_old_record_shows_a_person_is_historical_but_a_recent_one_does_not(self) -> None:
+        r = self.fx.research
+        old = self.fx.person("Elspet Marrow", living="unknown")
+        recent = self.fx.person("Corin Marrow", living="unknown")
+        with self.fx.write() as tx:
+            source = r.register_source(tx, title="Invented kirk session", access="public")
+            for person, year in ((old, "1701"), (recent, "1990")):
+                record = r.add_record(tx, title=f"Entry {year}", source_id=source, date_start=year, access="public")
+                mention = r.add_mention(tx, record_id=record, name_as_written="named")
+                r.identity_claim(tx, mention_id=mention, person_id=person)
+        public = {p.id for p in public_case(self.fx.project, build_year=2026)[0].records("Person")}
+        self.assertIn(old, public)
+        self.assertNotIn(recent, public)
+
     def test_current_estimate_is_published_once_for_both_directions(self) -> None:
         case, _ = public_case(self.fx.project, build_year=2026)
         links = [r for r in case.records("Relationship") if r.id == self.ids["father"]]

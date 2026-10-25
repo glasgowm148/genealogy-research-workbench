@@ -27,7 +27,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 import json
-from pathlib import Path
 import re
 from typing import Any
 
@@ -49,7 +48,8 @@ GENERATED_ASSET_KINDS = ("derivative", "generated", "presentation")
 #: Prose fields: a research item naming a withheld entity is withheld; a fact keeps its fact and loses the text.
 ITEM_TEXT = {"Finding": ("conclusion", "limitations"), "ResearchQuestion": ("question", "resolves", "next_record"),
              "Search": ("search", "result", "limitation"), "Hypothesis": ("statement", "supports", "objections"),
-             "Study": ("title", "summary", "rationale", "body", "conclusion", "limitations")}
+             "Study": ("title", "summary", "rationale", "body", "conclusion", "limitations"),
+             "Source": ("title", "author", "publication")}
 FACT_TEXT = {"Relationship": ("rationale",), "Claim": ("rationale", "value"), "Evidence": ("assessment", "limitation"),
              "Person": ("notes",), "Event": ("description",), "Citation": ("abstract", "transcription")}
 WORD = re.compile(r"[\w'.-]+")
@@ -79,7 +79,7 @@ class Omissions:
 
     items: list[dict[str, str]] = field(default_factory=list)
     withheld_terms: set[str] = field(default_factory=set)
-    withheld_files: set[str] = field(default_factory=set)   # matched against output file names only
+    withheld_files: set[str] = field(default_factory=set)   # SHA-256 of withheld files: their bytes must not appear
     published_assets: list[dict[str, Any]] = field(default_factory=list)
 
     def add(self, entity_id: str, kind: str, reason: str) -> None:
@@ -170,6 +170,15 @@ def public_case(project: Project, *, build_year: int | None = None,
                          "JOIN event e ON e.id = p.event_id WHERE e.kind='birth' AND p.role='principal' "
                          "ORDER BY e.date_start"):
         births.setdefault(row["person_id"], row["date_start"] or row["date_original"])
+    # Appearing in a record or event dated before the cut-off implies a birth before it too.
+    earliest: dict[str, int] = {}
+    for row in store.all("SELECT p.person_id AS pid, e.date_start AS d FROM event_participant p JOIN event e ON "
+                         "e.id=p.event_id WHERE e.date_start IS NOT NULL UNION ALL SELECT c.object_person_id, "
+                         "r.date_start FROM claim c JOIN mention m ON m.id=c.subject_mention_id JOIN record r ON "
+                         "r.id=m.record_id WHERE c.kind='identity' AND r.date_start IS NOT NULL"):
+        match = re.match(r"(\d{4})", row["d"] or "")
+        if match:
+            earliest[row["pid"]] = min(int(match.group(1)), earliest.get(row["pid"], 9999))
     external = {}
     for row in store.all("SELECT * FROM external_id ORDER BY system, value"):
         external.setdefault(row["entity_id"], []).append(row)
@@ -183,6 +192,8 @@ def public_case(project: Project, *, build_year: int | None = None,
             continue
         if row["living"] != "deceased" and not everything:
             upper = birth_upper_year(births.get(row["id"]))
+            if upper is None and row["id"] in earliest:
+                upper = earliest[row["id"]]
             if upper is None or upper >= year - living_years:
                 withhold(row, "person", "living status unknown and birth not shown to be historical")
                 continue
@@ -481,13 +492,11 @@ def public_case(project: Project, *, build_year: int | None = None,
             omissions.add(approval["id"], "approval", "file bytes changed since approval")
             continue
         omissions.published_assets.append({"target": approval["target"], "path": str(path), "sha256": approval["sha256"]})
-    approved_names = {Path(item["target"]).name for item in omissions.published_assets}
     for asset in store.all("SELECT * FROM asset WHERE access <> 'public' AND sha256 NOT IN (SELECT sha256 FROM "
                            "approval WHERE kind='exact_file' AND status='active') ORDER BY id"):
         omissions.withheld_terms.add(asset["sha256"])
-        if asset["original_name"] and asset["original_name"] not in approved_names \
-                and asset["kind"] not in GENERATED_ASSET_KINDS:
-            omissions.withheld_files.add(asset["original_name"])
+        if asset["kind"] not in GENERATED_ASSET_KINDS:
+            omissions.withheld_files.add(asset["sha256"])
     # A withheld name that also forms part of a published person's name ("G Glasgow" in
     # "James G Glasgow") cannot be told apart in text, so it is not used as a leak term;
     # withheld ids, external ids and hashes still are.

@@ -12,6 +12,7 @@ output, which is kept until the new one is in place.
 from __future__ import annotations
 
 from datetime import date
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -68,8 +69,8 @@ def leak_scan(root: Path, terms: set[str], files: set[str] = frozenset()) -> lis
         if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
-        if path.name in files:
-            findings.append({"file": relative, "term": f"withheld file name {path.name}"})
+        if files and hashlib.sha256(path.read_bytes()).hexdigest() in files:
+            findings.append({"file": relative, "term": "the bytes of a withheld file"})
         if path.suffix.lower() in PRIVATE_SUFFIXES:
             findings.append({"file": relative, "term": "database file"})
             continue
