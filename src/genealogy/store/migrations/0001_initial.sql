@@ -267,6 +267,7 @@ CREATE TABLE mention (
   extra_json      TEXT
 );
 CREATE INDEX mention_record ON mention(record_id);
+CREATE INDEX transcription_record ON transcription(record_id);
 
 -- What a document itself says about a relationship between two mentions
 -- ("Isaac, son of the testator"). It is not a genealogical conclusion.
@@ -308,6 +309,7 @@ CREATE TABLE event_participant (
   sort_order INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (event_id, person_id, role)
 );
+CREATE INDEX event_participant_person ON event_participant(person_id);
 
 -- -------------------------------------------------------- claims and evidence
 
@@ -337,6 +339,9 @@ CREATE TABLE claim (
 );
 CREATE INDEX claim_subject ON claim(subject_person_id);
 CREATE INDEX claim_object ON claim(object_person_id);
+CREATE INDEX claim_event ON claim(event_id);
+CREATE INDEX claim_mention ON claim(subject_mention_id);
+CREATE INDEX claim_kind ON claim(kind);
 
 -- A record or citation bearing on a claim, for or against.
 CREATE TABLE claim_evidence (
@@ -355,6 +360,7 @@ CREATE TABLE claim_evidence (
   CHECK (citation_id IS NOT NULL OR record_id IS NOT NULL OR mention_id IS NOT NULL)
 );
 CREATE INDEX claim_evidence_claim ON claim_evidence(claim_id);
+CREATE INDEX claim_evidence_record ON claim_evidence(record_id);
 
 -- Whose assessments these are. Independent researchers get separate scopes.
 CREATE TABLE assessment_scope (
@@ -685,6 +691,7 @@ CREATE TABLE import_origin (
   content_sha256  TEXT,                   -- hash of the input item as loaded, for idempotent re-runs
   PRIMARY KEY (entity_id, import_batch_id, input_path, pointer)
 );
+CREATE INDEX import_origin_batch ON import_origin(import_batch_id);
 
 -- Input the importer could not interpret, preserved verbatim with its origin.
 CREATE TABLE legacy_item (
