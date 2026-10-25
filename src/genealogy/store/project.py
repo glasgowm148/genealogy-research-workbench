@@ -12,7 +12,15 @@
     evidence = "evidence"
 
 Paths are relative to the project directory and may not escape it, except an
-asset root given as an absolute path, which is reported as external. The
+asset root given as an absolute path, which is reported as external.
+
+Machine-specific asset-root locations (an evidence drive, another checkout)
+belong in ``genealogy.local.toml`` beside ``genealogy.toml``. Keep that file out
+of version control; only its ``[storage.asset_roots]`` table is read, and it
+overrides roots of the same name::
+
+    [storage.asset_roots]
+    evidence = "/Volumes/Research/evidence" The
 database, native exports and backups are private: ``genealogy init`` writes a
 ``.gitignore`` for them and the site builder refuses to publish them.
 """
@@ -33,6 +41,7 @@ DEFAULT_STORAGE = {
     "exports": "private/exports",
 }
 MANAGED_ROOT = "managed"
+LOCAL_CONFIG = "genealogy.local.toml"
 
 
 @dataclass(slots=True)
@@ -69,6 +78,19 @@ class StorageSettings:
             if not Path(value).is_absolute() and value != ".":
                 safe_relative_path(value, setting=f"storage.asset_roots.{name}")
         values["asset_roots"] = dict(roots)
+        directory = config.raw.get("_directory")
+        local = Path(directory) / LOCAL_CONFIG if directory else None
+        if local is not None and local.is_file():
+            import tomllib
+            with local.open("rb") as handle:
+                data = tomllib.load(handle)
+            unknown = set(data) - {"storage"} or set(data.get("storage", {})) - {"asset_roots"}
+            if unknown:
+                raise ValueError(f"{LOCAL_CONFIG} may only set [storage.asset_roots]; found {', '.join(sorted(unknown))}")
+            for name, value in data.get("storage", {}).get("asset_roots", {}).items():
+                if name == MANAGED_ROOT or not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"{LOCAL_CONFIG}: storage.asset_roots.{name} must be a path (and not '{MANAGED_ROOT}')")
+                values["asset_roots"][name] = value
         return cls(**values)
 
 
@@ -121,7 +143,9 @@ def load_config(directory: Path) -> ProjectConfig:
     path = Path(directory) / "genealogy.toml"
     if not path.is_file():
         raise ValueError(f"No project configuration at {path}; run 'genealogy init DIRECTORY' first")
-    return ProjectConfig.load(path)
+    config = ProjectConfig.load(path)
+    config.raw.setdefault("_directory", str(Path(directory).resolve()))
+    return config
 
 
 def open_project(directory: Path, *, readonly: bool = False, create: bool = False) -> Project:

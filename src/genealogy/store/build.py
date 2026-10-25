@@ -25,6 +25,7 @@ from .projection import public_case
 
 TEXT_SUFFIXES = {".html", ".json", ".js", ".css", ".xml", ".txt", ".csv", ".ndjson", ".geojson", ".ged", ".svg",
                  ".atom", ".md", ".webmanifest", ""}
+SITE_MANIFEST = ".genealogy-site-manifest.json"
 PRIVATE_SUFFIXES = {".sqlite", ".sqlite3", ".db", ".sqlite-wal", ".sqlite-shm"}
 
 
@@ -73,6 +74,9 @@ def build_from_database(project: Project, output: Path | None = None, *, build_d
     private_roots = [project.database_path.parent.resolve(), *project.roots().values()]
     if any(output == root or output.is_relative_to(root) for root in private_roots):
         raise StoreError(f"refusing to build into private storage ({output})")
+    if output.exists() and (not output.is_dir() or (any(output.iterdir()) and not (output / SITE_MANIFEST).is_file())):
+        raise StoreError(f"{output} exists and was not made by a workbench build; refusing to replace it. "
+                         "Choose an empty or new output directory.")
     when = build_date or config.raw.get("site", {}).get("build_date") or date.today().isoformat()
     try:
         build_year = int(str(when)[:4])

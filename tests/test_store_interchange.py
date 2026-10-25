@@ -141,12 +141,20 @@ class PublicationAndBuild(unittest.TestCase):
 
     def test_builds_are_reproducible_and_need_no_previous_output(self) -> None:
         one, two = self.fx.root / "one", self.fx.root / "two"
-        two.mkdir()
+        build_from_database(self.fx.project, two, build_date="2026-10-25")
         (two / "stale.html").write_text("left over from an old build", encoding="utf-8")
         build_from_database(self.fx.project, one, build_date="2026-10-25")
         build_from_database(self.fx.project, two, build_date="2026-10-25")
         self.assertFalse((two / "stale.html").exists())
         self.assertEqual(tree_digest(one), tree_digest(two))
+
+    def test_build_never_replaces_a_directory_it_did_not_make(self) -> None:
+        other = self.fx.root / "releases"
+        other.mkdir()
+        (other / "site-2026.tar.gz").write_bytes(b"not a site")
+        with self.assertRaisesRegex(ValueError, "not made by a workbench build"):
+            build_from_database(self.fx.project, other, build_date="2026-10-25")
+        self.assertTrue((other / "site-2026.tar.gz").is_file())
 
     def test_exact_file_approvals_follow_the_bytes(self) -> None:
         crop = self.fx.directory / "evidence" / "will-crop.jpg"
