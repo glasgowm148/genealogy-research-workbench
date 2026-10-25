@@ -7,6 +7,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from db_helpers import private_view
+
 from genealogy.case import CaseStore, ResearchCase, validate_case
 from genealogy.cli import main
 from genealogy.config import ProjectConfig
@@ -164,7 +166,9 @@ class StubTests(unittest.TestCase):
 class ReimportTests(unittest.TestCase):
     TREE = "0 @I1@ INDI\n1 NAME Ada /Fable/\n1 DEAT Y\n0 @I2@ INDI\n1 NAME Rowan /Fable/\n1 DEAT Y\n"
 
-    def test_update_keeps_the_former_ids_recorded_on_an_imported_person(self):
+    def test_a_recorded_merge_survives_later_imports(self):
+        from genealogy.store import Research, open_project
+        from genealogy.store.operations import import_genealogy_file
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "project"
             self.assertEqual(main(["init", str(root), "--name", "Fictional"]), 0)
@@ -172,22 +176,25 @@ class ReimportTests(unittest.TestCase):
 
             def run(text):
                 source.write_text(text, encoding="utf-8")
-                project = ProjectConfig.load(root / "genealogy.toml")
-                store = CaseStore(root / project.case_directory)
-                import_file(root, store.load(project.default_case), project, source, publish_deceased=True,
-                            update=bool(store.load(project.default_case).records(Person)))
-                return store, project
+                with open_project(root) as project:
+                    import_genealogy_file(project, source, publish_deceased=True, lineage="tree")
 
-            store, project = run(self.TREE)
-            # Rowan (I2) was merged into Ada (I1) in the tree program; the next export lacks I2.
+            run(self.TREE)
+            with open_project(root) as project:
+                research = Research(project.store)
+                ada = research.find_external("xref:tree", "I1", statuses=("alias",))[0]
+                rowan = research.find_external("xref:tree", "I2", statuses=("alias",))[0]
+                with project.store.write(actor="test") as tx:
+                    research.map_external(tx, rowan, "wikitree", "Fable-2")
+                    research.merge_people(tx, survivor_id=ada, retired_id=rowan, reason="merged in the tree program")
+            # The next exports lack I2.
             run("0 @I1@ INDI\n1 NAME Ada /Fable/\n1 DEAT Y\n")
-            loaded = store.load(project.default_case)
-            loaded.records(Person)[0].former_ids = ["gedcom:person:I2"]
-            store.save(loaded)
             run("0 @I1@ INDI\n1 NAME Ada /Fable/\n1 DEAT Y\n1 NOTE A later export\n")
-            updated = store.load(project.default_case)
-            self.assertEqual(["gedcom:person:I1"], [p.id for p in updated.records(Person)])
-            self.assertEqual(["gedcom:person:I2"], updated.records(Person)[0].former_ids)
+            with open_project(root) as project:
+                research = Research(project.store)
+                self.assertEqual(research.find_external("wikitree", "Fable-2", statuses=("former",)), [ada])
+            people = {person.id: person for person in private_view(root)[0].records(Person)}
+            self.assertIn("Fable-2", people[ada].former_ids)
 
 
 if __name__ == "__main__":

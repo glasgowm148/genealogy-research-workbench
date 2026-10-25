@@ -6,9 +6,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from genealogy.cli import initialize_project, load_case, main
-from genealogy.exports import project_for_public_export
-from genealogy.importing import import_file
+from genealogy.cli import initialize_project, main
+from genealogy.store import open_project
+from genealogy.store.operations import import_genealogy_file
+
+from db_helpers import digest, fresh_project, native_text, private_view, public_view
 
 GEDCOM = '''0 HEAD
 1 CHAR UTF-8
@@ -47,49 +49,48 @@ class ImportWorkflowTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def run_import(self, **kwargs):
-        case, config = load_case(self.project)
-        return import_file(self.project, case, config, self.source, **kwargs)
+    def run_import(self, replace=False, **kwargs):
+        if replace:  # research is never discarded in place; start a new project instead
+            fresh_project(self.project, 'Invented "Family"')
+        with open_project(self.project) as project:
+            report = import_genealogy_file(project, self.source, **kwargs)
+            report.setdefault("people", project.store.one("SELECT count(*) n FROM person")["n"])
+            return report
 
     def test_empty_named_project_and_private_default_preserve_original(self):
-        case, config = load_case(self.project)
+        case, config = private_view(self.project)
         self.assertEqual('Invented "Family"', config.name)
         self.assertEqual([], case.records("Person"))
         report = self.run_import()
-        case, config = load_case(self.project)
         self.assertEqual(3, report["people"])
-        self.assertFalse(project_for_public_export(case, config)["people"])
-        preserved = list((self.project / "private" / "imports").glob("*.ged"))
+        self.assertFalse(public_view(self.project)["people"])
+        preserved = list((self.project / "private" / "assets").rglob("*.ged"))
         self.assertEqual(GEDCOM, preserved[0].read_text())
-        self.assertEqual(0o600, preserved[0].stat().st_mode & 0o777)
+        self.assertEqual(0o400, preserved[0].stat().st_mode & 0o777)
         self.assertEqual(GEDCOM, self.source.read_text())
 
     def test_opt_in_reveals_only_reviewed_historical_facts_and_retains_notes_privately(self):
         self.run_import(publish_deceased=True)
-        case, config = load_case(self.project)
-        public = project_for_public_export(case, config)
+        public = public_view(self.project)
         self.assertEqual(1, len(public["people"]))
         text = json.dumps(public)
         self.assertIn("Invented Ancestor", text)
         self.assertNotIn("PRIVATE UNSOURCED SECRET", text)
         self.assertNotIn("Restricted Ancestor", text)
         self.assertNotIn("Protected Living", text)
-        self.assertIn("PRIVATE UNSOURCED SECRET", json.dumps(case.to_dict()))
+        self.assertIn("PRIVATE UNSOURCED SECRET", native_text(self.project))
         self.assertTrue(public["events"])
         self.assertFalse(public["sources"])
 
     def test_idempotence_refusal_and_invalid_replacement_are_atomic(self):
         self.run_import()
-        casepath = self.project / "cases" / "research-case.json"
-        before = casepath.read_bytes()
+        before = digest(self.project)
         self.assertEqual("unchanged", self.run_import()["status"])
-        self.assertEqual(before, casepath.read_bytes())
+        self.assertEqual(before, digest(self.project))
         self.source.write_text("invalid gedcom")
-        with self.assertRaisesRegex(ValueError, "not empty"):
-            self.run_import()
         with self.assertRaisesRegex(ValueError, "invalid GEDCOM|no people"):
-            self.run_import(replace=True)
-        self.assertEqual(before, casepath.read_bytes())
+            self.run_import()
+        self.assertEqual(before, digest(self.project))
 
     def test_onetree_provider_public_still_requires_opt_in(self):
         self.source = self.root / "tree.json"
@@ -98,11 +99,9 @@ class ImportWorkflowTests(unittest.TestCase):
             "BirthDate": "1800-01-01", "DeathDate": "1880-01-01", "Privacy": 60,
         }}}))
         self.run_import()
-        case, config = load_case(self.project)
-        self.assertEqual([], project_for_public_export(case, config)["people"])
+        self.assertEqual([], public_view(self.project)["people"])
         self.run_import(replace=True, publish_deceased=True)
-        case, config = load_case(self.project)
-        self.assertEqual(1, len(project_for_public_export(case, config)["people"]))
+        self.assertEqual(1, len(public_view(self.project)["people"]))
 
     def test_historical_birth_qualifies_but_explicit_living_and_private_never_do(self):
         self.source = self.root / "tree.json"
@@ -115,8 +114,7 @@ class ImportWorkflowTests(unittest.TestCase):
              "sensitivity": "licensed"},
         ]))
         self.run_import(publish_deceased=True)
-        case, config = load_case(self.project)
-        people = project_for_public_export(case, config)["people"]
+        people = public_view(self.project)["people"]
         self.assertEqual(1, len(people))
         self.assertEqual("Invented historical", people[0]["names"][0]["value"])
 
@@ -145,11 +143,9 @@ class ImportWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "requires"):
             self.run_import(publish_reviewed_sources=True)
         self.run_import(publish_deceased=True)
-        case, config = load_case(self.project)
-        self.assertFalse(project_for_public_export(case, config)["sources"])
+        self.assertFalse(public_view(self.project)["sources"])
         self.run_import(replace=True, publish_deceased=True, publish_reviewed_sources=True)
-        case, config = load_case(self.project)
-        public = project_for_public_export(case, config)
+        public = public_view(self.project)
         self.assertEqual(1, len(public["sources"]))
         self.assertEqual(1, len(public["citations"]))
         self.assertEqual("Reviewed page 12", public["citations"][0]["locator"])
@@ -157,7 +153,7 @@ class ImportWorkflowTests(unittest.TestCase):
         self.assertEqual("unknown", public["claims"][0]["confidence"])
         self.assertNotIn("PRIVATE QUOTATION", json.dumps(public))
         self.assertNotIn("LIVING ONLY SOURCE TITLE", json.dumps(public))
-        self.assertIn("PRIVATE QUOTATION", json.dumps(case.to_dict()))
+        self.assertIn("PRIVATE QUOTATION", native_text(self.project))
 
     def test_textual_historical_births_publish_without_changing_supplied_dates(self):
         from datetime import date
@@ -173,12 +169,11 @@ class ImportWorkflowTests(unittest.TestCase):
             with self.subTest(date=supplied):
                 self.source.write_text(f"0 HEAD\n0 @I1@ INDI\n1 NAME Invented /Historical/\n1 BIRT\n2 DATE {supplied}\n0 TRLR\n")
                 self.run_import(replace=True, publish_deceased=True)
-                case, config = load_case(self.project)
-                public = project_for_public_export(case, config)
+                public = public_view(self.project)
                 self.assertEqual(int(supplied in historical), len(public["people"]))
-                self.assertEqual(supplied, case.records("Event")[0].date)
+                self.assertEqual(supplied, private_view(self.project)[0].records("Event")[0].date)
 
     def test_cli_formats_and_validation_fail_gracefully(self):
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             self.assertEqual(0, main(["--project", str(self.project), "import", str(self.source)]))
-        self.assertEqual(3, len(load_case(self.project)[0].records("Person")))
+        self.assertEqual(3, len(private_view(self.project)[0].records("Person")))

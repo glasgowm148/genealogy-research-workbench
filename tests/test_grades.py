@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import io
 import json
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import tempfile
 import unittest
@@ -102,10 +102,10 @@ class GradeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "p"
             self.assertEqual(0, main(["init", str(root), "--name", "Fictional"]))
-            store = next((root / "cases").glob("*.json"))
-            stored = json.loads(store.read_text())
-            stored["record_sets"] = case().to_dict()["record_sets"]
-            store.write_text(json.dumps(stored))
+            (root / "cases").mkdir()
+            (root / "cases" / "graded.json").write_text(json.dumps(case().to_dict()))
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(0, main(["--project", str(root), "upgrade"]))
             errors = io.StringIO()
             with redirect_stderr(errors):
                 self.assertEqual(1, main(["--project", str(root), "validate"]))

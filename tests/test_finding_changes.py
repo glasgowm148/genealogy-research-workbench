@@ -7,6 +7,9 @@ from contextlib import redirect_stderr
 from pathlib import Path
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+
+from db_helpers import private_view
 
 from genealogy.case import ResearchCase, grade_errors, validate_case
 from genealogy.cli import main
@@ -194,9 +197,8 @@ class CommandTests(unittest.TestCase):
             project = ["--project", str(root)]
             self.assertEqual(0, main([*project, "finding", "add", "f1", "Bram fits.", "--recorded-on", "2026-03-01",
                                       "--change", "ada-parent::possible"]))
-            case_file = next((root / "cases").glob("*.json"))
-            stored = json.loads(case_file.read_text())
-            self.assertEqual([change("ada-parent", None, "possible")], stored["record_sets"]["Finding"][0]["changes"])
+            stored = private_view(root)[0]
+            self.assertEqual([change("ada-parent", None, "possible")], stored.records("Finding")[0].changes)
             with redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(1, main([*project, "finding", "add", "f2", "Proved.", "--recorded-on", "2026-09-08",
                                           "--change", "ada-parent:possible:documented"]))
@@ -204,9 +206,10 @@ class CommandTests(unittest.TestCase):
             with redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(1, main([*project, "finding", "add", "f2", "Proved.", "--change", "ada-parent"]))
             self.assertIn("--change must be RECORD_ID:BEFORE:AFTER", err.getvalue())
-            # Edit the link first; the case is then invalid until the finding records the change.
-            stored["record_sets"]["Relationship"][0]["confidence"] = "documented"
-            case_file.write_text(json.dumps(stored))
+            # Reassess the link first; the research is then invalid until a finding records the change.
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(0, main([*project, "assess", "ada-parent", "--expected-revision", "1",
+                                          "--confidence", "documented"]))
             with redirect_stderr(io.StringIO()):
                 self.assertEqual(1, main([*project, "validate"]))
             self.assertEqual(0, main([*project, "finding", "add", "f2", "Proved.", "--recorded-on", "2026-09-08",

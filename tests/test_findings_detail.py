@@ -7,6 +7,8 @@ import re
 import tempfile
 import unittest
 
+from db_helpers import private_view
+
 from genealogy.case import ResearchCase, validate_case
 from genealogy.cli import main
 from genealogy.config import ProjectConfig
@@ -79,8 +81,8 @@ class FindingDetailTests(unittest.TestCase):
                 self.assertEqual(0, main(["--project", str(root), "record", "add", kind, "--input", str(path)]))
             self.assertEqual(0, main(["--project", str(root), "finding", "add", "f1", "A conclusion.", "--cite", "register-1",
                                       "--limitations", "Only a copy.", "--kind", "record"]))
-            stored = json.loads(next((root / "cases").glob("*.json")).read_text())["record_sets"]["Finding"][0]
-            self.assertEqual((["register-1"], "Only a copy.", "record"), (stored["citation_ids"], stored["limitations"], stored["kind"]))
+            stored = private_view(root)[0].records("Finding")[0]
+            self.assertEqual((["register-1"], "Only a copy.", "record"), (stored.citation_ids, stored.limitations, stored.kind))
 
 
 class ArchiveTests(unittest.TestCase):

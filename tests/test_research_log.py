@@ -10,6 +10,10 @@ import re
 import tempfile
 import unittest
 
+from genealogy.store import open_project
+
+from db_helpers import private_view
+
 from genealogy.artifacts import build_case_artifact_bundle
 from genealogy.case import CaseStore, ResearchCase, validate_case
 from genealogy.cli import main
@@ -221,11 +225,13 @@ class CommandTests(unittest.TestCase):
                                       "--limitation", "1799 missing", "--sensitivity", "public"]))
             self.assertEqual(0, main([*project, "search", "add", "s-burials", "Invented register, burials",
                                       "--result", "One entry", "--for", "ada", "--cite", "burial-1870"]))
-            stored = json.loads(next((root / "cases").glob("*.json")).read_text())["record_sets"]["Search"]
+            stored = [record.to_dict() for record in private_view(root)[0].records("Search")]
             self.assertEqual({"id": "s-baptisms", "search": "Invented register, baptisms 1795–1810", "result": "nothing",
                               "related_ids": ["ada", "harbour"], "searched_on": "2026-03-02", "limitation": "1799 missing",
                               "citation_ids": [], "sensitivity": "public"}, stored[0])
             self.assertEqual((["burial-1870"], "private"), (stored[1]["citation_ids"], stored[1]["sensitivity"]))
+            with open_project(root) as opened:
+                self.assertEqual(opened.store.get("search", "s-baptisms")["outcome"], "negative")
             # The record search is unchanged, including a search for the word "add".
             out.truncate(0), out.seek(0)
             self.assertEqual(0, main([*project, "search", "baptisms", "--kind", "Search"]))

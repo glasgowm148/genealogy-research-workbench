@@ -18,20 +18,33 @@ from genealogy.artifacts import (
 from genealogy.exports import build_public_views, render, safe_output_path, write_public_export
 from genealogy.models import Event, Finding, Place, ResearchQuestion
 
+from db_helpers import native_text, private_view
+
 EXAMPLE = Path(__file__).parents[1] / "examples" / "fictional-harbour"
+
+
+def upgraded_example(directory: Path) -> Path:
+    """A copy of the JSON-case example moved into a project database with 'genealogy upgrade'."""
+    import shutil
+    target = directory / "example"
+    shutil.copytree(EXAMPLE, target)
+    with redirect_stdout(io.StringIO()):
+        assert main(["--project", str(target), "upgrade"]) == 0
+    return target
 
 
 class CliAndOutputTests(unittest.TestCase):
     def test_fictional_example_validates_builds_and_exports(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            self.assertEqual(0, main(["--project", str(EXAMPLE), "validate"]))
-            self.assertEqual(0, main(["--project", str(EXAMPLE), "build", "--output", str(directory / "views")]))
+            example = upgraded_example(directory)
+            self.assertEqual(0, main(["--project", str(example), "validate"]))
+            self.assertEqual(0, main(["--project", str(example), "build", "--output", str(directory / "views")]))
             self.assertTrue((directory / "views" / "catalogue.md").is_file())
             self.assertIn("Rowan Marin", (directory / "views" / "catalogue.md").read_text())
             self.assertTrue(json.loads((directory / "views" / "places.geojson").read_text())["features"])
             output = directory / "records.ndjson"
-            self.assertEqual(0, main(["--project", str(EXAMPLE), "export", "ndjson", "--output", str(output)]))
+            self.assertEqual(0, main(["--project", str(example), "export", "ndjson", "--output", str(output)]))
             self.assertIn('"record_type": "people"', output.read_text())
 
     def test_exports_have_standard_formats(self) -> None:
@@ -76,12 +89,12 @@ class CliAndOutputTests(unittest.TestCase):
     def test_cli_writes_a_complete_local_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "fictional-bundle"
-            self.assertEqual(0, main(["--project", str(EXAMPLE), "bundle", "--output", str(output)]))
-            self.assertTrue((output / "case.json").is_file())
-            self.assertTrue((output / "research-brief.md").is_file())
-            self.assertTrue((output / BUNDLE_MANIFEST_FILENAME).is_file())
+            example = upgraded_example(Path(temporary))
+            self.assertEqual(0, main(["--project", str(example), "bundle", "--output", str(output)]))
+            self.assertTrue((output / "native.json").is_file())
+            self.assertTrue((output / "manifest.json").is_file())
             self.assertEqual(0, main([
-                "--project", str(EXAMPLE), "bundle", "--output", str(output), "--verify",
+                "--project", str(example), "bundle", "--output", str(output), "--verify",
             ]))
 
     def test_empty_case_is_valid(self) -> None:
@@ -114,9 +127,7 @@ class CliAndOutputTests(unittest.TestCase):
                 0,
                 main(["--project", str(target), "ingest", "tabular", str(source)]),
             )
-            case = ResearchCase.from_dict(
-                json.loads((target / "cases" / "research-case.json").read_text())
-            )
+            case, _ = private_view(target)
             self.assertEqual(len(case.records("Person")), 1)
             self.assertEqual(0, main(["--project", str(target), "validate"]))
             self.assertEqual(0, main(["--project", str(target), "export", "json"]))
@@ -126,23 +137,17 @@ class CliAndOutputTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "project"
             self.assertEqual(0, main(["init", str(target)]))
-            self.assertEqual(0, main([
+            # JSON case files are no longer a second store of research.
+            self.assertEqual(1, main([
                 "--project", str(target), "case", "create", "second-case",
                 "--title", "Second synthetic case",
             ]))
-            output = io.StringIO()
-            with redirect_stdout(output):
-                self.assertEqual(0, main(["--project", str(target), "case", "list"]))
-            self.assertIn("research-case *", output.getvalue())
-            self.assertIn("second-case", output.getvalue())
             self.assertEqual(0, main([
                 "--project", str(target), "finding", "add", "finding-1",
                 "A durable synthetic conclusion", "--confidence", "documented",
             ]))
-            case = ResearchCase.from_dict(json.loads(
-                (target / "cases" / "research-case.json").read_text(encoding="utf-8")
-            ))
-            self.assertEqual(case.finding_ids, ["finding-1"])
+            case, _ = private_view(target)
+            self.assertEqual([finding.id for finding in case.records("Finding")], ["finding-1"])
             output = io.StringIO()
             with redirect_stdout(output):
                 self.assertEqual(0, main([
@@ -186,7 +191,7 @@ class CliAndOutputTests(unittest.TestCase):
             self.assertEqual(1, main([
                 "--project", str(target), "record", "add", "Source", "--input", str(invalid),
             ]))
-            self.assertNotIn("bad-source", (target / "cases" / "research-case.json").read_text())
+            self.assertNotIn("bad-source", native_text(target))
 
     def test_validation_checks_references_indices_and_coordinates(self) -> None:
         case = ResearchCase(id="case", title="Case", question_ids=["missing"], finding_ids=["finding", "finding"])

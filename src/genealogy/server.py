@@ -8,7 +8,7 @@ import secrets
 import shutil
 from urllib.parse import unquote, urlsplit
 
-from .importing import MAX_IMPORT_BYTES, SUFFIXES, detect_format, import_file, private_write
+from .importing import MAX_IMPORT_BYTES, SUFFIXES, detect_format, private_write
 
 HTML = r'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Genealogy · Create your research site</title><style>
@@ -130,7 +130,10 @@ class UploadHandler(BaseHTTPRequestHandler):
             raw = self.rfile.read(length)
             if len(raw) != length:
                 raise ValueError("Upload interrupted; retry with the complete file")
-            from .cli import initialize_project, load_case, build_project
+            from .cli import initialize_project
+            from .store import open_project
+            from .store.build import build_from_database
+            from .store.operations import import_genealogy_file
             identifier = secrets.token_hex(12)
             base = (self.server.directory / "private" / "previews").resolve()
             if not base.is_relative_to(self.server.directory):
@@ -139,12 +142,13 @@ class UploadHandler(BaseHTTPRequestHandler):
             initialize_project(staging, name)
             source = staging / "private" / ("upload" + SUFFIXES[format])
             private_write(source, raw)
-            case, config = load_case(staging)
-            report = import_file(staging, case, config, source, format=format, publish_deceased=review == "true",
-                                 publish_reviewed_sources=source_review == "true")
-            source.unlink()
-            case, config = load_case(staging)
-            build_project(case, config, staging / "dist")
+            with open_project(staging) as project:
+                report = import_genealogy_file(project, source, format=format, publish_deceased=review == "true",
+                                               publish_reviewed_sources=source_review == "true",
+                                               actor="local upload wizard")
+                report["people"] = project.store.one("SELECT count(*) AS n FROM person")["n"]
+                source.unlink()
+                build_from_database(project, staging / "dist")
             self.server.previews[identifier] = staging / "dist"
             report.update({"preview": f"/site/{identifier}/", "project": str(staging)})
             self.json_reply(201, report)

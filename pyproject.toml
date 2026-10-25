@@ -41,11 +41,11 @@ genealogy = "genealogy.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"genealogy.store" = ["migrations/*.sql"]
 genealogy = [
   "web/*",
   "starter/*",
   "starter/.gitignore",
-  "starter/cases/*",
   "starter/skills/genealogy-research/*",
 ]
 

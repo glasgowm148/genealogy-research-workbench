@@ -57,11 +57,11 @@ class UploadServerTests(unittest.TestCase):
         self.assertIn(b"Invented", page)
         for download in ("data/public-tree.ged", "data/site.csv", "data/site-data.js", "data/site.json"):
             self.assertEqual(200, self.request("GET", report["preview"] + download)[0], download)
-        for path in ("/private/imports/input.ged", "/cases/research-case.json",
-                     report["preview"]+"../cases/research-case.json",
+        for path in ("/private/imports/input.ged", "/private/research.sqlite",
+                     report["preview"]+"../private/research.sqlite",
                      report["preview"]+"%2e%2e/%2e%2e/genealogy.toml"):
             self.assertEqual(404, self.request("GET", path)[0])
-        self.assertTrue((Path(report["project"]) / "cases" / "research-case.json").is_file())
+        self.assertTrue((Path(report["project"]) / "private" / "research.sqlite").is_file())
 
     def test_cross_origin_csrf_bad_host_and_unsafe_filenames_rejected(self):
         for override in ({"Origin": "https://attacker.invalid"}, {"X-CSRF-Token": "wrong"},

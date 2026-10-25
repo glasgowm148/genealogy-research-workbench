@@ -10,7 +10,12 @@ from genealogy.adapters import GedcomAdapter, OneTreeAdapter
 from genealogy.adapters._gedcom_text import decode_ansel, decode_gedcom
 from genealogy.case import CaseStore, ResearchCase, validate_case
 from genealogy.config import ProjectConfig
-from genealogy.importing import import_file
+from genealogy.store import Research, open_project
+from genealogy.store.operations import import_genealogy_file
+from contextlib import redirect_stderr, redirect_stdout
+import io
+
+from db_helpers import private_view
 from genealogy.models import Citation, Claim, Confidence, Event, Evidence, Finding, LivingStatus, Person, Relationship, Source
 from genealogy.cli import main
 
@@ -191,55 +196,54 @@ class ReimportTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def load(self):
-        config = ProjectConfig.load(self.root / "genealogy.toml")
-        return CaseStore(self.root / config.case_directory).load(config.default_case), config
-
-    def run_import(self, text, **options):
+    def run_import(self, text, *options):
         self.input.write_text(text, encoding="utf-8")
-        case, config = self.load()
-        return import_file(self.root, case, config, self.input, publish_deceased=True, **options)
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as errors:
+            status = main(["--project", str(self.root), "import", str(self.input), "--publish-deceased", *options])
+        if status:
+            raise ValueError(errors.getvalue())
+        return status
 
-    def test_update_keeps_added_research_and_backs_up_the_previous_case(self):
+    def person(self, xref):
+        with open_project(self.root) as project:
+            return Research(project.store).find_external("xref:gedcom:tree", xref, statuses=("alias",))[0]
+
+    def test_update_keeps_added_research_and_every_earlier_import(self):
         self.run_import(self.TREE)
-        case, config = self.load()
-        case.add(Finding(id="finding-ada", conclusion="Ada's line needs a parish search", related_ids=["gedcom:person:I1"]))
-        CaseStore(self.root / config.case_directory).save(case)
+        ada = self.person("I1")
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["--project", str(self.root), "finding", "add", "finding-ada",
+                                   "Ada's line needs a parish search", "--related", ada]), 0)
         with self.assertRaisesRegex(ValueError, "--update"):
             self.run_import(self.TREE + "0 @I3@ INDI\n1 NAME New /Fable/\n")
-        report = self.run_import(self.TREE + "0 @I3@ INDI\n1 NAME New /Fable/\n", update=True)
-        self.assertEqual(report["status"], "updated")
-        updated, _ = self.load()
-        self.assertEqual(len(updated.records(Person)), 3)
-        self.assertEqual([item.id for item in updated.records(Finding)], ["finding-ada"])
-        self.assertEqual(updated.finding_ids, ["finding-ada"])
-        backup = self.root / report["backup"]
-        self.assertTrue(backup.is_file())
-        self.assertIn("finding-ada", backup.read_text())
-        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+        self.run_import(self.TREE + "0 @I3@ INDI\n1 NAME New /Fable/\n", "--update")
+        case, _ = private_view(self.root)
+        self.assertEqual(len(case.records(Person)), 3)
+        self.assertEqual([item.id for item in case.records(Finding)], ["finding-ada"])
+        self.assertEqual(self.person("I1"), ada)
+        with open_project(self.root) as project:
+            self.assertEqual(project.store.one("SELECT count(*) n FROM asset WHERE kind='original_import'")["n"], 2)
 
-    def test_update_refuses_to_orphan_research_and_changes_nothing(self):
+    def test_update_never_orphans_research(self):
         self.run_import(self.TREE)
-        case, config = self.load()
-        case.add(Finding(id="finding-rowan", conclusion="Rowan research", related_ids=["gedcom:person:I2"]))
-        CaseStore(self.root / config.case_directory).save(case)
-        before = (self.root / "cases" / f"{config.default_case}.json").read_bytes()
-        with self.assertRaisesRegex(ValueError, "Nothing was changed"):
-            self.run_import("0 @I1@ INDI\n1 NAME Ada /Fable/\n", update=True)
-        self.assertEqual((self.root / "cases" / f"{config.default_case}.json").read_bytes(), before)
+        rowan = self.person("I2")
+        with redirect_stdout(io.StringIO()):
+            main(["--project", str(self.root), "finding", "add", "finding-rowan", "Rowan research", "--related", rowan])
+        self.run_import("0 @I1@ INDI\n1 NAME Ada /Fable/\n1 DEAT Y\n", "--update")
+        case, _ = private_view(self.root)
+        self.assertIn(rowan, {person.id for person in case.records(Person)})
+        self.assertEqual(case.records(Finding)[0].related_ids, [rowan])
 
-    def test_update_needs_an_earlier_import_and_excludes_replace(self):
-        with self.assertRaisesRegex(ValueError, "earlier gedcom import"):
-            self.run_import(self.TREE, update=True)
-        with self.assertRaisesRegex(ValueError, "either"):
-            self.run_import(self.TREE, update=True, replace=True)
+    def test_update_needs_an_earlier_import_and_replace_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "earlier import"):
+            self.run_import(self.TREE, "--update")
+        with self.assertRaisesRegex(ValueError, "never discarded"):
+            self.run_import(self.TREE, "--replace")
 
-    def test_replace_keeps_a_private_backup(self):
+    def test_a_separate_tree_needs_its_own_lineage(self):
         self.run_import(self.TREE)
-        report = self.run_import("0 @I9@ INDI\n1 NAME Other /Tree/\n", replace=True)
-        self.assertTrue((self.root / report["backup"]).is_file())
-        self.assertEqual(len(self.load()[0].records(Person)), 1)
-
+        self.run_import("0 @I9@ INDI\n1 NAME Other /Tree/\n1 DEAT Y\n", "--lineage", "other-tree")
+        self.assertEqual(len(private_view(self.root)[0].records(Person)), 3)
 
 
 class GedzipTests(unittest.TestCase):
@@ -258,23 +262,22 @@ class GedzipTests(unittest.TestCase):
             self.assertEqual(main(["init", str(root), "--name", "Fictional"]), 0)
             source = Path(temporary) / "family.gdz"
             source.write_bytes(self.archive({"gedcom.ged": tree, "media/ada.jpg": b"\xff\xd8not-a-real-photo"}))
-            config = ProjectConfig.load(root / "genealogy.toml")
-            case = CaseStore(root / config.case_directory).load(config.default_case)
-            report = import_file(root, case, config, source, publish_deceased=True)
-            self.assertEqual((report["format"], report["people"], report["published_people"]), ("gedzip", 1, 1))
-            self.assertTrue(any("1 media file was kept only in the private copy" in w for w in report["warnings"]))
-            self.assertTrue((root / "private" / "imports" / f"{report['sha256']}.gdz").is_file())
-            self.assertEqual(main(["--project", str(root), "build"]), 0)
+            with open_project(root) as project:
+                report = import_genealogy_file(project, source, publish_deceased=True)
+                self.assertEqual((report["format"], report["published_people"]), ("gedzip", 1))
+                self.assertTrue(any("1 media file was kept only in the private copy" in w for w in report["warnings"]))
+                self.assertTrue(list((root / "private" / "assets").rglob(f"{report['sha256']}.gdz")))
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["--project", str(root), "build"]), 0)
             self.assertFalse(any(path.suffix == ".jpg" for path in (root / "dist").rglob("*")))
 
     def test_a_missing_export_is_named_rather_than_called_too_large(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "project"
             self.assertEqual(main(["init", str(root), "--name", "Fictional"]), 0)
-            config = ProjectConfig.load(root / "genealogy.toml")
-            case = CaseStore(root / config.case_directory).load(config.default_case)
-            with self.assertRaisesRegex(ValueError, "No export file found at .*absent.gdz"):
-                import_file(root, case, config, Path(temporary) / "absent.gdz")
+            with open_project(root) as project:
+                with self.assertRaisesRegex(ValueError, "No export file found at .*absent.gdz"):
+                    import_genealogy_file(project, Path(temporary) / "absent.gdz")
 
     def test_archives_without_one_gedcom_are_rejected(self):
         from genealogy.importing import gedzip_gedcom

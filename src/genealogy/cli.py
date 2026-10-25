@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+import hashlib
 import json
 from importlib.resources import files
 from importlib.metadata import version, PackageNotFoundError
@@ -133,6 +134,8 @@ def copy_starter(target: Path) -> None:
     """Copy the packaged starter tree without depending on a source checkout."""
     template = files("genealogy").joinpath("starter")
     for source in template.iterdir():
+        if source.name in ("cases", "__pycache__"):
+            continue  # research lives in the project database, not in JSON case files
         destination = target / source.name
         if source.is_dir():
             copy_starter_tree(source, destination)
@@ -164,9 +167,8 @@ def initialize_project(target: Path, name: str | None = None) -> None:
         config_path.write_text(content.replace(
             f'name = "{old_name}"', f'name = {json.dumps(name.strip(), ensure_ascii=False)}', 1
         ), encoding="utf-8")
-        case, config = load_case(target)
-        case.title = name.strip()
-        CaseStore(project_path(target, config.case_directory, "project.case_directory")).save(case)
+    from .store import open_project
+    open_project(target, create=True).close()
 
 
 def build_project(case: ResearchCase, config: ProjectConfig, output: Path) -> None:
@@ -202,16 +204,18 @@ def parser(log_search: bool = False) -> argparse.ArgumentParser:
     init = commands.add_parser("init", help="create a starter research project")
     init.add_argument("directory", type=Path)
     init.add_argument("--name", help="public project/site title (no private personal details)")
-    imported = commands.add_parser("import", help="import GEDCOM or OneTree JSON into an empty case")
+    imported = commands.add_parser("import", help="import GEDCOM or OneTree JSON into the project database")
     imported.add_argument("input", type=Path)
     imported.add_argument("--format", choices=("auto", "gedcom", "gedzip", "one-tree"), default="auto")
     imported.add_argument("--publish-deceased", action="store_true",
                           help="confirm reviewed basic deceased/historical facts may be public; protected records stay private")
     imported.add_argument("--publish-reviewed-sources", action="store_true",
                           help="with --publish-deceased, confirm linked bibliographic titles/locators are reviewed; quotations stay private")
-    imported.add_argument("--replace", action="store_true", help="replace all selected case records; never merge unrelated trees")
+    imported.add_argument("--replace", action="store_true", help=argparse.SUPPRESS)
     imported.add_argument("--update", action="store_true",
-                          help="refresh a previous import of the same tree from a newer export, keeping research added to the case")
+                          help="refresh an earlier import of the same tree from a newer export; research is kept and "
+                               "changed values are listed for review")
+    imported.add_argument("--lineage", help="name for this tree's import lineage (default: format and file name)")
     serve = commands.add_parser("serve", help="open a local-only file upload and site preview server")
     serve.add_argument("--port", type=int, default=8000, help="loopback port (default: 8000)")
     commands.add_parser("validate", help="validate the selected durable research case")
@@ -227,15 +231,6 @@ def parser(log_search: bool = False) -> argparse.ArgumentParser:
     bundle = commands.add_parser("bundle", help="write or verify a complete private local artifact bundle")
     bundle.add_argument("--output", type=Path, default=Path("bundle"))
     bundle.add_argument("--verify", action="store_true", help="verify an existing bundle instead of writing one")
-    records = commands.add_parser("record", help="list, inspect, or add one typed durable record")
-    record_commands = records.add_subparsers(dest="record_command", required=True)
-    list_records = record_commands.add_parser("list", help="list records in the selected case")
-    list_records.add_argument("--kind", choices=tuple(sorted(MODEL_TYPES)), help="optional core record type")
-    show_record = record_commands.add_parser("show", help="show one record by id")
-    show_record.add_argument("record_id")
-    add_record = record_commands.add_parser("add", help="add one strict JSON core record")
-    add_record.add_argument("record_type", choices=tuple(sorted(MODEL_TYPES)))
-    add_record.add_argument("--input", type=Path, required=True, help="JSON object matching the selected record type")
     ingest = commands.add_parser("ingest", help="normalise an explicit adapter input into the selected case")
     ingest.add_argument("adapter", help="configured adapter name")
     ingest.add_argument("input", type=Path, help="explicit source file; no input discovery is performed")
@@ -293,7 +288,211 @@ def parser(log_search: bool = False) -> argparse.ArgumentParser:
     report = commands.add_parser("report", help="summarise unresolved work and evidence completeness")
     report.add_argument("--format", choices=("json", "markdown"), default="json")
     report.add_argument("--output", type=Path)
+    from .cli_db import add_parsers
+    add_parsers(commands)
     return result
+
+
+def private_case_store(project: Any) -> tuple[ResearchCase, CaseStore, Any]:
+    """The complete private view of the database as a read-only temporary case (for reports and searches)."""
+    import tempfile
+    from .store.projection import public_case
+    case, _ = public_case(project, everything=True)
+    directory = tempfile.TemporaryDirectory(prefix="genealogy-view-")
+    store = CaseStore(Path(directory.name))
+    store.save(case)
+    return case, store, directory
+
+
+def run_project_command(args: argparse.Namespace) -> int:
+    """Project commands in database mode: every write goes through the domain services."""
+    from .store import Research, open_project
+    from .store.build import build_from_database
+    from .store.importer import new_loader
+    from .store.operations import import_genealogy_file
+    from .store.projection import public_case
+    from .store.services import stable_id
+    with open_project(args.project) as project:
+        config = project.config
+        research = Research(project.store)
+        actor = "cli"
+        if args.command == "validate":
+            case, _ = public_case(project, everything=True)
+            errors = validate_case(case) + grade_errors(case, config.grades)
+            # A grade label is kept as recorded; it needs a [grades] definition to be published with a meaning.
+            for row in project.store.all(
+                    "SELECT a.claim_id, r.grade FROM assessment a JOIN assessment_revision r ON r.assessment_id=a.id "
+                    "AND r.revision=a.current_revision WHERE r.grade IS NOT NULL AND r.vocabulary='project-grades' "
+                    "ORDER BY a.claim_id"):
+                if row["grade"] not in config.grades:
+                    errors.append(f"{row['claim_id']}.grade is not defined under [grades] in genealogy.toml: {row['grade']}")
+            integrity = project.store.one("PRAGMA integrity_check")
+            broken = project.store.all("PRAGMA foreign_key_check")
+            if list(integrity.values())[0] != "ok":
+                errors.append("database failed SQLite integrity_check")
+            if broken:
+                errors.append(f"database has {len(broken)} broken references")
+            from .store.assets import verify_assets
+            files = verify_assets(project, orphans=False)
+            errors += [f"referenced file missing: {item['path']}" for item in files["missing"][:20]]
+            errors += [f"referenced file changed: {item['path']}" for item in files["changed"][:20]]
+            if errors:
+                print("\n".join(f"error: {error}" for error in errors), file=sys.stderr)
+                return 1
+            review = research.review_queue()
+            print("Research database is valid." + (f" {len(review)} conclusions need review after changed premises "
+                                                   "('genealogy review list')." if review else ""))
+            return 0
+        if args.command == "import":
+            if args.replace:
+                raise ValueError("--replace is not supported for a research database: research is never discarded. "
+                                 "Create a new project for an unrelated tree, or use --update for a newer export.")
+            lineage = args.lineage
+            previous = project.store.all("SELECT options_json FROM import_batch WHERE adapter=? AND options_json IS NOT NULL",
+                                         (detect_import_format(args.input, args.format),))
+            lineages = sorted({json.loads(row["options_json"]).get("lineage") for row in previous} - {None})
+            if args.update:
+                if not lineage:
+                    if len(lineages) != 1:
+                        raise ValueError("--update needs one earlier import of this format; found "
+                                         f"{len(lineages)}. Name it with --lineage ({', '.join(lineages) or 'none'})")
+                    lineage = lineages[0]
+            elif lineages and not lineage and project.store.one("SELECT 1 FROM person LIMIT 1"):
+                raise ValueError("The project already holds an imported tree; use --update to refresh it from a newer "
+                                 "export (research is kept), or --lineage NAME to import a separate tree")
+            report = import_genealogy_file(project, args.input, format=args.format, lineage=lineage,
+                                           publish_deceased=args.publish_deceased,
+                                           publish_reviewed_sources=args.publish_reviewed_sources)
+            for warning in report.get("warnings", []):
+                print(f"warning: {warning}", file=sys.stderr)
+            print(json.dumps(report, ensure_ascii=False))
+            print("Run genealogy --project <directory> build to generate the local site.")
+            return 0
+        if args.command == "ingest":
+            adapter = resolve_adapter(args.adapter)
+            if not adapter_is_enabled(config, adapter.name):
+                raise ValueError(f"adapter is not enabled by project configuration: {adapter.name}")
+            batch = adapter.ingest(adapter_payload(args.input, adapter.name))
+            if batch.records and not batch.entities:
+                raise ValueError(f"{adapter.name} input produced no neutral records")
+            digest = hashlib.sha256(args.input.read_bytes()).hexdigest()
+            batch_id = stable_id("imp", "ingest", adapter.name, digest)
+            with project.store.write(actor=actor, tool="genealogy ingest", source=str(args.input)) as tx:
+                if not project.store.get("import_batch", batch_id):
+                    tx.insert("import_batch", {"id": batch_id, "adapter": adapter.name, "input_label": args.input.name,
+                                               "input_sha256": digest, "imported_at": project.store.clock()})
+                loader = new_loader(research, tx, batch_id=batch_id, input_path=args.input.name, origin="imported",
+                                    input_sha256=digest)
+                loader.load([e for e in batch.entities if type(e).__name__ != "ImportProvenance"])
+                loader.finish()
+                for item in batch.records:
+                    research.record_observation(tx, system=adapter.name, external_value=item.external_id.value,
+                                                fields={"raw": item.raw, "payload": item.payload},
+                                                import_batch_id=batch_id)
+            for warning in batch.warnings:
+                print(f"warning: {warning}", file=sys.stderr)
+            print(f"Imported {sum(v for k, v in loader.report.items() if not k.startswith(('conflict', 'unsupported')) and 'already' not in k)} "
+                  f"neutral records through {adapter.name}.")
+            return 0
+        if args.command == "finding":
+            changes = []
+            for value in args.change:
+                parts = value.rsplit(":", 2)
+                if len(parts) != 3 or not parts[0] or not parts[2]:
+                    raise ValueError(f"--change must be RECORD_ID:BEFORE:AFTER: {value}")
+                changes.append({"record_id": parts[0], "before": parts[1] or None, "after": parts[2], "note": None})
+            finding = Finding(id=args.finding_id, conclusion=args.conclusion, related_ids=args.related,
+                              evidence_ids=args.evidence, status=args.status, confidence=Confidence(args.confidence),
+                              sensitivity=AccessLevel(args.sensitivity), recorded_on=args.recorded_on,
+                              limitations=args.limitations, citation_ids=args.cite, kind=args.kind, changes=changes)
+            case, _ = public_case(project, everything=True)
+            case.add(finding)
+            errors = validate_case(case) + grade_errors(case, config.grades)
+            if errors:
+                raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
+            with project.store.write(actor=actor, tool="genealogy finding add") as tx:
+                loader = new_loader(research, tx, batch_id=None, input_path="cli", origin="research")
+                loader.trace = lambda *a, **k: None
+                loader.load([finding])
+                loader.finish()
+                if loader.conflicts:
+                    raise ValueError(f"a record with id {args.finding_id} already exists")
+            print(f"Recorded finding {args.finding_id}.")
+            return 0
+        if args.command == "search" and getattr(args, "search_command", None) == "add":
+            search = Search(id=args.search_id, search=args.search, result=args.result, related_ids=args.related,
+                            searched_on=args.searched_on, limitation=args.limitation, citation_ids=args.cite,
+                            sensitivity=AccessLevel(args.sensitivity))
+            case, _ = public_case(project, everything=True)
+            case.add(search)
+            errors = validate_case(case)
+            if errors:
+                raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
+            with project.store.write(actor=actor, tool="genealogy search add") as tx:
+                loader = new_loader(research, tx, batch_id=None, input_path="cli", origin="research")
+                loader.trace = lambda *a, **k: None
+                loader.load([search])
+                loader.finish()
+                if loader.conflicts:
+                    raise ValueError(f"a record with id {args.search_id} already exists")
+            print(f"Logged search {args.search_id}.")
+            return 0
+        if args.command in ("search", "report"):
+            case, store, holder = private_case_store(project)
+            with holder:
+                service = ResearchService(store)
+                if args.command == "search":
+                    matches = service.search_records(case.id, args.query, kind=args.kind)
+                    print(json.dumps([{"record_type": type(m.record).__name__, "matched_fields": m.matched_fields,
+                                       "record": m.record.to_dict()} for m in matches], indent=2, ensure_ascii=False))
+                    return 0
+                content = (service.research_brief(case.id) if args.format == "markdown" else json.dumps({
+                    "evidence_completeness": asdict(service.evidence_completeness(case.id)),
+                    "unresolved_work": asdict(service.unresolved_work(case.id))}, indent=2, sort_keys=True) + "\n")
+            if args.output:
+                output = args.output if args.output.is_absolute() else args.project / args.output
+                write_text(output, content)
+                print(f"Wrote research report to {output}")
+            else:
+                print(content, end="")
+            return 0
+        if args.command == "bundle":
+            from .store.native import verify_package, write_package
+            output = args.output if args.output.is_absolute() else args.project / args.output
+            if args.verify:
+                problems = verify_package(output)
+                if problems:
+                    raise ValueError("bundle does not verify: " + "; ".join(problems[:5]))
+                print(f"Verified private native package at {output}")
+                return 0
+            write_package(project, output)
+            print(f"Wrote private native package (database export and files) to {output}")
+            return 0
+        if args.command == "build":
+            output = args.output if args.output.is_absolute() else args.project / args.output
+            report = build_from_database(project, output)
+            print(f"Built privacy-filtered views in {output} ({report['people']} people; "
+                  f"{report['omission_count']} items withheld, listed in {report['report']})")
+            return 0
+        if args.command == "export":
+            case, _ = public_case(project)
+            safe_project = public_project(case, config)
+            if args.output is None:
+                export_directory = project_path(args.project, config.exports.get("directory", "dist"), "exports.directory")
+                configured_name = config.exports.get(args.format, "research.ged" if args.format == "gedcom" else f"research.{args.format}")
+                output = safe_output_path(export_directory, configured_name)
+            else:
+                output = args.output if args.output.is_absolute() else args.project / args.output
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(render(safe_project, args.format), encoding="utf-8")
+            print(f"Wrote privacy-filtered {args.format} export to {output}")
+            return 0
+    raise ValueError(f"unsupported command: {args.command}")
+
+
+def detect_import_format(path: Path, selected: str) -> str:
+    from .importing import detect_format
+    return detect_format(path.name, selected)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -314,176 +513,31 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "case":
             config = load_config(args.project)
             store = CaseStore(project_path(args.project, config.case_directory, "project.case_directory"))
-            service = ResearchService(store)
             if args.case_command == "list":
-                for loaded in service.list_cases():
+                for loaded in ResearchService(store).list_cases():
                     marker = " *" if loaded.id == config.default_case else ""
-                    print(f"{loaded.id}{marker}\t{loaded.title}")
+                    print(f"{loaded.id}{marker}\t{loaded.title}\t(legacy JSON case; 'genealogy upgrade' moves it "
+                          "into the database)")
                 return 0
-            service.create_case(args.case_id, args.title, args.summary)
-            print(f"Created research case at {store.path_for(args.case_id)}")
-            return 0
-        case, config = load_case(args.project, args.case)
-        errors = validate_case(case) + grade_errors(case, config.grades)
-        if args.command == "validate":
-            if errors:
-                print("\n".join(f"error: {error}" for error in errors), file=sys.stderr)
-                return 1
-            print("Research case is valid.")
-            return 0
-        # A finding may record the change that a record's edited grade now
-        # needs, so that command checks the case with the finding added instead.
-        if errors and args.command != "finding":
-            raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
-        if args.command == "import":
-            from .importing import import_file
-            report = import_file(args.project, case, config, args.input, format=args.format,
-                                 publish_deceased=args.publish_deceased, replace=args.replace, update=args.update,
-                                 publish_reviewed_sources=args.publish_reviewed_sources)
-            for warning in report["warnings"]:
-                print(f"warning: {warning}", file=sys.stderr)
-            print(json.dumps(report, ensure_ascii=False))
-            print("Run genealogy --project <directory> build to generate the local site.")
-            return 0
-        if args.command == "ingest":
-            adapter = resolve_adapter(args.adapter)
-            if not adapter_is_enabled(config, adapter.name):
-                raise ValueError(f"adapter is not enabled by project configuration: {adapter.name}")
-            batch = adapter.ingest(adapter_payload(args.input, adapter.name))
-            if batch.records and not batch.entities:
-                raise ValueError(f"{adapter.name} input produced no neutral records")
-            imported = batch.add_to_case(case)
-            errors = validate_case(case)
-            if errors:
-                raise ValueError("Imported records failed validation:\n" + "\n".join(f"- {error}" for error in errors))
-            CaseStore(project_path(args.project, config.case_directory, "project.case_directory")).save(case)
-            for warning in batch.warnings:
-                print(f"warning: {warning}", file=sys.stderr)
-            print(f"Imported {imported} neutral records through {adapter.name}.")
-            return 0
-        if args.command == "finding":
-            service = ResearchService(CaseStore(
-                project_path(args.project, config.case_directory, "project.case_directory")
-            ))
-            changes = []
-            for value in args.change:
-                parts = value.rsplit(":", 2)
-                if len(parts) != 3 or not parts[0] or not parts[2]:
-                    raise ValueError(f"--change must be RECORD_ID:BEFORE:AFTER: {value}")
-                changes.append({"record_id": parts[0], "before": parts[1] or None, "after": parts[2], "note": None})
-            finding = Finding(
-                id=args.finding_id,
-                conclusion=args.conclusion,
-                related_ids=args.related,
-                evidence_ids=args.evidence,
-                status=args.status,
-                confidence=Confidence(args.confidence),
-                sensitivity=AccessLevel(args.sensitivity),
-                recorded_on=args.recorded_on,
-                limitations=args.limitations,
-                citation_ids=args.cite,
-                kind=args.kind,
-                changes=changes,
-            )
-            case.add(finding)
-            errors = validate_case(case) + grade_errors(case, config.grades)
-            if errors:
-                raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
-            service.add_finding(case.id, finding)
-            print(f"Recorded finding {args.finding_id} in case {case.id}.")
-            return 0
-        service = ResearchService(CaseStore(
-            project_path(args.project, config.case_directory, "project.case_directory")
-        ))
-        if args.command == "record":
-            if args.record_command == "list":
-                records = service.query_records(case.id, kind=args.kind)
-                print(json.dumps([
-                    {"record_type": type(record).__name__, "record": record.to_dict()}
-                    for record in records
-                ], indent=2, ensure_ascii=False))
-                return 0
-            if args.record_command == "show":
-                matches = service.query_records(case.id, ids=(args.record_id,))
-                if not matches:
-                    raise ValueError(f"record not found: {args.record_id}")
-                record = matches[0]
-                print(json.dumps({"record_type": type(record).__name__, "record": record.to_dict()},
-                                 indent=2, ensure_ascii=False))
-                return 0
-            record = record_payload(args.input, args.record_type)
-            service.add_record(case.id, record)
-            print(f"Recorded {args.record_type} {record.id} in case {case.id}.")
-            return 0
-        if args.command == "search" and getattr(args, "search_command", None) == "add":
-            search = Search(
-                id=args.search_id, search=args.search, result=args.result, related_ids=args.related,
-                searched_on=args.searched_on, limitation=args.limitation, citation_ids=args.cite,
-                sensitivity=AccessLevel(args.sensitivity),
-            )
-            case.add(search)
-            errors = validate_case(case)
-            if errors:
-                raise ValueError("Validation failed:\n" + "\n".join(f"- {error}" for error in errors))
-            service.add_search(case.id, search)
-            print(f"Logged search {args.search_id} in case {case.id}.")
-            return 0
-        if args.command == "search":
-            matches = service.search_records(case.id, args.query, kind=args.kind)
-            print(json.dumps([
-                {
-                    "record_type": type(match.record).__name__,
-                    "matched_fields": match.matched_fields,
-                    "record": match.record.to_dict(),
-                }
-                for match in matches
-            ], indent=2, ensure_ascii=False))
-            return 0
-        if args.command == "report":
-            content = (
-                service.research_brief(case.id)
-                if args.format == "markdown"
-                else json.dumps({
-                    "evidence_completeness": asdict(service.evidence_completeness(case.id)),
-                    "unresolved_work": asdict(service.unresolved_work(case.id)),
-                }, indent=2, sort_keys=True) + "\n"
-            )
-            if args.output:
-                output = args.output if args.output.is_absolute() else args.project / args.output
-                write_text(output, content)
-                print(f"Wrote research report to {output}")
-            else:
-                print(content, end="")
-            return 0
-        if args.command == "bundle":
-            output = args.output if args.output.is_absolute() else args.project / args.output
-            if args.verify:
-                bundled_case = read_case_artifact_bundle(output)
-                print(f"Verified private artifact bundle for case {bundled_case.id} at {output}")
-                return 0
-            write_case_artifact_bundle(case, output)
-            print(f"Wrote private local research-case artifact bundle to {output}")
-            return 0
-        safe_project = public_project(case, config)
-        if args.command == "build":
-            output = args.output if args.output.is_absolute() else args.project / args.output
-            build_project(case, config, output)
-            print(f"Built privacy-filtered views in {output}")
-            return 0
-        if args.output is None:
-            export_directory = project_path(
-                args.project,
-                config.exports.get("directory", "dist"),
-                "exports.directory",
-            )
-            configured_name = config.exports.get(args.format, "research.ged" if args.format == "gedcom" else f"research.{args.format}")
-            output = safe_output_path(export_directory, configured_name)
-        else:
-            output = args.output if args.output.is_absolute() else args.project / args.output
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(render(safe_project, args.format), encoding="utf-8")
-        print(f"Wrote privacy-filtered {args.format} export to {output}")
-        return 0
+            raise ValueError("JSON case files are no longer created: research cases, questions and findings live in "
+                             "the project database. Use 'genealogy question add', 'genealogy note add --kind case' "
+                             "and related commands")
+        from .cli_db import DB_COMMANDS, run as run_database_command
+        from .store import has_database
+        if args.command == "upgrade" or (args.command == "db" and args.db_command == "init") or args.command in (
+                "native", "backup") and getattr(args, "native_command", getattr(args, "backup_command", None)) in (
+                "import", "verify", "restore"):
+            return run_database_command(args)
+        if not has_database(args.project):
+            legacy = list((args.project / load_config(args.project).case_directory).glob("*.json"))
+            raise ValueError(
+                "this project has no research database yet; run 'genealogy --project "
+                f"{args.project} upgrade' to move its {len(legacy)} JSON case file(s) into one"
+                if legacy else f"no research database in {args.project}; run 'genealogy init DIRECTORY' or "
+                "'genealogy db init'")
+        if args.command in DB_COMMANDS:
+            return run_database_command(args)
+        return run_project_command(args)
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
