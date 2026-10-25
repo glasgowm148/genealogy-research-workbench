@@ -13,6 +13,7 @@ WHEEL=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 WORK=${2:-$(mktemp -d "${TMPDIR:-/tmp}/grwb-acceptance.XXXXXX")}
 unset PYTHONPATH PYTHONHOME
 mkdir -p "$WORK"
+WORK=$(cd "$WORK" && pwd -P)
 cd "$WORK"
 python3 -m venv venv
 venv/bin/python -m pip install --quiet --no-index --no-deps "$WHEEL"
@@ -21,7 +22,7 @@ absent() { if grep -rq "$1" "$2"; then echo "LEAK: $1 found in $2"; exit 1; fi; 
 step() { printf '\n== %s\n' "$*"; }
 
 step "the installed package is the wheel, not a checkout"
-venv/bin/python -I -c "import genealogy, sys; p = genealogy.__file__; print(p); sys.exit(0 if p.startswith('$WORK') else 1)"
+venv/bin/python -I -c "import genealogy, os, sys; p = os.path.realpath(genealogy.__file__); print(p); sys.exit(0 if p.startswith('$WORK/venv/') else 1)"
 "$G" --version
 
 step "initialise an independent project"
