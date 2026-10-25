@@ -167,6 +167,21 @@ class PublicationAndBuild(unittest.TestCase):
         self.assertFalse((two / "stale.html").exists())
         self.assertEqual(tree_digest(one), tree_digest(two))
 
+    def test_builds_match_across_hash_seeds(self) -> None:
+        import os
+        import subprocess
+        import sys
+        digests = []
+        for seed in ("1", "2"):
+            out = self.fx.root / f"seed-{seed}"
+            code = ("import sys; from pathlib import Path; from genealogy.store import open_project; "
+                    "from genealogy.store.build import build_from_database; "
+                    "p = open_project(Path(sys.argv[1])); build_from_database(p, Path(sys.argv[2]), build_date='2026-10-25')")
+            subprocess.run([sys.executable, "-c", code, str(self.fx.directory), str(out)], check=True,
+                           env={**os.environ, "PYTHONHASHSEED": seed}, capture_output=True)
+            digests.append(tree_digest(out))
+        self.assertEqual(digests[0], digests[1])
+
     def test_build_never_replaces_a_directory_it_did_not_make(self) -> None:
         other = self.fx.root / "releases"
         other.mkdir()

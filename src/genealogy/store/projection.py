@@ -49,10 +49,10 @@ GENERATED_ASSET_KINDS = ("derivative", "generated", "presentation")
 ITEM_TEXT = {"Finding": ("conclusion", "limitations"), "ResearchQuestion": ("question", "resolves", "next_record"),
              "Search": ("search", "result", "limitation"), "Hypothesis": ("statement", "supports", "objections"),
              "Study": ("title", "summary", "rationale", "body", "conclusion", "limitations"),
-             "Source": ("title", "author", "publication")}
+             "Source": ("title", "author", "publication", "url")}
 FACT_TEXT = {"Relationship": ("rationale",), "Claim": ("rationale", "value"), "Evidence": ("assessment", "limitation"),
              "Person": ("notes",), "Event": ("description",), "Citation": ("abstract", "transcription")}
-WORD = re.compile(r"[\w'.-]+")
+WORD = re.compile(r"[\w-]+")
 
 
 def _matcher(terms: set[str]):
@@ -66,8 +66,8 @@ def _matcher(terms: set[str]):
         present = set(WORD.findall(text))
         for token in present & by_first.keys():
             for term, words in by_first[token]:
-                if len(words) == 1 or (all(word in present for word in words) and re.search(
-                        r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", text)):
+                if all(word in present for word in words) and re.search(
+                        r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", text):
                     return term
         return None
     return find
@@ -505,6 +505,11 @@ def public_case(project: Project, *, build_year: int | None = None,
         term for term in omissions.withheld_terms
         if " " not in term or (sum(len(word) > 1 and any(c.isalpha() for c in word) for word in term.split()) >= 2
                                and not re.search(r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", public_text))}
+    # Identifiers published for a public person (its current and former ids) are public facts,
+    # even when another local entity also carries them (an unmerged WikiTree redirect).
+    for person in case.records("Person"):
+        omissions.withheld_terms.difference_update(person.former_ids)
+        omissions.withheld_terms.difference_update(identifier.value for identifier in person.external_ids)
     if not everything:
         _remove_indirect_references(case, omissions)
     return case, omissions

@@ -39,7 +39,7 @@ class LeakError(StoreError):
                          f"was left in place; inspect {staging} and change the research's access or wording.")
 
 
-WORD = re.compile(r"[\w'.-]+")
+WORD = re.compile(r"[\w-]+")
 
 
 def leak_scan(root: Path, terms: set[str], files: set[str] = frozenset()) -> list[dict[str, str]]:
@@ -60,8 +60,8 @@ def leak_scan(root: Path, terms: set[str], files: set[str] = frozenset()) -> lis
         present = set(tokens)
         for token in present & by_first.keys():
             for term, words in by_first[token]:
-                if len(words) == 1 or (all(word in present for word in words)
-                                       and re.search(r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", text)):
+                if all(word in present for word in words) and re.search(
+                        r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", text):
                     findings.append({"file": where, "term": term})
                     return
 

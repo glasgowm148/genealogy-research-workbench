@@ -852,7 +852,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             else:
                 recorded.setdefault(other, row)
         sibling_items = []
-        for sibling in sorted(set(siblings) | set(recorded), key=lambda s: (date_sort_key(next((e.get("date") for e in events_by_person[s] if e["kind"] == "birth"), None)), person_name(s))):
+        for sibling in sorted(set(siblings) | set(recorded), key=lambda s: (date_sort_key(next((e.get("date") for e in events_by_person[s] if e["kind"] == "birth"), None)), person_name(s), s)):
             shared, row = siblings.get(sibling, set()), recorded.get(sibling)
             in_common = "two recorded parents in common" if len(shared) >= 2 else "shares a recorded parent"
             if row is None:
@@ -1848,8 +1848,8 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
 
     def findings_legend(prefix: str = "") -> str:
         """The status and type badges the log uses, each with what it means; a status links to its guide entry."""
-        statuses = sorted({str(f["status"]) for f in project["findings"] if f.get("status")}, key=str.casefold)
-        kinds = sorted({str(f["kind"]) for f in project["findings"] if f.get("kind")}, key=str.casefold)
+        statuses = sorted({str(f["status"]) for f in project["findings"] if f.get("status")}, key=lambda v: (v.casefold(), v))
+        kinds = sorted({str(f["kind"]) for f in project["findings"] if f.get("kind")}, key=lambda v: (v.casefold(), v))
         meaning = lambda s: RESEARCH_MEANINGS.get(s.casefold()) or CLAIM_STATUS.get(s.casefold(), ("", "Recorded in this project's own wording."))[1]
         items = []
         for status in statuses:
