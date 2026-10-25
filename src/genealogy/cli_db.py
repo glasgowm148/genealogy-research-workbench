@@ -326,6 +326,31 @@ def add_parsers(commands: Any) -> None:
     publication.add_argument("--year", type=int)
 
 
+REFERENCE_ARGUMENTS = ("claim", "person", "child", "relative", "record", "mention", "source", "citation", "dependent",
+                       "premise", "entity", "question", "transcription", "dependency", "profile_entity")
+
+
+def resolve_references(store: Any, args: argparse.Namespace) -> None:
+    """Let commands name entities by external identifier: SYSTEM:VALUE, e.g. wikitree:Ada-12."""
+    def resolve(value: str) -> str:
+        if not isinstance(value, str) or store.entity_type(value) or ":" not in value:
+            return value
+        system, _, external = value.partition(":")
+        rows = store.all("SELECT DISTINCT entity_id FROM external_id WHERE system=? AND value=? AND status IN "
+                         "('current', 'redirect') ORDER BY entity_id", (system, external))
+        if len(rows) > 1:
+            raise StoreError(f"{value} identifies {len(rows)} entities; use one of: "
+                             + ", ".join(row["entity_id"] for row in rows))
+        return rows[0]["entity_id"] if rows else value
+    for name in REFERENCE_ARGUMENTS:
+        if isinstance(getattr(args, name, None), str):
+            setattr(args, name, resolve(getattr(args, name)))
+    for name in ("about", "basis", "related"):
+        values = getattr(args, name, None)
+        if isinstance(values, list):
+            setattr(args, name, [resolve(value) for value in values])
+
+
 def _project(args: argparse.Namespace, *, readonly: bool = False):
     return open_project(args.project, readonly=readonly, create=args.command == "upgrade")
 
@@ -368,6 +393,7 @@ def run(args: argparse.Namespace) -> int:
     with _project(args) as project:
         research = Research(project.store)
         store = project.store
+        resolve_references(store, args)
         write = lambda: store.write(actor=_actor(args), reason=getattr(args, "reason", None),  # noqa: E731
                                     tool=f"genealogy {command}")
         if command == "db":
