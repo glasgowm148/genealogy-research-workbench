@@ -8,11 +8,12 @@ import sqlite3
 from .errors import IncompatibleSchemaError
 
 #: The schema this workbench writes. Raise it with a new numbered migration.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 #: Ordered migrations: (version reached, SQL resource name).
 MIGRATIONS: tuple[tuple[int, str], ...] = (
     (1, "0001_initial.sql"),
+    (2, "0002_legacy_resolution.sql"),
 )
 
 #: Tables whose rows are addressable entities, registered in ``entity``.
@@ -128,12 +129,13 @@ def check_version(version: int | None, path: object) -> None:
         )
 
 
-def apply_migrations(conn: sqlite3.Connection, *, from_version: int | None) -> list[int]:
-    """Apply pending migrations in one transaction each; returns versions reached."""
+def apply_migrations(conn: sqlite3.Connection, *, from_version: int | None,
+                     to_version: int | None = None) -> list[int]:
+    """Apply pending migrations (up to ``to_version``) in one transaction each; returns versions reached."""
     applied: list[int] = []
     start = from_version or 0
     for version, name in MIGRATIONS:
-        if version <= start:
+        if version <= start or (to_version is not None and version > to_version):
             continue
         conn.execute("BEGIN IMMEDIATE")
         try:

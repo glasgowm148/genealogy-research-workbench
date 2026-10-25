@@ -731,6 +731,35 @@ class Research:
                                      "from_status": proposal["status"], "to_status": to_status, "actor": actor,
                                      "note": note, "change_set_id": tx.change_set_id})
 
+    # ===================================================== items kept for review
+    def legacy_items(self, *, open_only: bool = True, disposition: str | None = None,
+                     input_prefix: str | None = None) -> list[dict[str, Any]]:
+        """Items an import kept for review, oldest input first."""
+        sql = ("SELECT id, revision, disposition, input_path, pointer, reason, entity_id, resolution, resolved_on, "
+               "resolved_by FROM legacy_item WHERE 1=1")
+        params: list[Any] = []
+        if open_only:
+            sql += " AND resolution IS NULL"
+        if disposition:
+            sql += " AND disposition = ?"
+            params.append(disposition)
+        if input_prefix:
+            sql += " AND (input_path = ? OR input_path LIKE ? ESCAPE '\\')"
+            escaped = input_prefix.rstrip("/").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            params += [input_prefix.rstrip("/"), escaped + "/%"]
+        return self.store.all(sql + " ORDER BY input_path, pointer, id", tuple(params))
+
+    def resolve_legacy_item(self, tx: Tx, item_id: str, *, resolution: str, expected_revision: int,
+                            resolved_by: str | None = None) -> None:
+        """Record what was decided about an item kept for review; the item itself is never altered."""
+        if not resolution or not resolution.strip():
+            raise ConstraintError("a resolution says what was decided and why")
+        item = self.store.require("legacy_item", item_id)
+        if item["resolution"] is not None:
+            raise ConstraintError(f"{item_id} is already resolved: {item['resolution']}")
+        tx.update("legacy_item", item_id, {"resolution": resolution.strip(), "resolved_on": self.store.clock(),
+                                           "resolved_by": resolved_by}, expected_revision=expected_revision)
+
     # ========================================================= merge and split
     PERSON_REFERENCES = (
         ("person_name", "person_id"), ("event_participant", "person_id"), ("claim", "subject_person_id"),

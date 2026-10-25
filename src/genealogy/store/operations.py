@@ -197,6 +197,7 @@ def status(project: Project) -> dict[str, Any]:
     return {"database": str(project.database_path), "schema_version": int(store.meta("schema_version")),
             "project_id": store.meta("project_id"), "counts": counts,
             "review_needed": store.one("SELECT count(*) AS n FROM dependency WHERE status='review_needed'")["n"],
+            "legacy_items_open": store.one("SELECT count(*) AS n FROM legacy_item WHERE resolution IS NULL")["n"],
             "legacy_cases": [p.relative_to(project.directory).as_posix() for p in legacy_case_paths(project)],
             "legacy_cases_migrated": store.meta("legacy_cases_migrated")}
 

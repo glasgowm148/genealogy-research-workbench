@@ -139,16 +139,34 @@ byte-identical rebuilds.
 
 ## Versions and upgrades
 
-- Database schema version 1 (`genealogy db status`). A newer workbench applies
+- Database schema version 2 (`genealogy db status`). A newer workbench applies
   numbered migrations with `genealogy db migrate`, which backs the database up
-  first. A database written by a newer workbench is refused with an
-  instruction to upgrade.
-- Native export format `genealogy-native` version 1.
+  first (`<database>.pre-v2.backup`). A database written by a newer workbench
+  is refused with an instruction to upgrade. Version 2 (workbench 0.10) adds
+  resolutions to items kept for review.
+- Native export format `genealogy-native` version 1. An export records the
+  schema it was written with; one from an older schema imports into that
+  schema and is then migrated forward.
 - Legacy JSON research cases (`cases/*.json`, workbench ≤ 0.8) are moved into
   the database by `genealogy upgrade`. Case files are left untouched; records
   sharing an id across cases become one entity, and differing copies are kept
   as `legacy_item` conflicts. After upgrading, case files are no longer read or
   written; `genealogy case create` is refused.
+
+## Items kept for review
+
+An import keeps what it could not interpret (a conflict between two copies, an
+unsupported structure, an unresolved reference, an excluded row) as a
+`legacy_item`, with its input file, pointer, reason and the original payload.
+These rows are never altered or deleted. A researcher resolves one by recording
+what was decided and why; the decision, who made it and when are kept with the
+item and in the audit log, and `genealogy db status` counts the open ones:
+
+```text
+genealogy --project DIR legacy list [--all] [--disposition conflict] [--input research/]
+genealogy --project DIR legacy resolve ID --resolution "why" --expected-revision N
+genealogy --project DIR legacy resolve --from decisions.json   # [{id, expected_revision, resolution}], one transaction
+```
 
 ## Commands
 

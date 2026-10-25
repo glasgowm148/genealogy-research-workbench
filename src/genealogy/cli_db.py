@@ -20,7 +20,7 @@ ACCESS = ("public", "private", "restricted", "licensed")
 DB_COMMANDS = {"db", "upgrade", "person", "place", "source", "record", "citation", "transcription", "mention",
                "identify", "claim", "relationship", "assess", "history", "evidence", "depend", "review", "note",
                "question", "hypothesis", "study", "asset", "approval", "native", "backup", "gedcom", "proposal",
-               "wikitree", "show", "publication"}
+               "wikitree", "show", "publication", "legacy"}
 
 
 def _print(value: Any) -> None:
@@ -208,6 +208,19 @@ def add_parsers(commands: Any) -> None:
     ack.add_argument("dependency")
     ack.add_argument("--expected-revision", type=int, required=True)
     ack.add_argument("--note")
+
+    legacy = commands.add_parser("legacy", help="list or resolve items an import kept for review")
+    lg_sub = legacy.add_subparsers(dest="legacy_command", required=True)
+    lg_list = lg_sub.add_parser("list", help="items kept for review (open ones unless --all)")
+    lg_list.add_argument("--all", action="store_true", help="include resolved items")
+    lg_list.add_argument("--disposition", choices=("unresolved", "excluded", "unsupported", "conflict"))
+    lg_list.add_argument("--input", dest="input_prefix", metavar="PATH", help="only items from inputs under PATH")
+    lg_res = actor(lg_sub.add_parser("resolve", help="record what was decided about an item, and why"))
+    lg_res.add_argument("item", nargs="?")
+    lg_res.add_argument("--resolution", help="what was decided and why")
+    lg_res.add_argument("--expected-revision", type=int)
+    lg_res.add_argument("--from", dest="from_file", type=Path,
+                        help="JSON list of {id, expected_revision, resolution}, resolved in one transaction")
 
     note = commands.add_parser("note", help="add research prose linked to entities")
     n_sub = note.add_subparsers(dest="note_command", required=True)
@@ -574,6 +587,25 @@ def run(args: argparse.Namespace) -> int:
                 research.acknowledge_dependency(tx, args.dependency, expected_revision=args.expected_revision,
                                                 note=args.note)
             print(f"Acknowledged {args.dependency}.")
+            return 0
+        if command == "legacy":
+            if args.legacy_command == "list":
+                _print(research.legacy_items(open_only=not args.all, disposition=args.disposition,
+                                             input_prefix=args.input_prefix))
+                return 0
+            if args.from_file:
+                decisions = json.loads(args.from_file.read_text(encoding="utf-8"))
+            elif args.item and args.resolution and args.expected_revision is not None:
+                decisions = [{"id": args.item, "expected_revision": args.expected_revision,
+                              "resolution": args.resolution}]
+            else:
+                raise StoreError("legacy resolve needs ITEM --resolution TEXT --expected-revision N, or --from FILE")
+            with write() as tx:
+                for decision in decisions:
+                    research.resolve_legacy_item(tx, decision["id"], resolution=decision["resolution"],
+                                                 expected_revision=decision["expected_revision"],
+                                                 resolved_by=_actor(args))
+            print(f"Resolved {len(decisions)} item(s).")
             return 0
         if command == "note":
             asset_id = None

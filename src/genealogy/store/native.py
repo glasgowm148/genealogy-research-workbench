@@ -39,7 +39,7 @@ def export_document(store: Store, *, exported_at: str | None = None) -> dict[str
     document: dict[str, Any] = {
         "format": FORMAT,
         "format_version": FORMAT_VERSION,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": int(store.meta("schema_version")),
         "project_id": store.meta("project_id"),
         "tables": tables,
     }
@@ -70,10 +70,8 @@ def check_document(document: Any) -> None:
         raise IncompatibleSchemaError(
             f"native export was written with database schema {schema!r}; this workbench supports up to {SCHEMA_VERSION}. "
             "Upgrade the workbench before importing it.")
-    if schema < SCHEMA_VERSION:
-        raise IncompatibleSchemaError(
-            f"native export uses database schema {schema}; import it with the workbench release for that schema, "
-            "then run 'genealogy db migrate'")
+    if schema < 1:
+        raise IncompatibleSchemaError(f"native export schema {schema} is not a workbench schema")
     unknown = set(document.get("tables", {})) - set(TABLE_KEYS)
     if unknown:
         raise IncompatibleSchemaError(f"native export has unknown tables: {', '.join(sorted(unknown))}")
@@ -87,8 +85,10 @@ def import_document(document: dict[str, Any], target: Path) -> Store:
         raise ConstraintError(f"{target} already exists; native import creates a new database only")
     target.parent.mkdir(parents=True, exist_ok=True)
     conn = connect(target)
+    schema = document["schema_version"]
     try:
-        apply_migrations(conn, from_version=None)
+        # An export from an older schema is loaded into that schema, then migrated forward.
+        apply_migrations(conn, from_version=None, to_version=schema)
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("PRAGMA defer_foreign_keys = ON")
         conn.execute("DELETE FROM schema_meta WHERE key <> 'schema_version'")
@@ -106,6 +106,7 @@ def import_document(document: dict[str, Any], target: Path) -> Store:
         if problems:
             raise ConstraintError(f"native export has {len(problems)} broken references, e.g. {tuple(problems[0])}")
         conn.execute("COMMIT")
+        apply_migrations(conn, from_version=schema)
     except BaseException:
         if conn.in_transaction:
             conn.execute("ROLLBACK")
