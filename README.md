@@ -20,7 +20,7 @@ Genealogy Research Workbench turns a GEDCOM or WikiTree OneTree export into a se
 
 OneTree imports retain WikiTree identifiers, so your local research stays connected to the profiles it concerns. Use the workbench to investigate questions and prepare sourced updates to make manually on WikiTree. You can also link a published research study from a WikiTree profile. The toolkit does not automatically synchronize with or write back to WikiTree.
 
-Imports and builds run on your computer with **no runtime dependencies or network requests**. The output is ordinary HTML, CSS, JavaScript and data files; publishing is your choice.
+Imports and builds run on your computer with **no runtime dependencies or network requests**; research is kept in one SQLite database per project, using Python's standard library. The output is ordinary HTML, CSS, JavaScript and data files; publishing is your choice.
 
 ## What you can build
 
@@ -117,11 +117,13 @@ Everything the importer does not interpret is counted in the import report and k
 
 ### Try it before importing your family
 
-From the toolkit checkout:
+From the toolkit checkout (the demo is stored in the earlier JSON-case format, so this also shows the upgrade):
 
 ```sh
-genealogy --project examples/demo build
-python -m http.server 8000 --bind 127.0.0.1 --directory examples/demo/dist
+cp -R examples/demo /tmp/alderwick
+genealogy --project /tmp/alderwick upgrade
+genealogy --project /tmp/alderwick build
+python -m http.server 8000 --bind 127.0.0.1 --directory /tmp/alderwick/dist
 ```
 
 The demo has 42 invented people, four generations, sources, uncertainty (including one person with two candidate fathers and a reassessment still to make on the tree), three invented DNA branches, and research questions. The [matching GEDCOM and OneTree files](examples/demo/input/) let you exercise the complete import workflow.
@@ -144,32 +146,44 @@ The reusable package includes the research model, adapters, local upload workflo
 
 ## Continue the research
 
+Research lives in one SQLite database per project (`private/research.sqlite`). Every command below writes through the same audited services; nothing edits JSON files.
+
 ```sh
-genealogy --project my-family search "harbour"
-genealogy --project my-family record list --kind Person
-genealogy --project my-family record show gedcom:person:I1
-genealogy --project my-family report --format markdown --output research-brief.md
-genealogy --project my-family export json --output dist/research.json
-genealogy --project my-family export csv --output dist/research.csv
-genealogy --project my-family export gedcom --output dist/public-tree.ged
-genealogy --project my-family bundle --output private/research-bundle
-genealogy --project my-family bundle --output private/research-bundle --verify
-genealogy --project my-family check-links
+genealogy --project my-family source add "Parish register of St Ann" --repository "County Record Office"
+genealogy --project my-family record add baptism --title "Baptism of Ada, 1801" --source SOURCE-ID --date "3 May 1801"
+genealogy --project my-family citation add --source SOURCE-ID --record RECORD-ID --locator "folio 12"
+genealogy --project my-family mention add RECORD-ID "Ada" --role child
+genealogy --project my-family identify MENTION-ID PERSON-ID --status possible     # candidates can compete
+genealogy --project my-family relationship add CHILD-ID father FATHER-ID
+genealogy --project my-family assess CLAIM-ID --status probable --estimate 70 --reasoning "Baptism names him."
+genealogy --project my-family assess CLAIM-ID --expected-revision 1 --status proved   # later revisions keep history
+genealogy --project my-family history CLAIM-ID
+genealogy --project my-family question add "Who were Ada's parents?" --about PERSON-ID
+genealogy --project my-family search add s-1 "St Ann burials 1820-1840" --result "nothing found" --for PERSON-ID
+genealogy --project my-family review list          # conclusions whose premises changed
+genealogy --project my-family publication          # what the public site includes and omits
+genealogy --project my-family gedcom export family.ged --version 7.0     # or 5.5.1; with a loss report
+genealogy --project my-family native export private/exports/full.json   # complete, versioned, private
+genealogy --project my-family backup create
+genealogy backup restore private/backups/<stamp> ~/restored-family
 ```
 
-Typed records can be added with `record add TYPE --input record.json`. Findings can link related records and evidence and carry the date they were reached. Studies hold the written account. [Research recipes](docs/research.md) cover citations, confidence, studies, place precision, public review and maintaining a case. A complete research bundle includes protected content and stays **private**, unlike a filtered website or public export.
+Any command that takes an id also accepts `SYSTEM:VALUE`, such as `wikitree:Ada-12`. Bulk or agent-written changes go through a reviewable [proposal](docs/database.md#writing-safely) that is re-checked against the current revisions before it is applied. [The research database](docs/database.md) explains the model; [backup and upgrades](docs/backup.md) covers restoration, upgrades and moving an earlier JSON-case project in with `genealogy upgrade`.
 
 ## A portable project
 
 ```text
 my-family/
-├── genealogy.toml          Project name, paths, views and privacy settings
-├── cases/                  Private typed research cases
-├── private/imports/        Original exports and bounded import reports
+├── genealogy.toml          Project name, privacy, storage, views and presentation settings (yours)
+├── genealogy.local.toml    Optional machine-specific file locations (keep out of version control)
+├── private/research.sqlite The one authoritative research database (private)
+├── private/assets/         Original imports, captures and prose, by content hash (private)
+├── private/backups/        Verified backups (private)
+├── private/exports/        Native exports and build reports (private)
 └── dist/                   Generated, privacy-filtered website and downloads
 ```
 
-All generated site links are relative, so the site works under a subdirectory and can be hosted on an ordinary static server. It needs no external scripts, maps, fonts, or analytics. Build into a dedicated output folder: generated files are replaced on rebuild, and obsolete generated dossiers are removed. Files outside the generated manifest are preserved.
+All generated site links are relative, so the site works under a subdirectory and can be hosted on an ordinary static server. It needs no external scripts, maps, fonts, or analytics. Each build renders into a fresh staging folder, checks it for withheld material and only then replaces the previous build; a folder the workbench did not build is never replaced.
 
 ## Documentation and development
 
@@ -178,7 +192,10 @@ All generated site links are relative, so the site works under a subdirectory an
 | [Your first site](docs/first-site.md) | Export → import → review → research → update → publish, step by step |
 | [Import formats](docs/imports.md) | GEDCOM subset, OneTree shapes, warnings, encoding, and limitations |
 | [Privacy and publication](docs/privacy.md) | Review options, withheld content, private bundles, and local uploads |
-| [Research recipes](docs/research.md) | Cases, records, sources, claims, findings, and exports |
+| [The research database](docs/database.md) | What is authoritative, the model, safe writing, publication, builds and every command |
+| [Backup, restore and upgrades](docs/backup.md) | Backups, native exports, schema upgrades and moving JSON cases into the database |
+| [GEDCOM](docs/gedcom.md) | GEDCOM 7 / 5.5.1 import and export mappings, the extension and the loss report |
+| [Research recipes](docs/research.md) | Citations, confidence, studies, place precision and public review |
 | [Glasgow feature parity](docs/parity.md) | Shared features, recent ports and project-specific research |
 | [Build and deployment](docs/deployment.md) | Branding, generated routes, static hosting, and rebuilds |
 | [Developer guide](docs/development.md) | Tests, package builds, adapters, and release checklist |
