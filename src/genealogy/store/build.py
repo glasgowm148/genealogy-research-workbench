@@ -38,7 +38,7 @@ class LeakError(StoreError):
                          f"was left in place; inspect {staging} and change the research's access or wording.")
 
 
-def leak_scan(root: Path, terms: set[str]) -> list[dict[str, str]]:
+def leak_scan(root: Path, terms: set[str], files: set[str] = frozenset()) -> list[dict[str, str]]:
     usable = sorted((term for term in terms if term and len(term) >= 4), key=len, reverse=True)
     findings: list[dict[str, str]] = []
     # Whole tokens only: a withheld file "tree.ged" is not leaked by "public-tree.ged".
@@ -47,6 +47,8 @@ def leak_scan(root: Path, terms: set[str]) -> list[dict[str, str]]:
         if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
+        if path.name in files:
+            findings.append({"file": relative, "term": f"withheld file name {path.name}"})
         if path.suffix.lower() in PRIVATE_SUFFIXES:
             findings.append({"file": relative, "term": "database file"})
             continue
@@ -101,7 +103,7 @@ def build_from_database(project: Project, output: Path | None = None, *, build_d
             copied.append(item["target"])
     finally:
         store.conn.execute("COMMIT")
-    findings = leak_scan(staging, omissions.withheld_terms)
+    findings = leak_scan(staging, omissions.withheld_terms, omissions.withheld_files)
     report = {
         "build_date": when, "output": str(output), "people": len(case.records("Person")),
         "relationships": len(case.records("Relationship")), "findings": len(case.records("Finding")),

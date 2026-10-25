@@ -220,7 +220,7 @@ def parser(log_search: bool = False) -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8000, help="loopback port (default: 8000)")
     commands.add_parser("validate", help="validate the selected durable research case")
     build_parser = commands.add_parser("build", help="create privacy-filtered catalogue, timeline and map")
-    build_parser.add_argument("--output", type=Path, default=Path("dist"))
+    build_parser.add_argument("--output", type=Path, help="output folder (default: [exports] directory, normally dist)")
     links = commands.add_parser("check-links", help="report broken internal links and anchors in a built site")
     links.add_argument("site", nargs="?", type=Path, help="site folder (default: the project's dist/)")
     links.add_argument("--baseline", type=Path, help="JSON of known broken (page, target) pairs; new pairs fail")
@@ -469,8 +469,9 @@ def run_project_command(args: argparse.Namespace) -> int:
             print(f"Wrote private native package (database export and files) to {output}")
             return 0
         if args.command == "build":
-            output = args.output if args.output.is_absolute() else args.project / args.output
+            output = None if args.output is None else (args.output if args.output.is_absolute() else args.project / args.output)
             report = build_from_database(project, output)
+            output = report["output"]
             print(f"Built privacy-filtered views in {output} ({report['people']} people; "
                   f"{report['omission_count']} items withheld, listed in {report['report']})")
             return 0

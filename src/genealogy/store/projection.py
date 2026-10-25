@@ -27,6 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 import json
+from pathlib import Path
 import re
 from typing import Any
 
@@ -51,6 +52,7 @@ class Omissions:
 
     items: list[dict[str, str]] = field(default_factory=list)
     withheld_terms: set[str] = field(default_factory=set)
+    withheld_files: set[str] = field(default_factory=set)   # matched against output file names only
     published_assets: list[dict[str, Any]] = field(default_factory=list)
 
     def add(self, entity_id: str, kind: str, reason: str) -> None:
@@ -172,7 +174,8 @@ def public_case(project: Project, *, build_year: int | None = None,
         if row["id"] not in people:
             omissions.withheld_terms.update(x["value"] for x in external.get(row["id"], []))
             for name in store.all("SELECT full_name FROM person_name WHERE person_id=?", (row["id"],)):
-                omissions.withheld_terms.add(name["full_name"])
+                if " " in name["full_name"].strip():   # a lone surname or forename is not identifying
+                    omissions.withheld_terms.add(name["full_name"].strip())
 
     # ------------------------------------------------------------ sources
     sources: dict[str, Source] = {}
@@ -451,11 +454,12 @@ def public_case(project: Project, *, build_year: int | None = None,
             omissions.add(approval["id"], "approval", "file bytes changed since approval")
             continue
         omissions.published_assets.append({"target": approval["target"], "path": str(path), "sha256": approval["sha256"]})
-    for asset in store.all("SELECT * FROM asset WHERE sha256 NOT IN (SELECT sha256 FROM approval WHERE "
-                           "kind='exact_file' AND status='active') ORDER BY id"):
+    approved_names = {Path(item["target"]).name for item in omissions.published_assets}
+    for asset in store.all("SELECT * FROM asset WHERE access <> 'public' AND sha256 NOT IN (SELECT sha256 FROM "
+                           "approval WHERE kind='exact_file' AND status='active') ORDER BY id"):
         omissions.withheld_terms.add(asset["sha256"])
-        if asset["original_name"] and len(asset["original_name"]) > 6:
-            omissions.withheld_terms.add(asset["original_name"])
+        if asset["original_name"] and asset["original_name"] not in approved_names:
+            omissions.withheld_files.add(asset["original_name"])
     public_names = {name.value for person in people.values() for name in person.names}
     omissions.withheld_terms -= public_names
     return case, omissions
