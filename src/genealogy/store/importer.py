@@ -42,7 +42,9 @@ PEDIGREE = {"birth": "biological", "biological": "biological", "natural": "biolo
             "adoptive": "adoptive", "step": "step", "foster": "foster", "sealing": "sealing", "guardian": "guardian"}
 VITAL_PREDICATES = {"birth", "death", "baptism", "christening", "burial", "marriage", "sex", "age"}
 NEGATIVE_RESULT = re.compile(r"^\s*(nothing|none|no\s|not found|no result|found nothing)", re.IGNORECASE)
-DURABLE_SYSTEMS = re.compile(r"^(wikitree|familysearch|gedcom:(uid|_uid|refn|exid|afn|rfn).*)$", re.IGNORECASE)
+DURABLE_SYSTEMS = re.compile(r"^(wikitree|one-tree|familysearch|gedcom:(uid|_uid|refn|exid|afn|rfn).*)$", re.IGNORECASE)
+#: Adapter systems whose identifiers are another system's ids (OneTree rows are WikiTree profiles).
+CANONICAL_SYSTEM = {"one-tree": "wikitree"}
 
 
 def _iso(value: str | None) -> str | None:
@@ -167,10 +169,11 @@ class RecordLoader:
                                                 access=self._access(record))
         self.private_note(person_id, record.notes, "imported_note")
         for ident in record.external_ids:
-            status = "current" if DURABLE_SYSTEMS.match(ident.system) else "alias"
-            if status == "current" and self.research.find_external(ident.system, ident.value, statuses=("current",)):
+            system = CANONICAL_SYSTEM.get(ident.system, ident.system)
+            status = "current" if DURABLE_SYSTEMS.match(system) else "alias"
+            if status == "current" and self.research.find_external(system, ident.value, statuses=("current",)):
                 status = "candidate"
-            self.research.map_external(self.tx, person_id, ident.system, ident.value, url=ident.url, status=status,
+            self.research.map_external(self.tx, person_id, system, ident.value, url=ident.url, status=status,
                                        verified=ident.verified)
         for former in record.former_ids:
             self.research.map_external(self.tx, person_id, "workbench-case", former, status="former")

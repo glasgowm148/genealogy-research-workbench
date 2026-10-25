@@ -14,7 +14,7 @@ from ..importing import MAX_IMPORT_BYTES, _IMPORT_ADAPTERS, _json_text, detect_f
 from ..models import AccessLevel
 from ..publication import review_deceased
 from .assets import prepare_managed, register_asset
-from .importer import DURABLE_SYSTEMS, new_loader
+from .importer import CANONICAL_SYSTEM, DURABLE_SYSTEMS, new_loader
 from .project import MANAGED_ROOT, Project
 from .services import Research, stable_id
 
@@ -79,7 +79,7 @@ def _person_ids(research: Research, batch: Any, lineage: str) -> dict[str, str]:
         found: list[str] = []
         for ident in entity.external_ids:
             if DURABLE_SYSTEMS.match(ident.system):
-                found = research.find_external(ident.system, ident.value)
+                found = research.find_external(CANONICAL_SYSTEM.get(ident.system, ident.system), ident.value)
                 if found:
                     break
         if not found:

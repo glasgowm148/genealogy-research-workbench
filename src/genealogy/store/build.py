@@ -50,7 +50,7 @@ def leak_scan(root: Path, terms: set[str], files: set[str] = frozenset()) -> lis
     by_first: dict[str, list[tuple[str, list[str]]]] = {}
     for term in terms:
         words = WORD.findall(term)
-        if term and len(term) >= 4 and words:
+        if term and len(term) >= 4 and words and any(character.isalpha() for character in term):
             by_first.setdefault(words[0], []).append((term, words))
     findings: list[dict[str, str]] = []
 
@@ -117,7 +117,10 @@ def build_from_database(project: Project, output: Path | None = None, *, build_d
             copied.append(item["target"])
     finally:
         store.conn.execute("COMMIT")
-    findings = leak_scan(staging, omissions.withheld_terms, omissions.withheld_files)
+    # Exact-file approvals publish those bytes as approved; they are not rescanned.
+    approved = {item.lstrip("/") for item in copied}
+    findings = [item for item in leak_scan(staging, omissions.withheld_terms, omissions.withheld_files)
+                if item["file"] not in approved]
     report = {
         "build_date": when, "output": str(output), "people": len(case.records("Person")),
         "relationships": len(case.records("Relationship")), "findings": len(case.records("Finding")),

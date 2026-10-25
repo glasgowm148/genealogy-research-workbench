@@ -460,6 +460,12 @@ def public_case(project: Project, *, build_year: int | None = None,
         omissions.withheld_terms.add(asset["sha256"])
         if asset["original_name"] and asset["original_name"] not in approved_names:
             omissions.withheld_files.add(asset["original_name"])
-    public_names = {name.value for person in people.values() for name in person.names}
-    omissions.withheld_terms -= public_names
+    # A withheld name that also forms part of a published person's name ("G Glasgow" in
+    # "James G Glasgow") cannot be told apart in text, so it is not used as a leak term;
+    # withheld ids, external ids and hashes still are.
+    public_text = "\n".join(name.value for person in people.values() for name in person.names)
+    omissions.withheld_terms = {
+        term for term in omissions.withheld_terms
+        if " " not in term or (sum(len(word) > 1 and any(c.isalpha() for c in word) for word in term.split()) >= 2
+                               and not re.search(r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", public_text))}
     return case, omissions

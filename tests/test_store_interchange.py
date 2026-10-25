@@ -206,6 +206,18 @@ class Imports(unittest.TestCase):
         self.assertEqual(self.fx.project.store.one("SELECT count(*) n FROM asset WHERE kind='original_import'")["n"], 2)
         self.assertEqual(second["status"], "imported")
 
+    def test_onetree_profiles_are_mapped_as_wikitree_ids(self) -> None:
+        tree = self.fx.root / "tree.json"
+        tree.write_text(json.dumps({"data": {"Fable-1": {"Name": "Fable-1", "FirstName": "Ada", "LastNameAtBirth": "Fable",
+                                                          "BirthDate": "1800-01-01", "DeathDate": "1870-01-01",
+                                                          "Privacy": 60}}}), encoding="utf-8")
+        import_genealogy_file(self.fx.project, tree, format="one-tree")
+        found = self.fx.research.find_external("wikitree", "Fable-1", statuses=("current",))
+        self.assertEqual(len(found), 1)
+        with self.fx.write() as tx:  # research naming the same profile reuses the person
+            self.assertEqual(self.fx.research.find_external("wikitree", "Fable-1"), found)
+            del tx
+
     def test_unknown_gedcom_structures_are_kept_verbatim(self) -> None:
         import_genealogy_file(self.fx.project, self.ged)
         rows = self.fx.project.store.all("SELECT fields_json FROM external_observation")
