@@ -281,6 +281,9 @@ def migrate_store(path: Path) -> dict[str, Any]:
         if version == SCHEMA_VERSION:
             return {"status": "current", "schema_version": version}
         backup = path.with_name(f"{path.name}.pre-v{SCHEMA_VERSION}.backup")
+        if backup.exists():
+            raise ConstraintError(f"{backup} already exists; move it aside before migrating again")
+        backup.touch(mode=0o600)   # private like the database it copies
         target = sqlite3.connect(str(backup))
         with target:
             conn.backup(target)

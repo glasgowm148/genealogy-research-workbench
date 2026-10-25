@@ -37,6 +37,18 @@ def add_item(fx: Fixture, item_id: str, input_path: str, disposition: str = "con
 
 
 class Migration(unittest.TestCase):
+    def test_an_existing_pre_migration_backup_is_never_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "old.sqlite"
+            version_one_database(path)
+            Path(f"{path}.pre-v{SCHEMA_VERSION}.backup").write_text("earlier backup")
+            with self.assertRaisesRegex(ConstraintError, "already exists"):
+                migrate_store(path)
+            self.assertEqual(Path(f"{path}.pre-v{SCHEMA_VERSION}.backup").read_text(), "earlier backup")
+            store = store_core.connect(path)
+            self.assertEqual(store.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0], "1")
+            store.close()
+
     def test_a_version_one_database_migrates_with_a_backup_and_keeps_its_items(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "old.sqlite"
@@ -44,6 +56,7 @@ class Migration(unittest.TestCase):
             result = migrate_store(path)
             self.assertEqual((result["from"], result["to"]), (1, SCHEMA_VERSION))
             self.assertTrue(Path(result["backup"]).is_file())
+            self.assertEqual(Path(result["backup"]).stat().st_mode & 0o777, 0o600)
             store = open_store(path)
             item = store.require("legacy_item", "leg-1")
             self.assertEqual((item["revision"], item["resolution"], item["reason"]), (1, None, "two values differ"))
