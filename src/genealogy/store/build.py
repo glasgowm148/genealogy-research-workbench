@@ -38,11 +38,32 @@ class LeakError(StoreError):
                          f"was left in place; inspect {staging} and change the research's access or wording.")
 
 
+WORD = re.compile(r"[\w'.-]+")
+
+
 def leak_scan(root: Path, terms: set[str], files: set[str] = frozenset()) -> list[dict[str, str]]:
-    usable = sorted((term for term in terms if term and len(term) >= 4), key=len, reverse=True)
+    """Find withheld terms as whole tokens in every output file (and withheld file names).
+
+    Terms are indexed by their first word, so each file costs one pass over its
+    own words rather than one search per term.
+    """
+    by_first: dict[str, list[tuple[str, list[str]]]] = {}
+    for term in terms:
+        words = WORD.findall(term)
+        if term and len(term) >= 4 and words:
+            by_first.setdefault(words[0], []).append((term, words))
     findings: list[dict[str, str]] = []
-    # Whole tokens only: a withheld file "tree.ged" is not leaked by "public-tree.ged".
-    pattern = re.compile(r"(?<![\w.-])(?:" + "|".join(re.escape(term) for term in usable) + r")(?![\w-])") if usable else None
+
+    def scan(text: str, where: str) -> None:
+        tokens = WORD.findall(text)
+        present = set(tokens)
+        for token in present & by_first.keys():
+            for term, words in by_first[token]:
+                if len(words) == 1 or (all(word in present for word in words)
+                                       and re.search(r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", text)):
+                    findings.append({"file": where, "term": term})
+                    return
+
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
@@ -52,16 +73,9 @@ def leak_scan(root: Path, terms: set[str], files: set[str] = frozenset()) -> lis
         if path.suffix.lower() in PRIVATE_SUFFIXES:
             findings.append({"file": relative, "term": "database file"})
             continue
-        if pattern is None:
-            continue
-        for match in pattern.finditer(relative):
-            findings.append({"file": relative, "term": match.group(0)})
-        if path.suffix.lower() not in TEXT_SUFFIXES:
-            continue
-        text = path.read_text(encoding="utf-8", errors="replace")
-        for match in pattern.finditer(text):
-            findings.append({"file": relative, "term": match.group(0)})
-            break
+        scan(relative.replace("/", " "), relative)
+        if path.suffix.lower() in TEXT_SUFFIXES:
+            scan(path.read_text(encoding="utf-8", errors="replace"), relative)
     return findings
 
 
