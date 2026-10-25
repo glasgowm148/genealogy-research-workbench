@@ -449,21 +449,51 @@ function catalogue(){
   if(at<0||to===undefined)return;e.preventDefault();const tab=tabs[(to+tabs.length)%tabs.length];tab.focus();tab.click();});
  sync(true);prev.addEventListener('click',()=>{page--;render();});next.addEventListener('click',()=>{page++;render();});render();keep();
 }
+// The tree views' icons in the view switch: one stroked path each, drawn in the button's colour.
+const VIEW_ICONS={atlas:'M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15zm0 4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zM10 2.5v4m0 7v4M2.5 10h4m7 0h4',
+ whole:'M4 5h3v3H4zm9 0h3v3h-3zM8.5 13h3v3h-3zM5.5 8v2.5h9V8M10 10.5V13',family:'M7 4.5a2 2 0 1 1 0 .1zm6 0a2 2 0 1 1 0 .1zM3.5 11c0-1.7 1.6-3 3.5-3s3.5 1.3 3.5 3m-1 0c0-1.7 1.6-3 3.5-3s3.5 1.3 3.5 3M10 13v3.5',
+ branches:'M10 17.5V11m0 0L5 7m5 4 5-4M5 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm10 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',hourglass:'M5 2.5h10M5 17.5h10M6 2.5c0 4 4 5 4 7.5s-4 3.5-4 7.5m8-15c0 4-4 5-4 7.5s4 3.5 4 7.5',
+ sun:'M10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0-4.5v2m0 11v2M2.5 10h2m11 0h2M4.7 4.7l1.4 1.4m7.8 7.8 1.4 1.4m0-10.6-1.4 1.4m-7.8 7.8-1.4 1.4',lanes:'M3 5.5h9m-9 4.5h13M3 14.5h7'};
+const viewIcon=key=>{const svg=svgEl('svg',{class:'view-icon',viewBox:'0 0 20 20','aria-hidden':'true'});svg.append(svgEl('path',{d:VIEW_ICONS[key]||''}));return svg;};
 function tree(){
  const output=$('#tree-output'),root=$('#tree-root');if(!output||!root)return;
  fillPeople(root);
  // The address can name the person and view in its query (?person=&view=) or its fragment (#view=branches&person=, a dossier's link).
  const asked=key=>new URLSearchParams(location.hash.slice(1)).get(key)||new URLSearchParams(location.search).get(key);
  const requested=asked('person');if(requested&&personBy.has(requested))root.value=requested;
- const controls=el('div',undefined,'tree-controls'),out=el('button','−'),inn=el('button','+'),reset=el('button','Fit tree'),help=el('span','Drag to pan · wheel or buttons to zoom','hint');out.setAttribute('aria-label','Zoom out');inn.setAttribute('aria-label','Zoom in');controls.append(out,inn,reset,help);output.before(controls);
+ // The page's workspace (site.py): a toolbar with the person search, the views and the zoom; the drawing; the person drawer.
+ const toolbar=$('.tree-toolbar'),workspace=$('.tree-workspace');
+ const controls=el('div',undefined,'tree-controls'),out=el('button','−'),inn=el('button','+'),reset=el('button','Fit tree'),help=el('span','Drag to pan · wheel or buttons to zoom','hint');out.setAttribute('aria-label','Zoom out');inn.setAttribute('aria-label','Zoom in');controls.append(out,inn,reset,help);
  let tx=0,ty=0,scale=1,group,svg,initial,mode=new URLSearchParams(location.search).get('person')&&personBy.has(new URLSearchParams(location.search).get('person'))?'family':'atlas',wholeController;
- const modes=el('div',undefined,'tree-modes');modes.setAttribute('role','group');modes.setAttribute('aria-label','Tree view');const modeButtons=new Map;for(const [value,label] of [['atlas','Atlas'],['whole','Whole tree'],['family','Focus family'],['branches','Branch cards'],['hourglass','Hourglass'],['sun','Family sun'],['lanes','Lanes']]){const button=el('button',label);button.dataset.treeView=value;button.setAttribute('aria-pressed',String(mode===value));button.addEventListener('click',()=>{mode=value;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));if(value!=='atlas'&&location.hash)history.replaceState(history.state,'',location.pathname+location.search);draw();});modes.append(button);modeButtons.set(value,button);}controls.before(modes);
+ const modes=el('div',undefined,'tree-modes');modes.setAttribute('role','group');modes.setAttribute('aria-label','Tree view');const modeButtons=new Map;for(const [value,label] of [['atlas','Atlas'],['whole','Whole tree'],['family','Focus family'],['branches','Branch cards'],['hourglass','Hourglass'],['sun','Family sun'],['lanes','Lanes']]){const button=el('button');button.append(viewIcon(value),label);button.dataset.treeView=value;button.setAttribute('aria-pressed',String(mode===value));button.addEventListener('click',()=>{mode=value;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));if(value!=='atlas'&&location.hash)history.replaceState(history.state,'',location.pathname+location.search);draw();});modes.append(button);modeButtons.set(value,button);}if(toolbar)toolbar.append(modes,controls);else{output.before(controls);controls.before(modes);}
+ // The selected person: a band above the title links to their other pages, and a drawer beside the drawing
+ // holds their profile (atlas.js draws it). The atlas keeps its own panel, so neither shows there.
+ const drawer=el('aside',undefined,'atlas-panel tree-drawer');drawer.hidden=true;drawer.setAttribute('aria-labelledby','tree-person');workspace?.append(drawer);
+ const band=el('div',undefined,'tree-context');band.hidden=true;$('.tree-intro')?.before(band);
+ let closedFor=null,drawerTab='overview';
+ const hasPage=page=>!!document.querySelector(`.site-sidebar a[href$="${page}"]`);
+ function selection(){const id=root.value,p=mode!=='atlas'&&personBy.get(id);toolbar?.classList.toggle('tree-toolbar-atlas',mode==='atlas');
+  const drawn=!!(p&&workspace&&closedFor!==id&&typeof window.GenealogyPersonPanel==='function');workspace?.classList.toggle('has-drawer',drawn);
+  if(drawn)window.GenealogyPersonPanel(drawer,id,atlasHelpers(),{uid:'tree-person',tab:()=>drawerTab,setTab:key=>{drawerTab=key;},select:pid=>{root.value=pid;draw();drawer.querySelector('h3')?.focus();},
+   selectLabel:who=>`Show ${who} in the tree`,close:()=>{closedFor=id;selection();},explore:pid=>openTreeView('branches',pid)});
+  else{drawer.hidden=true;drawer.replaceChildren();}
+  band.hidden=!p;band.replaceChildren();if(!p)return;
+  const top=el('div',undefined,'tree-context-top'),title=el('div',undefined,'tree-context-title'),clear=el('button','Clear selection & show all','tree-context-clear');clear.type='button';
+  title.append(el('span','Selected person','tree-context-label'),el('strong',name(p)),el('span',p.external_id||p.id,'tree-context-id'),el('p','The views below follow this selection. Use the links to read about this person elsewhere on the site.','tree-context-help'));
+  clear.addEventListener('click',()=>{root.value='';closedFor=null;modeButtons.get('atlas')?.click();});top.append(title,clear);
+  const tabs=el('nav',undefined,'tree-context-tabs');tabs.setAttribute('aria-label',`About ${name(p)}`);const link=(href,words)=>{const a=el('a',words);a.href=href;tabs.append(a);};
+  const page=links[p.id];if(page)link(page,'Overview');const here=el('span','Family tree');here.setAttribute('aria-current','page');tabs.append(here);
+  if(page){link(`${page}#events`,'Life events');link(`${page}#research`,'Research');}
+  if(hasPage('timeline.html'))link(`timeline.html?q=${encodeURIComponent(name(p))}`,'Timeline');
+  if(hasPage('connections.html'))link(`connections.html?a=${encodeURIComponent(p.id)}`,'Find a connection');
+  band.append(top,tabs);}
  // ?view=hourglass, sun or lanes opens that view (with ?person=, around that person).
  {const view=asked('view');if(TREE_VIEWS[view]){mode=view;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));}}
  // The atlas's "Explore this family" opens another view on its person.
  openTreeView=(value,id)=>{root.value=id;mode=value;modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));history.replaceState(history.state,'',location.pathname+location.search);draw();modes.scrollIntoView?.({block:'nearest'});};
  function transform(){group?.setAttribute('transform',`translate(${tx} ${ty}) scale(${scale})`);}
- function draw(){wholeController?.dispose();wholeController=null;output.replaceChildren();controls.hidden=mode==='atlas';if(mode==='whole'){wholeController=wholeTree(output,root,()=>{mode='family';modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});return;}if(TREE_VIEWS[mode]){wholeController=TREE_VIEWS[mode](output,root,id=>{root.value=id;draw();});return;}const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return;}
+ function draw(){drawView();selection();}
+ function drawView(){wholeController?.dispose();wholeController=null;output.replaceChildren();controls.hidden=mode==='atlas';if(mode==='whole'){wholeController=wholeTree(output,root,()=>{mode='family';modeButtons.forEach((b,v)=>b.setAttribute('aria-pressed',String(v===mode)));draw();});return;}if(TREE_VIEWS[mode]){wholeController=TREE_VIEWS[mode](output,root,id=>{root.value=id;draw();});return;}const id=root.value||people[0]?.id;if(!personBy.has(id)){output.append(empty('No public people available to draw.'));return;}
  const nodes=new Map([[id,{id,depth:0}]]),edges=[];let frontier=[id];for(let depth=0;depth<3;depth++){const next=[];for(const n of frontier){for(const r of relationships){const sibling=SIBLING_KINDS.includes(r.kind);if(r.confidence==='disproved'||!(sibling||['parent','father','mother','parent_child','child','biological_parent','adoptive_parent'].includes(r.kind)))continue;if(r.subject_id!==n&&r.object_id!==n)continue;const other=r.subject_id===n?r.object_id:r.subject_id;if(!personBy.has(other))continue;const d=nodes.get(n).depth+(sibling?0:r.subject_id===n?-1:1);if(!nodes.has(other)&&nodes.size<70){nodes.set(other,{id:other,depth:d});next.push(other);}if(nodes.has(other)&&!edges.some(e=>e.id===r.id))edges.push(r);}}frontier=next;}
  const columns=new Map;nodes.forEach(n=>{if(!columns.has(n.depth))columns.set(n.depth,[]);columns.get(n.depth).push(n);});let minD=Math.min(...columns.keys());columns.forEach((col,depth)=>col.forEach((n,i)=>{n.x=(depth-minD)*235+25;n.y=i*82+30;}));const width=(Math.max(...columns.keys())-minD+1)*235+25,height=Math.max(1,...[...columns.values()].map(c=>c.length))*82+30;
  const viewport=el('div',undefined,'tree-viewport');svg=svgEl('svg',{viewBox:`0 0 ${width} ${Math.max(height,270)}`,role:'img','aria-label':`Family connections around ${name(personBy.get(id))}`});group=svgEl('g');svg.append(group);edges.forEach(r=>{const a=nodes.get(r.subject_id),b=nodes.get(r.object_id);if(!a||!b)return;const side=a.x===b.x;group.append(svgEl('path',{d:side?`M${a.x+200},${a.y+27} C${a.x+228},${a.y+27} ${b.x+228},${b.y+27} ${b.x+200},${b.y+27}`:`M${a.x+100},${a.y+25} C${(a.x+b.x)/2+100},${a.y+25} ${(a.x+b.x)/2+100},${b.y+25} ${b.x+100},${b.y+25}`,class:`tree-edge ${SIBLING_KINDS.includes(r.kind)?'sibling':''} ${['documented','probable'].includes(r.confidence)?'':'uncertain'}`}));});nodes.forEach(n=>{const p=personBy.get(n.id),g=svgEl('g',{class:`tree-node ${n.id===id?'focus':''}`,transform:`translate(${n.x} ${n.y})`,tabindex:0,role:'button','aria-label':`Focus on ${name(p)}`});g.append(svgEl('rect',{width:200,height:55,rx:6}));const t=svgEl('text',{x:12,y:23});t.textContent=name(p).length>25?name(p).slice(0,24)+'…':name(p);const m=svgEl('text',{x:12,y:42,class:'node-meta'});m.textContent=dates(p).join(' – ');g.append(t,m);const focus=()=>{root.value=p.id;draw();};g.addEventListener('click',focus);g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();focus();}});group.append(g);});viewport.append(svg);output.append(viewport);const note=el('p',`Showing ${nodes.size} people within three connection steps. Dashed lines mark uncertain relationships. Recorded connections are not proof.`,'hint');output.append(note);
@@ -669,10 +699,13 @@ const assess=r=>{const c=String(r?.confidence||'unknown'),g=GRADES[r?.grade],lev
 for(const [key,make] of Object.entries(window.GENEALOGY_TREE_VIEWS||{})){try{TREE_VIEWS[key]=make({people,personBy,placeBy,relationships,links,el,svgEl,name,lifespan,pe,year,assess,empty,PARENT_KINDS,PARTNER_KINDS,SIBLING_KINDS});}catch(error){console.warn('Optional genealogy enhancement unavailable:',key,error);}}
 // The atlas lives in atlas.js, loaded on the tree page only; it draws with these helpers.
 let openTreeView=null;
-TREE_VIEWS.atlas=(output,menu)=>{if(typeof window.GenealogyAtlas!=='function'){output.append(empty('The atlas could not be loaded. Choose another view, or read the family list below.'));return NO_VIEW;}
- const studyUrls=data.site?.study_urls||{};
- return window.GenealogyAtlas(output,menu,{data,people,personBy,placeBy,kin,name,lifespan,shownDates,pe,eventDate,regionOfPlace,links,el,empty,relBadges,firm,canonical,surnameOf,fold,FAMILY,GRADES,plural,year,byDate,prefix:root,
-  studies:list('studies'),claimsOf:id=>claimsByPerson.get(id)||[],studyUrl:id=>root+(studyUrls[id]||`studies/s-${sha256(id)}.html`),open:(value,id)=>openTreeView?.(value,id)});};
+// One helper object for the atlas and the tree page's person drawer, both drawn by atlas.js.
+let atlasH=null;
+const atlasHelpers=()=>{if(atlasH)return atlasH;const studyUrls=data.site?.study_urls||{};
+ return atlasH={data,people,personBy,placeBy,kin,name,lifespan,shownDates,pe,eventDate,regionOfPlace,links,el,empty,relBadges,firm,canonical,surnameOf,fold,FAMILY,GRADES,plural,year,byDate,prefix:root,
+  studies:list('studies'),claimsOf:id=>claimsByPerson.get(id)||[],studyUrl:id=>root+(studyUrls[id]||`studies/s-${sha256(id)}.html`),open:(value,id)=>openTreeView?.(value,id)};};
+TREE_VIEWS.atlas=(output,menu)=>{if(typeof window.GenealogyAtlas!=='function'){output.append(empty('The atlas could not be loaded. Choose another view.'));return NO_VIEW;}
+ return window.GenealogyAtlas(output,menu,atlasHelpers());};
 // The dossier anchors each relationship as "r-" + the SHA-256 of its id (site.py's _anchor), so a step can link to its entry.
 function sha256(text){
  const K=[],H=[],prime=n=>{for(let d=2;d*d<=n;d++)if(n%d===0)return false;return true;};
@@ -1066,7 +1099,7 @@ function records(){
 }
 // After tree, comparison and connections, which fill and preselect these menus.
 // The form pages' boxes suggest the first two public people as examples.
-function personPickers(){const ex=i=>({hide:true,...(people[i]?{placeholder:`e.g. ${name(people[i])}`}:{})});for(const [menu,label,opts] of [['#tree-root','Find a person to explore from'],['[data-compare-a]','Find the first person',ex(0)],['[data-compare-b]','Find the second person',ex(1)],['[data-connection-a]','Find the first person',ex(0)],['[data-connection-b]','Find the second person',ex(1)]])picker($(menu),label,opts);}
+function personPickers(){const ex=i=>({hide:true,...(people[i]?{placeholder:`e.g. ${name(people[i])}`}:{})});for(const [menu,label,opts] of [['#tree-root','Find a person to explore from',{hide:true,placeholder:'Search within the family tree'}],['[data-compare-a]','Find the first person',ex(0)],['[data-compare-b]','Find the second person',ex(1)],['[data-connection-a]','Find the first person',ex(0)],['[data-connection-b]','Find the second person',ex(1)]])picker($(menu),label,opts);}
 // Latest findings: filter the table by words, type, status, person, study and place. Every filter is in the address
 // (?q=&kind=&status=&person=&study=&place=&order=), so the "Findings by study" and "by place" links open a filtered view.
 // A long log's page holds only the newest findings; it then loads data/findings-index.js, so a filter searches them all.

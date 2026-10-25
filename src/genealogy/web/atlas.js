@@ -14,11 +14,50 @@ const MODES={colour:[['country','Country'],['family','Family'],['evidence','Evid
 // Kept between redraws of the view (a choice in the person box rebuilds it), and in the address.
 let state=null;
 
+// ---- The person profile: who, when and where, links out, then Overview, Family and Research tabs. The atlas
+// shows it beside its drawing; the tree page's other views show it in their drawer (site.js), through
+// window.GenealogyPersonPanel. o: uid, tab() and setTab(key), select(id), selectLabel(name), close(), explore(id).
+const kinCache=new WeakMap;
+function personPanel(panel,id,h,o){
+ const {el,personBy,name}=h,A=h.data.site?.atlas||{},p=personBy.get(id);if(!p)return;
+ if(!kinCache.has(h))kinCache.set(h,h.kin());const {parents,children,partners}=kinCache.get(h),uidp=o.uid;
+ const button=(text,cls)=>{const b=el('button',text,cls);b.type='button';return b;};
+ const linkTo=(href,text,cls)=>{const a=el('a',text,cls);a.href=href;return a;};
+ function relativeList(title,rows){const box=el('div',undefined,'atlas-relatives');box.append(el('h4',title));if(!rows.length){box.append(el('p','None recorded.','meta'));return box;}const ul=el('ul');
+  for(const {id:rid,r} of rows){const q=personBy.get(rid);if(!q)continue;const li=el('li'),b=button(name(q),'atlas-relative');b.setAttribute('aria-label',o.selectLabel(name(q)));b.addEventListener('click',()=>o.select(rid));li.append(b);const span=h.lifespan(q);if(span)li.append(el('span',` ${span}`,'meta'));if(r){const m=el('span',undefined,'atlas-badges');m.append(' ',...h.relBadges(r));li.append(m);}ul.append(li);}box.append(ul);return box;}
+ panel.hidden=false;panel.replaceChildren();
+ const head=el('div',undefined,'atlas-panel-head'),close=button('×','atlas-close');close.setAttribute('aria-label','Close the person profile');close.addEventListener('click',()=>o.close());head.append(el('p','Person profile','eyebrow'),close);
+ const title=el('h3',name(p));title.id=uidp;title.tabIndex=-1;
+ const [born,died]=h.shownDates(p);panel.append(head,el('p',p.external_id||id,'record-id'),title,el('p',[born,died].filter(v=>v!=='Unknown').join(' – ')||'Dates not recorded','lifespan'));
+ const actions=el('p',undefined,'atlas-actions'),profile=A.profiles?.[id];
+ if(profile){const a=linkTo(profile[1],`${profile[0]} ↗`,'button');a.rel='noopener';actions.append(a,' ');}
+ actions.append(linkTo(`${h.prefix}catalogue.html?q=${encodeURIComponent(p.external_id||id)}`,'Catalogue','button button-quiet'));panel.append(actions);
+ const reads=el('ul',undefined,'atlas-reads');if(h.links[id]){const li=el('li');li.append(linkTo(h.links[id],'Read current assessment & sources →'));reads.append(li);const ev=el('li');ev.append(linkTo(`${h.links[id]}#events`,'Open this person’s events and places'));reads.append(ev);}if(reads.childElementCount)panel.append(reads);
+ const ev=h.pe(p).sort(h.byDate),regions=[];for(const e of ev){const pl=h.placeBy.get(e.place_id);const r=pl&&h.regionOfPlace(pl);if(r&&regions[regions.length-1]!==r)regions.push(r);}
+ if(regions.length)panel.append(el('p',regions.join(' → '),'atlas-route'));
+ const tabs=el('div',undefined,'atlas-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label',`About ${name(p)}`);const bodies=[];
+ const overview=el('dl',undefined,'atlas-facts');for(const e of ev.slice(0,8)){const pl=h.placeBy.get(e.place_id),row=el('div');row.append(el('dt',e.kind.replace(/_/g,' ').replace(/^./,c=>c.toUpperCase())));const dd=el('dd',h.eventDate(e));if(pl)dd.append(el('span',pl.name,'meta'));row.append(dd);overview.append(row);}
+ if(!ev.length)overview.append(el('p','No public events recorded.','meta'));if(ev.length>8)overview.append(el('p',`${ev.length-8} more events on the person’s page.`,'meta'));
+ const fam=el('div');fam.append(relativeList('Parents',parents.get(id)||[]),relativeList('Spouses and partners',partners.get(id)||[]),relativeList('Children',children.get(id)||[]));
+ const research=el('div'),claims=(h.claimsOf(id)||[]),studies=h.studies.filter(s=>(s.related_ids||[]).includes(id)),changes=p.changes||[];
+ research.append(el('p',claims.length?`${h.plural(claims.length,'claim')} recorded, ${claims.filter(c=>c.status==='supported').length} supported by evidence.`:'No claims recorded yet.'));
+ if(studies.length){research.append(el('h4','Studies'));const ul=el('ul');for(const s of studies){const li=el('li');li.append(linkTo(h.studyUrl(s.id),s.title||s.id));ul.append(li);}research.append(ul);}
+ if(changes.length)research.append(el('p',`${h.plural(changes.length,'relationship change')} waiting to be made on ${A.tree_name||'the tree'}.`,'meta'));
+ if(h.links[id]){const more=el('p');more.append(linkTo(`${h.links[id]}#research`,'Research notes on the person’s page →'));research.append(more);}
+ for(const [key,words,body] of [['overview','Overview',overview],['family','Family',fam],['research','Research',research]]){const tab=button(words),pane=el('div',undefined,'atlas-pane');tab.id=`${uidp}-tab-${key}`;pane.id=`${uidp}-pane-${key}`;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',pane.id);pane.setAttribute('role','tabpanel');pane.setAttribute('aria-labelledby',tab.id);pane.tabIndex=0;pane.append(body);tab.dataset.tab=key;tabs.append(tab);bodies.push([key,tab,pane]);
+  tab.addEventListener('click',()=>{o.setTab(key);show();});}
+ const show=()=>{const current=bodies.some(([key])=>key===o.tab())?o.tab():'overview';for(const [key,tab,pane] of bodies){const on=key===current;tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;pane.hidden=!on;}};
+ tabs.addEventListener('keydown',e=>{const i=Math.max(0,bodies.findIndex(([key])=>key===o.tab())),move={ArrowRight:1,ArrowLeft:-1,Home:-i,End:bodies.length-1-i}[e.key];if(move===undefined)return;e.preventDefault();o.setTab(bodies[(i+move+bodies.length)%bodies.length][0]);show();bodies.find(([key])=>key===o.tab())[1].focus();});
+ show();panel.append(tabs,...bodies.map(([,,pane])=>pane));
+ const explore=button('Explore this family →','atlas-explore');explore.addEventListener('click',()=>o.explore(id));panel.append(explore);
+}
+window.GenealogyPersonPanel=personPanel;
+
 window.GenealogyAtlas=function atlas(output,menu,h){
  const {el,people,personBy,name}=h,A=h.data.site?.atlas||{},groups=A.groups||[],kids=A.kids||{},beside=A.beside||{};
  if(!people.length){output.append(h.empty('No public people available to draw.'));return {zoom(){},fit(){},dispose(){}};}
  const hash=new URLSearchParams(location.hash.slice(1)),pick=(key,value)=>MODES[key].some(([v])=>v===value)?value:MODES[key][0][0];
- if(!state)state={colour:pick('colour',hash.get('colour')),arrange:pick('arrange',hash.get('arrange')),show:pick('show',hash.get('show')),born:Number(hash.get('born'))||null,k:1,cx:0,cy:0,tools:true,list:false,tab:'overview',selected:null};
+ if(!state)state={colour:pick('colour',hash.get('colour')),arrange:pick('arrange',hash.get('arrange')),show:pick('show',hash.get('show')),born:Number(hash.get('born'))||null,k:1,cx:0,cy:0,tools:false,tab:'overview',selected:null};
  const {parents,children,partners}=h.kin(),nodes=new Map;
 
  // Layout: each group a sector as wide as its share of the people; within it every person has a span of
@@ -69,10 +108,9 @@ window.GenealogyAtlas=function atlas(output,menu,h){
  const lead=el('p',`Time runs outward from ${lo}. Drag the year slider to watch the families grow.`,'hint');intro.append(el('p','The whole tree','eyebrow'),heading,lead);
  const bar=el('div',undefined,'atlas-bar'),search=el('input'),searchLabel=el('label');search.type='search';search.id=`${uid}-search`;search.setAttribute('autocomplete','off');search.placeholder='Search within the family tree';searchLabel.htmlFor=search.id;searchLabel.className='sr-only';searchLabel.textContent='Search within the family tree';
  const searchWrap=el('div',undefined,'atlas-search');searchWrap.append(searchLabel,search);
- const families=document.querySelector('[data-atlas-families]'),listButton=el('button','Readable family list'),toolsButton=el('button','Filters & tools');
- if(families){listButton.setAttribute('aria-controls',families.id);}else listButton.hidden=true;
+ const toolsButton=el('button','Filters & tools');
  const tools=el('div',undefined,'atlas-tools');tools.id=`${uid}-tools`;toolsButton.setAttribute('aria-controls',tools.id);
- bar.append(searchWrap,listButton,toolsButton);
+ bar.append(searchWrap,toolsButton);
  const results=el('div',undefined,'atlas-results'),resultStatus=el('p','','meta'),resultList=el('ul');resultStatus.setAttribute('role','status');results.append(resultStatus,resultList);
  // The year slider and its Play button.
  const slider=el('input'),sliderId=`${uid}-born`,sliderLabel=el('label','Born by'),sliderValue=el('output'),play=el('button','Play'),allYears=el('button','All');
@@ -185,39 +223,12 @@ window.GenealogyAtlas=function atlas(output,menu,h){
  function select(id,{centre=false,focus=false}={}){const n=nodes.get(id);if(!n)return;state.selected=id;if(menu)menu.value=id;if(centre){if(!visible(n)){state.born=null;state.show='all';}positions();centreOn(n);}fill(n);sync();schedule();announce.textContent=`${name(n.p)} selected.`;if(focus)panel.querySelector('h3')?.focus();}
  function clear(){state.selected=null;if(menu)menu.value='';panel.hidden=true;panel.replaceChildren();sync();schedule();announce.textContent='Selection cleared.';canvas.focus();}
  const button=(text,cls)=>{const b=el('button',text,cls);b.type='button';return b;};
- const linkTo=(href,text,cls)=>{const a=el('a',text,cls);a.href=href;return a;};
- function relativeList(title,rows){const box=el('div',undefined,'atlas-relatives');box.append(el('h4',title));if(!rows.length){box.append(el('p','None recorded.','meta'));return box;}const ul=el('ul');
-  for(const {id,r} of rows){const p=personBy.get(id),li=el('li'),b=button(name(p),'atlas-relative');b.setAttribute('aria-label',`Select ${name(p)} in the atlas`);b.addEventListener('click',()=>select(id,{centre:true,focus:true}));li.append(b);const span=h.lifespan(p);if(span)li.append(el('span',` ${span}`,'meta'));if(r){const m=el('span',undefined,'atlas-badges');m.append(' ',...h.relBadges(r));li.append(m);}ul.append(li);}box.append(ul);return box;}
- function fill(n){const p=n.p,id=n.id,uidp=`${uid}-person`;panel.hidden=false;panel.replaceChildren();
-  const head=el('div',undefined,'atlas-panel-head'),close=button('×','atlas-close');close.setAttribute('aria-label','Close the person profile');close.addEventListener('click',clear);head.append(el('p','Person profile','eyebrow'),close);
-  const title=el('h3',name(p));title.id=uidp;title.tabIndex=-1;
-  const [born,died]=h.shownDates(p);panel.append(head,el('p',p.external_id||id,'record-id'),title,el('p',[born,died].filter(v=>v!=='Unknown').join(' – ')||'Dates not recorded','lifespan'));
-  const actions=el('p',undefined,'atlas-actions'),profile=A.profiles?.[id];
-  if(profile){const a=linkTo(profile[1],`${profile[0]} ↗`,'button');a.rel='noopener';actions.append(a,' ');}
-  actions.append(linkTo(`${h.prefix}catalogue.html?q=${encodeURIComponent(p.external_id||id)}`,'Catalogue','button button-quiet'));panel.append(actions);
-  const reads=el('ul',undefined,'atlas-reads');if(h.links[id]){const li=el('li');li.append(linkTo(h.links[id],'Read current assessment & sources →'));reads.append(li);const ev=el('li');ev.append(linkTo(`${h.links[id]}#events`,'Open this person’s events and places'));reads.append(ev);}if(reads.childElementCount)panel.append(reads);
-  const ev=h.pe(p).sort(h.byDate),regions=[];for(const e of ev){const pl=h.placeBy.get(e.place_id);const r=pl&&h.regionOfPlace(pl);if(r&&regions[regions.length-1]!==r)regions.push(r);}
-  if(regions.length)panel.append(el('p',regions.join(' → '),'atlas-route'));
-  const tabs=el('div',undefined,'atlas-tabs');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label',`About ${name(p)}`);const bodies=[];
-  const overview=el('dl',undefined,'atlas-facts');for(const e of ev.slice(0,8)){const pl=h.placeBy.get(e.place_id),row=el('div');row.append(el('dt',e.kind.replace(/_/g,' ').replace(/^./,c=>c.toUpperCase())));const dd=el('dd',h.eventDate(e));if(pl)dd.append(el('span',pl.name,'meta'));row.append(dd);overview.append(row);}
-  if(!ev.length)overview.append(el('p','No public events recorded.','meta'));if(ev.length>8)overview.append(el('p',`${ev.length-8} more events on the person’s page.`,'meta'));
-  const fam=el('div');fam.append(relativeList('Parents',parents.get(id)||[]),relativeList('Spouses and partners',partners.get(id)||[]),relativeList('Children',children.get(id)||[]));
-  const research=el('div'),claims=(h.claimsOf(id)||[]),studies=h.studies.filter(s=>(s.related_ids||[]).includes(id)),changes=p.changes||[];
-  research.append(el('p',claims.length?`${h.plural(claims.length,'claim')} recorded, ${claims.filter(c=>c.status==='supported').length} supported by evidence.`:'No claims recorded yet.'));
-  if(studies.length){research.append(el('h4','Studies'));const ul=el('ul');for(const s of studies){const li=el('li');li.append(linkTo(h.studyUrl(s.id),s.title||s.id));ul.append(li);}research.append(ul);}
-  if(changes.length)research.append(el('p',`${h.plural(changes.length,'relationship change')} waiting to be made on ${A.tree_name||'the tree'}.`,'meta'));
-  if(h.links[id]){const more=el('p');more.append(linkTo(`${h.links[id]}#research`,'Research notes on the person’s page →'));research.append(more);}
-  for(const [key,words,body] of [['overview','Overview',overview],['family','Family',fam],['research','Research',research]]){const tab=button(words),pane=el('div',undefined,'atlas-pane');tab.id=`${uidp}-tab-${key}`;pane.id=`${uidp}-pane-${key}`;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',pane.id);pane.setAttribute('role','tabpanel');pane.setAttribute('aria-labelledby',tab.id);pane.tabIndex=0;pane.append(body);tab.dataset.tab=key;tabs.append(tab);bodies.push([key,tab,pane]);
-   tab.addEventListener('click',()=>{state.tab=key;show();});}
-  const show=()=>{for(const [key,tab,pane] of bodies){const on=key===state.tab;tab.setAttribute('aria-selected',String(on));tab.tabIndex=on?0:-1;pane.hidden=!on;}};
-  tabs.addEventListener('keydown',e=>{const i=bodies.findIndex(([key])=>key===state.tab),move={ArrowRight:1,ArrowLeft:-1,Home:-i,End:bodies.length-1-i}[e.key];if(move===undefined)return;e.preventDefault();state.tab=bodies[(i+move+bodies.length)%bodies.length][0];show();bodies.find(([key])=>key===state.tab)[1].focus();});
-  show();panel.append(tabs,...bodies.map(([,,pane])=>pane));
-  const explore=button('Explore this family →','atlas-explore');explore.addEventListener('click',()=>h.open('branches',id));panel.append(explore);}
+ function fill(n){personPanel(panel,n.id,h,{uid:`${uid}-person`,tab:()=>state.tab,setTab:key=>{state.tab=key;},select:id=>select(id,{centre:true,focus:true}),selectLabel:who=>`Select ${who} in the atlas`,close:clear,explore:id=>h.open('branches',id)});}
 
- // ---- Controls, the address and the readable list.
+ // ---- Controls and the address.
  function sync(){for(const key of Object.keys(choices))for(const [value,b] of choices[key])b.setAttribute('aria-pressed',String(state[key]===value));
   slider.value=String(cut());sliderValue.textContent=state.born===null?'all years':String(state.born);allYears.disabled=state.born===null;
-  toolsButton.setAttribute('aria-expanded',String(state.tools));tools.hidden=!state.tools;listButton.setAttribute('aria-expanded',String(state.list));if(families)families.hidden=!state.list;
+  toolsButton.setAttribute('aria-expanded',String(state.tools));tools.hidden=!state.tools;
   swatches.replaceChildren(...categories[state.colour].legend.map(([words,n,c])=>{const li=el('li'),sw=el('span',undefined,'atlas-swatch');sw.style.background=c;sw.setAttribute('aria-hidden','true');li.append(sw,`${words} `,el('span',n.toLocaleString(),'meta'));return li;}));
   const named=sectors.filter(s=>s.anchor).length;count.textContent=`${h.plural(shown.length,'person')} shown of ${all.length.toLocaleString()} · ${h.plural(named,'family group')} around the edge${sectors.length>named?', and those with no recorded relatives':''}`;
   canvas.setAttribute('aria-label',`Atlas of the whole tree: ${h.plural(shown.length,'person')} on rings by ${state.arrange==='generation'?'generation':`birth year from ${lo} to ${cut()}`}, coloured by ${state.colour}, in ${h.plural(sectors.length,'sector')}.${state.selected?` ${name(personBy.get(state.selected))} is selected.`:''}`);
@@ -230,9 +241,6 @@ window.GenealogyAtlas=function atlas(output,menu,h){
  play.addEventListener('click',()=>{if(playing){stopPlay();return;}if(state.born===null||state.born>=hi)state.born=lo;play.textContent='Pause';play.setAttribute('aria-pressed','true');const by=Math.max(1,Math.round((hi-lo)/90));
   playing=setInterval(()=>{const next=(state.born??lo)+by;state.born=next>=hi?null:next;if(state.born===null)stopPlay();refresh();},90);refresh();});
  toolsButton.addEventListener('click',()=>{state.tools=!state.tools;sync();schedule();});
- listButton.addEventListener('click',()=>{state.list=!state.list;sync();if(state.list)families?.querySelector('h2')?.scrollIntoView?.({block:'nearest'});});
- // Each person in the readable list can be chosen in the atlas from the keyboard.
- const added=[];if(families)for(const li of families.querySelectorAll('li[data-person-id]')){const id=li.dataset.personId;if(!nodes.has(id))continue;const b=button('Show','atlas-show');b.setAttribute('aria-label',`Show ${name(personBy.get(id))} in the atlas`);b.addEventListener('click',()=>{select(id,{centre:true,focus:true});section.scrollIntoView?.({block:'start'});});const first=li.querySelector(':scope > ul');li.insertBefore(b,first);li.insertBefore(document.createTextNode(' '),b);added.push(b);}
  // Search within the tree: matches stay bright on the drawing and the first eight are listed to choose from.
  const searchText=new Map(all.map(n=>[n.id,h.fold([...(n.p.names||[]).map(x=>x.value),n.id,n.p.external_id||''].join(' '))]));
  function find(){const words=h.fold(search.value).trim().split(/\s+/).filter(Boolean);if(!words.length){matches=null;resultList.replaceChildren();resultStatus.textContent='';results.hidden=true;schedule();return;}
@@ -246,6 +254,6 @@ window.GenealogyAtlas=function atlas(output,menu,h){
  positions();const asked=menu?.value&&nodes.has(menu.value)?menu.value:null;
  if(asked&&asked!==state.selected)select(asked,{centre:true});else if(asked)fill(nodes.get(asked));else{state.selected=null;}
  sync();changed();
- return {zoom:f=>zoom(f),fit,dispose(){dead=true;stopPlay();if(frame)cancelAnimationFrame(frame);observer?.disconnect();added.forEach(b=>{b.previousSibling?.remove();b.remove();});if(families)families.hidden=false;}};
+ return {zoom:f=>zoom(f),fit,dispose(){dead=true;stopPlay();if(frame)cancelAnimationFrame(frame);observer?.disconnect();}};
 };
 })();

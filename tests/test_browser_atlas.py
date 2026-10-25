@@ -88,6 +88,12 @@ class AtlasBrowserTests(unittest.TestCase):
         self.assertTrue(page.locator('.tree-controls').is_hidden())
         self.assertEqual('7 people shown of 7 · 1 family group around the edge, and those with no recorded relatives',
                          page.locator('.atlas-count').inner_text())
+        # Filters & tools starts folded, as on the Glasgow site, and opens over the drawing.
+        tools = page.get_by_role('button', name='Filters & tools')
+        self.assertEqual('false', tools.get_attribute('aria-expanded'))
+        self.assertTrue(page.locator('.atlas-tools').is_hidden())
+        tools.click()
+        self.assertEqual('true', tools.get_attribute('aria-expanded'))
         for name in ('Everyone', 'Year', 'Country'):
             self.assertEqual('true', page.get_by_role('button', name=name, exact=True).get_attribute('aria-pressed'))
         self.assertEqual('all years', page.locator('.atlas-years output').inner_text())
@@ -131,8 +137,7 @@ class AtlasBrowserTests(unittest.TestCase):
         self.assertEqual('140%', level.inner_text())
         page.keyboard.press('0')
         self.assertEqual('100%', level.inner_text())
-        # Filters & tools folds the controls away.
-        tools = page.get_by_role('button', name='Filters & tools')
+        # Filters & tools folds the controls away again.
         tools.click()
         self.assertEqual('false', tools.get_attribute('aria-expanded'))
         self.assertTrue(page.locator('.atlas-tools').is_hidden())
@@ -143,7 +148,9 @@ class AtlasBrowserTests(unittest.TestCase):
         panel = page.locator('[data-atlas-panel]')
         self.assertEqual('Corin Fable', panel.locator('h3').inner_text())
         self.assertEqual('p0003', page.locator('#tree-root').input_value())
-        self.assertEqual('Corin Fable', page.get_by_role('combobox', name='Find a person to explore from').input_value())
+        # The atlas has its own search, so the tree's search box is out of sight here but keeps the choice.
+        self.assertEqual('Corin Fable', page.locator('.tree-toolbar [role=combobox]').input_value())
+        self.assertTrue(page.locator('.tree-toolbar [role=combobox]').is_hidden())
         self.assertTrue(panel.get_by_role('link', name='Read current assessment & sources →').get_attribute('href').startswith('people/p-'))
         self.assertEqual('catalogue.html?q=p0003', panel.get_by_role('link', name='Catalogue').get_attribute('href'))
         self.assertEqual(0, panel.get_by_role('link', name='FableTree ↗').count())  # Corin has no tree profile
@@ -181,7 +188,7 @@ class AtlasBrowserTests(unittest.TestCase):
         self.assertEqual('p0003', page.locator('#tree-root').input_value())
         self.assertEqual(0, page.locator('[data-atlas-canvas]').count())
 
-    def test_search_within_the_tree_and_the_readable_family_list(self):
+    def test_search_within_the_tree(self):
         page = self.open('atlas/tree.html')
         search = page.get_by_role('searchbox', name='Search within the family tree')
         search.fill('fable')
@@ -193,23 +200,9 @@ class AtlasBrowserTests(unittest.TestCase):
         self.assertTrue(page.evaluate("document.activeElement.matches('[data-atlas-panel] h3')"))
         search.fill('nobody here')
         self.assertIn('No public person in the tree matches', page.locator('.atlas-results').inner_text())
-        # The readable list is folded behind its button and lists each family as nested lists.
-        families = page.locator('[data-atlas-families]')
-        toggle = page.get_by_role('button', name='Readable family list')
-        self.assertTrue(families.is_hidden())
-        toggle.click()
-        self.assertEqual('true', toggle.get_attribute('aria-expanded'))
-        self.assertTrue(families.is_visible())
-        self.assertEqual(1, families.locator('li[data-person-id="p0002"] > ul > li[data-person-id="p0003"] > ul > li[data-person-id="p0006"]').count())
-        show = families.get_by_role('button', name='Show Eli Fable in the atlas')
-        show.focus()
-        page.keyboard.press('Enter')
-        self.assertEqual('Eli Fable', page.locator('[data-atlas-panel] h3').inner_text())
-        # Leaving the atlas restores the list as plain text.
-        page.locator('[data-tree-view="whole"]').click()
-        self.assertTrue(families.is_visible())
-        self.assertEqual(0, families.locator('button').count())
-        self.assertEqual('', self.hash())
+        # The readable family list is the page's text without scripts only; with them it is not on the page.
+        self.assertEqual(0, page.locator('[data-atlas-families]').count())
+        self.assertEqual(0, page.get_by_role('button', name='Readable family list').count())
 
     def test_without_javascript_the_family_list_is_the_tree(self):
         page = self.open('atlas/tree.html', javascript=False)
@@ -245,8 +238,6 @@ class AtlasBrowserTests(unittest.TestCase):
             self.assertTrue(page.locator('[data-atlas-panel]').is_visible())
             self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), width, width)
             self.axe(f'large atlas, person selected, {width}')
-            page.get_by_role('button', name='Readable family list').click()
-            self.axe(f'large atlas, family list open, {width}')
             self.context.close()
             self.assertEqual([], self.errors, width)
             del self.context

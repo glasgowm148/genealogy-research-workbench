@@ -205,6 +205,7 @@ class ProjectConfig:
         safe_relative_path(self.case_directory, setting="project.case_directory")
         site_contact(self.raw.get("site", {}))
         self.dna_heading  # validates [site] dna_heading
+        self.brand  # validates [site] brand_name and brand_caption
         home_settings(self.raw.get("home", {}))
         for key in ("allow_living", "allow_licensed", "allow_restricted"):
             if key in self.privacy:
@@ -342,6 +343,19 @@ class ProjectConfig:
         if value is not None and (not isinstance(value, str) or not value.strip() or _control(value) or len(value.strip()) > 60):
             raise ValueError("site.dna_heading must be a non-empty string of at most 60 characters")
         return value.strip() if value is not None else "DNA"
+
+    @property
+    def brand(self) -> tuple[str, str]:
+        """The sidebar's wordmark: ``[site] brand_name`` set large ("Glasgow") over ``brand_caption`` ("Surname
+        Project"). Unset, the project's name is the wordmark and the caption is the site's tagline."""
+        site = self.raw.get("site") or {}
+        values = []
+        for key, default, limit in (("brand_name", self.name, 120), ("brand_caption", "People · records · evidence", 60)):
+            value = site.get(key)
+            if value is not None and (not isinstance(value, str) or not value.strip() or _control(value) or len(value.strip()) > limit):
+                raise ValueError(f"site.{key} must be a non-empty string of at most {limit} characters")
+            values.append(value.strip() if value is not None else default)
+        return values[0], values[1]
 
     def to_dict(self) -> dict[str, Any]:
         # Preserve project-defined extension sections so a toolkit upgrade does

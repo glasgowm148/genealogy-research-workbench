@@ -112,7 +112,7 @@ class TreeViewBrowserTests(unittest.TestCase):
         self.assertIn('2 ancestors in 2 generations above, 1 descendant in 1 generation below, 0 spouses or partners',
                       self.page.locator('[data-hourglass]').get_attribute('aria-label'))
         # Ada Alder: Bram beside her, four children with their spouses, eight grandchildren; great-grandchildren folded.
-        self.page.locator('#tree-root').select_option('person:01')
+        self.page.locator('#tree-root').select_option('person:01', force=True)
         self.assertEqual(18, nodes.count())
         vera = self.page.locator('[data-hourglass] [data-person="person:21"]')
         self.assertEqual('false', vera.get_attribute('aria-expanded'))
@@ -132,7 +132,7 @@ class TreeViewBrowserTests(unittest.TestCase):
         self.page.get_by_role('button', name='Zoom in').click()
         self.assertIn('scale(1.25)', self.page.locator('[data-hourglass] > g').get_attribute('transform'))
         # Quill Ember's link to Arden is only possible: dashed.
-        self.page.locator('#tree-root').select_option('person:42')
+        self.page.locator('#tree-root').select_option('person:42', force=True)
         self.assertEqual(1, self.page.locator('[data-hourglass] path.tree-edge.uncertain').count())
         self.assertIn('Possible', self.page.locator('[data-hourglass] [data-person="person:26"]').get_attribute('aria-label'))
 
@@ -181,7 +181,7 @@ class TreeViewBrowserTests(unittest.TestCase):
         self.assertEqual(5, bars.count())
         self.assertEqual(['Parents\' family: Elara Cairn', 'Own family: Vera Cairn'], self.page.locator('[data-lanes] .lane-head').all_text_contents())
         # Elara: Ada's family (5), her own (4) and her two children's families (2 each).
-        self.page.locator('#tree-root').select_option('person:05')
+        self.page.locator('#tree-root').select_option('person:05', force=True)
         self.assertEqual(4, self.page.locator('[data-lanes] .lane-head').count())
         self.assertEqual(13, bars.count())
         self.open('views', 'p0001', 'lanes')

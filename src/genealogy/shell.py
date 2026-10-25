@@ -37,6 +37,19 @@ def icon(name: str) -> str:
     return f'<svg class="nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="{ICONS[name]}"/></svg>'
 
 
+# The sidebar's crest: a tree under an arch, drawn in the sidebar's line colour.
+CREST = ('<svg class="brand-crest" viewBox="0 0 40 52" aria-hidden="true"><path d="M2 49V19a18 18 0 0 1 36 0v30Z"/>'
+         '<path d="M20 42V15m0 18-9-8m9 0 8-8m-8 20 10-6m-10-9-6-6"/>'
+         '<path class="brand-dots" d="M20 12h0M11 23h0M29 15h0M31 29h0M13 14h0"/></svg>')
+
+
+def brand(prefix: str, name: str, caption: str, short: bool = False) -> str:
+    """The sidebar's home link: the crest beside the wordmark and its caption. A short ``[site] brand_name`` is set
+    in spaced capitals, as on the Glasgow site; a full project name keeps its own case."""
+    return (f'<a class="site-brand brand{" brand-short" if short else ""}" href="{prefix}index.html">{CREST}<span class="brand-copy">'
+            f'<span class="brand-name">{escape(name)}</span><span class="brand-caption">{escape(caption)}</span></span></a>')
+
+
 def readable_date(value: str) -> str:
     """An ISO date (YYYY, YYYY-MM or YYYY-MM-DD) as "27 Sep 2026", "Sep 2026" or "2026"."""
     match = re.fullmatch(r"(\d{4})(?:-(\d\d)(?:-(\d\d))?)?", value)

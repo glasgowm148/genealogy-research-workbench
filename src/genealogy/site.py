@@ -1007,9 +1007,19 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
             extra_titles[page_url(n)] = ("people", f"People catalogue, page {n}")
     else:
         pages["catalogue.html"] = catalogue_search + '<div data-catalogue>' + (catalogue_table(sorted(people, key=lambda pid: (person_name(pid).casefold(), pid))) if people else '<p class="empty-state">No public people are available.</p>') + '</div>'
-    pages["tree.html"] = '<h1>Family tree and branches</h1><p>Arrows follow the stored relationship direction; each label describes the recorded assessment, not proof. <a href="evidence.html">Reading the evidence</a>.</p><label>Explore from <select id="tree-root">' + options + '</select></label><div id="tree-output"></div><h2>Recorded family connections</h2>' + (
+    # The tree page is one workspace, as on the Glasgow site: a short title with the collection's counts, then the
+    # stage (the person search, the view switch and the drawing) beside the selected person's profile, and a key.
+    # The readable family list and the recorded connections are its text when scripts do not run.
+    pages["tree.html"] = (
+        '<div class="tree-intro"><h1>The family tree</h1><!--tree:metrics--></div>'
+        '<section class="tree-workspace" aria-label="Family tree"><div class="tree-stage"><div class="tree-toolbar">'
+        '<label>Explore from <select id="tree-root">' + options + '</select></label></div><div id="tree-output"></div></div></section>'
+        '<footer class="tree-legend"><span><i class="tree-line"></i>Parent link</span><span><i class="tree-line tree-line-uncertain"></i>Possible or unassessed</span>'
+        '<span><i class="tree-line tree-line-partner"></i>Partners</span><span class="tree-legend-note">Each label describes the recorded assessment, not proof.</span>'
+        '<a href="evidence.html">Reading the evidence ↗</a><a href="branches.html">Families &amp; branches</a></footer>'
+        '<noscript><!--tree:families--><h2>Recorded family connections</h2>' + (
         f'<p>{len(project["relationships"]):,} recorded family connections. Each person\'s page lists their parents, partners, children and siblings with these labels, and <a href="branches.html">Families &amp; branches</a> groups them.</p>'
-        if compact_relationships else empty([relationship(r) for r in project["relationships"]], "No public family connections recorded."))
+        if compact_relationships else empty([relationship(r) for r in project["relationships"]], "No public family connections recorded.")) + '</noscript>')
     timeline_list = lambda rows, prefix="": empty([event(e, prefix) for e in rows], "No public dated events recorded.").replace('class="record-list"', 'class="record-list timeline"', 1)
     if compact_events:
         # One page per decade; an event keeps its page as others are added.
@@ -3769,8 +3779,15 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
                                    "kids": {pid: row for pid, row in kids.items() if row}, "beside": {pid: row for pid, row in beside.items() if row},
                                    "profiles": profile, **({"tree_name": config.tree_name} if config.tree_name else {})}
 
+    def tree_metrics() -> str:
+        """The tree page's counts beside its title: the people, the connected family groups and, where the project
+        records them, its DNA branches, else its recorded family links."""
+        third = (len(dna_branches), "DNA branch", "DNA branches") if dna_branches else (len(project["relationships"]), "family link", "family links")
+        rows = [(len(people), "public profile", "public profiles"), (len(connected), "family group", "family groups"), third]
+        return '<dl class="tree-metrics">' + "".join(f'<div><dt>{one if n == 1 else many}</dt><dd>{n:,}</dd></div>' for n, one, many in rows) + "</dl>"
+
     atlas_layout = atlas_forest()
-    pages["tree.html"] = pages["tree.html"].replace('<div id="tree-output"></div>', '<div id="tree-output"></div>' + atlas_families(*atlas_layout), 1)
+    pages["tree.html"] = pages["tree.html"].replace("<!--tree:families-->", atlas_families(*atlas_layout), 1).replace("<!--tree:metrics-->", tree_metrics(), 1)
     downloads = [("data/site.json", "Public research JSON"), ("data/site.csv", "Public research CSV"), ("data/places.geojson", "Place GeoJSON"),
                  ("data/public-tree.ged", "Public tree as GEDCOM 5.5.1"), ("data/routes.json", "Route index JSON")]
     if dna_branches:
@@ -3844,7 +3861,7 @@ def build_site(case: ResearchCase, config: ProjectConfig, directory: Path) -> di
         payload = {"project": project["project"], "site": {"root": prefix}}
         corrections_link = f' · <a href="{prefix}corrections.html">Corrections</a>' if "corrections.html" in routes else ""
         canonical = f'<link rel="canonical" href="{_text(base_url + quote(path))}">' if base_url else ""
-        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar"><a class="site-brand brand" href="{prefix}index.html">{_text(config.name)}</a><p class="site-tagline">People · records · evidence</p><nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button>{shell.breadcrumb(path, prefix, view, title, routes)}{stamp}{search_form(prefix)}</header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
+        outputs[path] = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{_text(description)}"><title>{_text(title)} — {_text(config.name)}</title>{canonical}<link rel="icon" href="{prefix}assets/favicon.svg"><meta name="theme-color" content="#193f33"><link rel="stylesheet" href="{prefix}assets/site.css">{data_script}<script defer src="{prefix}assets/site.js"></script><noscript><style>.site-sidebar nav{{display:grid!important}}#menu-toggle{{display:none!important}}</style></noscript></head><body data-view="{view}"{person_attribute}><a class="skip-link" href="#main-content">Skip to content</a><div class="site-shell"><aside class="site-sidebar" id="site-sidebar">{shell.brand(prefix, *config.brand, short=bool((config.raw.get("site") or {}).get("brand_name")))}<nav aria-label="Main navigation">{nav}</nav></aside><div class="site-content"><header class="site-header"><button id="menu-toggle" aria-controls="site-sidebar" aria-expanded="false">Menu</button>{shell.breadcrumb(path, prefix, view, title, routes)}{stamp}{search_form(prefix)}</header><main id="main-content">{content}</main><footer class="site-footer"><p>Public research edition · <a href="{prefix}sitemap.html">Site index and downloads</a> · <a href="{prefix}evidence.html">Reading the evidence</a>{corrections_link}</p><p>Missing information is unknown; confidence and status remain attached to recorded claims.</p></footer></div></div><script type="application/json" id="site-data">{_json(payload)}</script></body></html>'
     # The atlas draws only on the tree page, and before site.js, which offers it as the first tree view.
     outputs["tree.html"] = outputs["tree.html"].replace('<script defer src="assets/site.js"></script>', '<script defer src="assets/atlas.js"></script><script defer src="assets/site.js"></script>', 1)
     # A moved page is a stub, not a route: it stays out of routes.json and the

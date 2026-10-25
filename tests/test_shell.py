@@ -167,6 +167,35 @@ class ShellTests(unittest.TestCase):
             self.assertNotIn("site-search", html.split("</aside>", 1)[0], route)
             self.assertIn("<noscript><style>.site-sidebar nav{display:grid!important}#menu-toggle{display:none!important}</style></noscript>", html, route)
 
+    def test_the_sidebar_wordmark_is_the_crest_and_the_project_name_by_default(self):
+        brand = self.pages["index.html"].split('<aside class="site-sidebar"', 1)[1].split("<nav", 1)[0]
+        self.assertIn('<a class="site-brand brand" href="index.html"><svg class="brand-crest"', brand)
+        self.assertIn('<span class="brand-name">Fictional shell</span><span class="brand-caption">People · records · evidence</span>', brand)
+
+    def test_a_short_brand_name_and_caption_replace_the_wordmark(self):
+        config = ProjectConfig(name="Fictional shell (preview build)", raw={"site": {"brand_name": "Fable", "brand_caption": "Surname Project"}})
+        with tempfile.TemporaryDirectory() as directory:
+            build_site(case(), config, directory)
+            page = (Path(directory) / "index.html").read_text()
+        self.assertIn('<a class="site-brand brand brand-short" href="index.html">', page)
+        self.assertIn('<span class="brand-name">Fable</span><span class="brand-caption">Surname Project</span>', page)
+        self.assertIn("— Fictional shell (preview build)</title>", page)  # the page titles keep the project's name
+        for bad in ("", "  ", "x" * 61, 3):
+            with self.assertRaises(ValueError):
+                ProjectConfig(name="Fictional", raw={"site": {"brand_caption": bad}}).validate()
+
+    def test_the_tree_page_is_one_workspace_with_its_text_version_for_readers_without_script(self):
+        tree = self.pages["tree.html"]
+        main = tree.split('<main id="main-content">', 1)[1].split("</main>", 1)[0]
+        self.assertTrue(main.startswith('<div class="tree-intro"><h1>The family tree</h1><dl class="tree-metrics">'))
+        self.assertIn("<div><dt>public profiles</dt><dd>2</dd></div>", main)
+        self.assertIn('<section class="tree-workspace" aria-label="Family tree"><div class="tree-stage"><div class="tree-toolbar"><label>Explore from <select id="tree-root">', main)
+        self.assertIn('<footer class="tree-legend">', main)
+        script_free = main.split("<noscript>", 1)[1].split("</noscript>", 1)[0]
+        self.assertIn('<section class="atlas-families" id="atlas-families"', script_free)
+        self.assertIn("<h2>Recorded family connections</h2>", script_free)
+        self.assertNotIn("atlas-families", main.split("<noscript>", 1)[0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -918,10 +918,11 @@ class BrowserSiteTests(unittest.TestCase):
         first = page.get_by_role('combobox', name='Find the first person')
         second = page.get_by_role('combobox', name='Find the second person')
         options = page.locator('[role=listbox]:visible').get_by_role('option')  # a menu's own options are options too
-        # The tree keeps its full menu in view beside the box on a small site; the compare and connections
-        # forms keep theirs out of sight (still in the form, so it submits ?a=&b=). Typing and a click choose a person.
+        # The tree's search box is its one control, as are the compare and connections forms' (their menus stay in
+        # the form out of sight, so it submits ?a=&b=). Typing and a click choose a person.
         page.goto(self.base + 'tree.html')
-        self.assertTrue(page.locator('#tree-root').is_visible())
+        self.assertFalse(page.locator('#tree-root').is_visible())
+        self.assertEqual('Search within the family tree', page.locator('.tree-toolbar [role=combobox]').get_attribute('placeholder'))
         page.goto(self.base + 'compare.html')
         self.assertFalse(page.locator('[data-compare-a]').is_visible())
         self.assertEqual(1, page.locator('form[data-person-form] select[name=a][data-compare-a]').count())
@@ -1013,13 +1014,12 @@ class BrowserSiteTests(unittest.TestCase):
             options.first.click()
             self.assertIn('Person 0002 Fable', page.locator('#compare-result').inner_text())
             self.assertEqual('p0001', page.locator('[data-compare-a]').input_value())
-            # The tree folds its full menu under "or choose from the list".
+            # The tree's search box stands alone on a large site too: its menu stays out of sight.
             page.goto(large + 'tree.html', wait_until='networkidle')
-            self.assertEqual(1, page.locator('details.picker-menu:not([open])').count())
-            page.locator('details.picker-menu summary').first.click()
-            self.assertTrue(page.locator('#tree-root').is_visible())
+            self.assertEqual(0, page.locator('details.picker-menu').count())
+            self.assertFalse(page.locator('#tree-root').is_visible())
             if axe:
-                self.assertEqual([], self.axe_violations(), f'large tree, list open, {width}')
+                self.assertEqual([], self.axe_violations(), f'large tree, {width}')
         # With one person given, the box for the other takes focus, since its menu is out of sight.
         page.goto(large + 'connections.html?a=p0001', wait_until='networkidle')
         self.assertEqual('Person 0001 Fable', first.input_value())
@@ -1028,10 +1028,10 @@ class BrowserSiteTests(unittest.TestCase):
         page.keyboard.press('Enter')
         self.assertIn('Person 0003 Fable', page.locator('#connection-result').inner_text())
         page.goto(large + 'tree.html', wait_until='networkidle')
-        tree_box.fill('person 0007')
+        # The atlas, the default view, has its own search in place of the tree's box; its choice is the tree's too.
+        page.get_by_role('searchbox', name='Search within the family tree').fill('person 0007')
         page.keyboard.press('Enter')
         self.assertEqual('p0007', page.locator('#tree-root').input_value())
-        # The atlas, the default view, selects the person chosen in the box.
         self.assertIn('Person 0007 Fable', page.locator('[data-atlas-panel]').inner_text())
         if axe:
             self.assertEqual([], self.axe_violations(), 'large tree')
