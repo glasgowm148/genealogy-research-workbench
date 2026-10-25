@@ -44,6 +44,33 @@ DATE_PRECISION = {"exact": "exact", "about": "about", "before": "before", "after
                   "range": "range", "estimated": "about", "calculated": "about", "inferred": "about",
                   "unknown": "unknown"}
 WITHHELD_STATUSES = ("withheld",)
+#: Asset kinds that are generated output; their file names reveal nothing.
+GENERATED_ASSET_KINDS = ("derivative", "generated", "presentation")
+#: Prose fields: a research item naming a withheld entity is withheld; a fact keeps its fact and loses the text.
+ITEM_TEXT = {"Finding": ("conclusion", "limitations"), "ResearchQuestion": ("question", "resolves", "next_record"),
+             "Search": ("search", "result", "limitation"), "Hypothesis": ("statement", "supports", "objections"),
+             "Study": ("title", "summary", "rationale", "body", "conclusion", "limitations")}
+FACT_TEXT = {"Relationship": ("rationale",), "Claim": ("rationale", "value"), "Evidence": ("assessment", "limitation"),
+             "Person": ("notes",), "Event": ("description",), "Citation": ("abstract", "transcription")}
+WORD = re.compile(r"[\w'.-]+")
+
+
+def _matcher(terms: set[str]):
+    by_first: dict[str, list[tuple[str, list[str]]]] = {}
+    for term in terms:
+        words = WORD.findall(term)
+        if len(term) >= 4 and words and any(character.isalpha() for character in term):
+            by_first.setdefault(words[0], []).append((term, words))
+
+    def find(text: str) -> str | None:
+        present = set(WORD.findall(text))
+        for token in present & by_first.keys():
+            for term, words in by_first[token]:
+                if len(words) == 1 or (all(word in present for word in words) and re.search(
+                        r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", text)):
+                    return term
+        return None
+    return find
 
 
 @dataclass(slots=True)
@@ -458,7 +485,8 @@ def public_case(project: Project, *, build_year: int | None = None,
     for asset in store.all("SELECT * FROM asset WHERE access <> 'public' AND sha256 NOT IN (SELECT sha256 FROM "
                            "approval WHERE kind='exact_file' AND status='active') ORDER BY id"):
         omissions.withheld_terms.add(asset["sha256"])
-        if asset["original_name"] and asset["original_name"] not in approved_names:
+        if asset["original_name"] and asset["original_name"] not in approved_names \
+                and asset["kind"] not in GENERATED_ASSET_KINDS:
             omissions.withheld_files.add(asset["original_name"])
     # A withheld name that also forms part of a published person's name ("G Glasgow" in
     # "James G Glasgow") cannot be told apart in text, so it is not used as a leak term;
@@ -468,4 +496,41 @@ def public_case(project: Project, *, build_year: int | None = None,
         term for term in omissions.withheld_terms
         if " " not in term or (sum(len(word) > 1 and any(c.isalpha() for c in word) for word in term.split()) >= 2
                                and not re.search(r"(?<![\w.-])" + re.escape(term) + r"(?![\w-])", public_text))}
+    if not everything:
+        _remove_indirect_references(case, omissions)
     return case, omissions
+
+
+def _texts(record: Any, fields: tuple[str, ...]) -> list[tuple[str, str]]:
+    found = []
+    for name in fields:
+        value = getattr(record, name, None)
+        if isinstance(value, list):
+            value = "\n".join(str(item) for item in value)
+        if isinstance(value, str) and value:
+            found.append((name, value))
+    return found
+
+
+def _remove_indirect_references(case: ResearchCase, omissions: Omissions) -> None:
+    """Prose naming a withheld id, name or file is not published, wherever it appears."""
+    find = _matcher(omissions.withheld_terms)
+    for kind, fields in ITEM_TEXT.items():
+        kept = []
+        for record in case.records(kind):
+            term = next((hit for _, text in _texts(record, fields) if (hit := find(text))), None)
+            if term:
+                omissions.add(record.id, kind.lower(), "its text names a withheld person or record")
+                omissions.withheld_terms.add(record.id)
+            else:
+                kept.append(record)
+        if kind in case.record_sets:
+            case.record_sets[kind] = kept
+    for kind, fields in FACT_TEXT.items():
+        for record in case.records(kind):
+            for name, text in _texts(record, fields):
+                if name != "value" and find(text):
+                    setattr(record, name, None)
+                    omissions.add(record.id, kind.lower(), f"{name} withheld: it names a withheld person or record")
+    case.question_ids = [rid for rid in case.question_ids if rid in {r.id for r in case.records("ResearchQuestion")}]
+    case.finding_ids = [rid for rid in case.finding_ids if rid in {r.id for r in case.records("Finding")}]

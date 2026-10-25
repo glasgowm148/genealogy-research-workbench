@@ -128,15 +128,34 @@ class PublicationAndBuild(unittest.TestCase):
         self.assertGreater(report["omission_count"], 0)
         self.assertFalse(list(out.rglob("*.sqlite")))
 
-    def test_build_refuses_a_leak_and_keeps_the_previous_site(self) -> None:
+    def test_prose_naming_a_withheld_person_is_not_published(self) -> None:
+        with self.fx.write() as tx:
+            finding = self.fx.research.add_finding(tx, statement="Isaac lodged with Hidden Quillfeather in 1851.",
+                                                   access="public", links=[self.ids["isaac"]])
+        out = self.fx.root / "site"
+        report = build_from_database(self.fx.project, out, build_date="2026-10-25")
+        self.assertNotIn("Quillfeather", self._all_text(out))
+        self.assertIn("finding: its text names a withheld person or record", report["omitted"])
+        case, _ = public_case(self.fx.project, build_year=2026)
+        self.assertNotIn(finding, {f.id for f in case.records("Finding")})
+
+    def test_leak_guard_refuses_and_keeps_the_previous_site(self) -> None:
+        from genealogy.store import build as build_module
         out = self.fx.root / "site"
         build_from_database(self.fx.project, out, build_date="2026-10-25")
         before = tree_digest(out)
-        with self.fx.write() as tx:
-            self.fx.research.add_finding(tx, statement="Isaac lodged with Hidden Quillfeather in 1851.",
-                                         access="public", links=[self.ids["isaac"]])
-        with self.assertRaises(LeakError):
-            build_from_database(self.fx.project, out, build_date="2026-10-25")
+        original = build_module.public_case
+
+        def leaky(project, **kwargs):
+            case, omissions = original(project, **kwargs)
+            case.records("Person")[0].notes = "Mentions Hidden Quillfeather"
+            return case, omissions
+        build_module.public_case = leaky
+        try:
+            with self.assertRaises(LeakError):
+                build_from_database(self.fx.project, out, build_date="2026-10-25")
+        finally:
+            build_module.public_case = original
         self.assertEqual(tree_digest(out), before)
 
     def test_builds_are_reproducible_and_need_no_previous_output(self) -> None:
