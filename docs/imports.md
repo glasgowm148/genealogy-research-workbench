@@ -8,19 +8,19 @@ genealogy --project my-family import /path/to/tree.ged --publish-deceased
 genealogy --project my-family build
 ```
 
-Imports keep the original bytes in `private/imports/` with a SHA-256 identity, a bounded report and private file permissions. The case is saved only after parsing and reference validation succeed, so a failed import never replaces a valid case. Identical bytes with the same review choices are a no-op.
+Each import keeps the original file privately in `private/assets/`, by its SHA-256, and records every input record verbatim as an external observation. Nothing is written unless the whole file parses. Importing identical bytes with the same review choices again does nothing.
 
 ## Importing again
 
 | You have | Command | What happens |
 | --- | --- | --- |
-| An empty project | `import FILE` | The tree becomes the case |
-| A newer export of the **same** tree, plus research you added | `import FILE --update` | Records created by earlier imports of that format are replaced; findings, questions, sources and other records you added are kept |
-| A different tree, or you want to start again | `import FILE --replace` | Every record in the case is replaced |
+| An empty project | `import FILE` | The tree's people, events and links are loaded as imported claims |
+| A newer export of the **same** tree | `import FILE --update` | New people and records are added; people are matched to the ones already loaded by their durable identifiers (WikiTree ids, GEDCOM `UID`s, then the tree's own record ids) |
+| A second tree | `import FILE --lineage NAME` | Loaded alongside, under its own name; people with the same durable identifier become one person |
 
-Before `--update` or `--replace` changes anything, the previous case is copied to `private/imports/backups/<case>-<time>.json`. To recover, copy that file back to `cases/<case>.json`.
+Nothing an import loaded before is overwritten or deleted, and nothing you added (findings, questions, sources, assessments) is touched. When the newer export has a different value for something already loaded, the value already held is kept and the new one is stored as an **item for review**, with both versions. List them with `genealogy legacy list` and record each decision with `genealogy legacy resolve` (see [the research database](database.md#items-kept-for-review)). There is no `--replace`: research is never discarded. To start again, create a new project.
 
-`--update` refuses, and changes nothing, when research you kept would point at a person or record that the new export no longer contains, or when one of your record IDs collides with a newly imported ID. The error lists the references. Correct them, restore the person in your tree program, or use `--replace`. Edits made directly to previously imported records are replaced by the new export, except the `former_ids` you record on a person after a merge ([Record a merge or a changed ID](research.md#record-a-merge-or-a-changed-id)); put lasting research in your own records rather than editing imported ones. Identity across exports relies on the exporter keeping its record identifiers (`@I12@`, WikiTree IDs): an export that renumbers everyone is a different tree.
+Identity across exports relies on the exporter keeping its identifiers. An export that renumbers everyone looks like a different tree.
 
 ## GEDCOM
 

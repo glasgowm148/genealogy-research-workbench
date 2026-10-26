@@ -20,7 +20,7 @@ Genealogy Research Workbench turns a GEDCOM or WikiTree OneTree export into a se
 
 OneTree imports retain WikiTree identifiers, so your local research stays connected to the profiles it concerns. Use the workbench to investigate questions and prepare sourced updates to make manually on WikiTree. You can also link a published research study from a WikiTree profile. The toolkit does not automatically synchronize with or write back to WikiTree.
 
-Imports and builds run on your computer with **no runtime dependencies or network requests**; research is kept in one SQLite database per project, using Python's standard library. The output is ordinary HTML, CSS, JavaScript and data files; publishing is your choice.
+Imports and builds run on your computer with **no runtime dependencies or network requests**. Research is kept in one SQLite database per project (Python's standard library), with every change recorded: who made it, with which tool, and why. The output is ordinary HTML, CSS, JavaScript and data files; publishing is your choice.
 
 ## What you can build
 
@@ -64,13 +64,15 @@ The screenshots use the [fully fictional Alderwick demo](examples/demo/README.md
 
 ## Get started
 
-You need **Python 3.11 or later**. No database, account or API key is required. Install the toolkit from [PyPI](https://pypi.org/project/genealogy-research-workbench/):
+You need **Python 3.11 or later** and Git. No database server, account or API key is required: the research database is an ordinary SQLite file that Python already supports. Install the toolkit from GitHub:
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install genealogy-research-workbench
+python -m pip install "git+https://github.com/glasgowm148/genealogy-research-workbench@main"
 ```
+
+The version on [PyPI](https://pypi.org/project/genealogy-research-workbench/) is 0.6.0, which predates the research database, so install from GitHub until a new release is published.
 
 On Windows, activate with `.venv\Scripts\activate` instead. To work on the toolkit itself, or to run the fictional demo, clone this repository and see [installation](docs/development.md#install-and-test). New here? [Your first site](docs/first-site.md) walks through every step.
 
@@ -105,7 +107,7 @@ Open [localhost:8000](http://localhost:8000/). For OneTree, use the same command
 genealogy --project my-family import /path/to/one-tree.json --publish-deceased
 ```
 
-Got a newer export of the same tree? `import FILE --update` refreshes the imported records and keeps the research you added: findings, questions, sources and notes. It stops, changing nothing, if that research would point at someone the new export no longer contains. `--replace` starts again from the new file. Both keep a private backup of the previous case first. An identical import with the same review options does nothing. Omitting publication options keeps the imported records private, so the public site can be empty. Your original input is preserved privately and never modified.
+Got a newer export of the same tree? `import FILE --update` refreshes the imported records and keeps everything you added: findings, questions, sources, notes and assessments. People are matched across exports by their durable identifiers (WikiTree ids, GEDCOM UIDs), and values that changed are listed for review rather than overwritten silently. Nothing is deleted, so there is no "replace" mode. An identical import with the same review options does nothing. Omitting publication options keeps the imported records private, so the public site can be empty. Your original file is kept privately, by hash, and never modified.
 
 | Supported input | Details |
 | --- | --- |
@@ -167,6 +169,8 @@ genealogy --project my-family native export private/exports/full.json   # comple
 genealogy --project my-family backup create
 genealogy backup restore private/backups/<stamp> ~/restored-family
 ```
+
+Changing an existing record or assessment needs the revision you read (`--expected-revision N`); if someone changed it since, the command refuses and shows the current version, so two people can't silently overwrite each other. Anything an import couldn't interpret, or two exports disagree on, is kept as an item for review: `genealogy legacy list` shows them and `genealogy legacy resolve ID --resolution "why" --expected-revision N` records the decision. Items are never deleted.
 
 Any command that takes an id also accepts `SYSTEM:VALUE`, such as `wikitree:Ada-12`. Bulk or agent-written changes go through a reviewable [proposal](docs/database.md#writing-safely) that is re-checked against the current revisions before it is applied. [The research database](docs/database.md) explains the model; [backup and upgrades](docs/backup.md) covers restoration, upgrades and moving an earlier JSON-case project in with `genealogy upgrade`.
 
