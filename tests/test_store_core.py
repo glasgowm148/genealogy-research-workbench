@@ -313,9 +313,14 @@ class ResearchSemantics(unittest.TestCase):
     def test_projection_hides_retired_merge_row_and_undo_restores_it(self) -> None:
         survivor, retired = self.fx.person("Glasgow 3654"), self.fx.person("Glasgow 3654")
         with self.fx.write() as tx:
+            self.r.map_external(tx, survivor, "wikitree", "Glasgow-2454")
+            self.r.map_external(tx, survivor, "wikitree", "Glasgow-3654", status="redirect",
+                                redirect_to="Glasgow-2454")
             self.r.map_external(tx, retired, "wikitree", "Glasgow-3654")
             merge = self.r.merge_people(tx, survivor_id=survivor, retired_id=retired, reason="documented duplicate")
         projected, _ = public_case(self.fx.project, everything=True)
+        survivor_projection = next(p for p in projected.records("Person") if p.id == survivor)
+        self.assertEqual(survivor_projection.former_ids.count("Glasgow-3654"), 1)
         self.assertEqual([p.id for p in projected.records("Person")].count(survivor), 1)
         self.assertNotIn(retired, [p.id for p in projected.records("Person")])
         self.assertEqual([], validate_case(projected))
