@@ -16,6 +16,8 @@ from genealogy.store import (
 from genealogy.store import core as store_core
 from genealogy.store.assets import register_asset, verify_assets
 from genealogy.store.schema import SCHEMA_VERSION
+from genealogy.store.projection import public_case
+from genealogy.case import validate_case
 
 from store_fixtures import Fixture
 
@@ -307,6 +309,20 @@ class ResearchSemantics(unittest.TestCase):
         with self.fx.write() as tx:
             self.r.undo_merge(tx, merge, reason="separate burials found")
         self.assertEqual(self.r.find_external("wikitree", "Harrow-9", statuses=("current",)), [b])
+
+    def test_projection_hides_retired_merge_row_and_undo_restores_it(self) -> None:
+        survivor, retired = self.fx.person("Glasgow 3654"), self.fx.person("Glasgow 3654")
+        with self.fx.write() as tx:
+            self.r.map_external(tx, retired, "wikitree", "Glasgow-3654")
+            merge = self.r.merge_people(tx, survivor_id=survivor, retired_id=retired, reason="documented duplicate")
+        projected, _ = public_case(self.fx.project, everything=True)
+        self.assertEqual([p.id for p in projected.records("Person")].count(survivor), 1)
+        self.assertNotIn(retired, [p.id for p in projected.records("Person")])
+        self.assertEqual([], validate_case(projected))
+        with self.fx.write() as tx:
+            self.r.undo_merge(tx, merge, reason="separate identity found")
+        restored, _ = public_case(self.fx.project, everything=True)
+        self.assertIn(retired, [p.id for p in restored.records("Person")])
 
     def test_merge_where_the_survivor_already_holds_the_id_as_a_redirect(self) -> None:
         a, b = self.fx.person("Isobel Harrow"), self.fx.person("Isobel Harrow")

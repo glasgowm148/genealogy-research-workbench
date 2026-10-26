@@ -182,8 +182,22 @@ def public_case(project: Project, *, build_year: int | None = None,
     external = {}
     for row in store.all("SELECT * FROM external_id ORDER BY system, value"):
         external.setdefault(row["entity_id"], []).append(row)
+    # A merge is active until its matching undo/split ledger entry.  Retired
+    # person rows remain in the database for audit/undo, but must not be
+    # projected as a second current person while their former identifiers stay
+    # attached to the survivor.  This is ledger state, not a label heuristic.
+    retired_by_active_merge: set[str] = set()
+    merges = store.all("SELECT em.*, cs.created_at FROM entity_merge em JOIN change_set cs ON cs.id=em.change_set_id "
+                       "ORDER BY cs.created_at, em.id")
+    undone = {match.group(1) for merge in merges if merge["kind"] == "split"
+              for match in [re.match(r"^undo\s+(mrg-[A-Za-z0-9_-]+):", merge["reason"] or "")] if match}
+    for merge in merges:
+        if merge["kind"] == "merge" and merge["id"] not in undone:
+            retired_by_active_merge.update(json.loads(merge["retired_ids"]))
     people: dict[str, Person] = {}
     for row in store.all("SELECT * FROM person ORDER BY id"):
+        if row["id"] in retired_by_active_merge:
+            continue
         if not pub(row):
             withhold(row, "person", f"access {row['access']}")
             continue
