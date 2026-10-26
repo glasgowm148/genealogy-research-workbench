@@ -782,6 +782,17 @@ class Research:
             keys = TABLE_KEYS[table]
             for row in self.store.all(f"SELECT * FROM {table} WHERE {column}=?", (retired_id,)):
                 where = " AND ".join(f"{key}=?" for key in keys)
+                if table == "external_id" and self.store.one(
+                        "SELECT 1 FROM external_id WHERE entity_id=? AND system=? AND value=?",
+                        (survivor_id, row["system"], row["value"])):
+                    # The survivor already holds this id (say, as a redirect): it stays on the
+                    # retired person, no longer current, and the undo puts its status back.
+                    if row["status"] == "current":
+                        tx.conn.execute("UPDATE external_id SET status='former' WHERE id=?", (row["id"],))
+                    tx._audit(table, row["id"], "update", row.get("revision"), row, {**row, "status": "former"})
+                    moved.append({"table": table, "column": column, "key": {k: row[k] for k in keys},
+                                  "status": row["status"], "kept_on_retired": True})
+                    continue
                 tx.conn.execute(f"UPDATE {table} SET {column}=? WHERE {where}", (survivor_id, *(row[k] for k in keys)))
                 after_key = {key: (survivor_id if key == column else row[key]) for key in keys}
                 item = {"table": table, "column": column, "key": after_key}
@@ -804,6 +815,9 @@ class Research:
         retired_id = json.loads(merge["retired_ids"])[0]
         moved = json.loads(merge["moved_json"])
         for item in moved["rows"]:
+            if item.get("kept_on_retired"):
+                tx.conn.execute("UPDATE external_id SET status=? WHERE id=?", (item["status"], item["key"]["id"]))
+                continue
             where = " AND ".join(f"{key}=?" for key in item["key"])
             tx.conn.execute(f"UPDATE {item['table']} SET {item['column']}=? WHERE {where}",
                             (retired_id, *item["key"].values()))

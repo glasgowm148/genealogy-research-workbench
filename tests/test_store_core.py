@@ -308,6 +308,19 @@ class ResearchSemantics(unittest.TestCase):
             self.r.undo_merge(tx, merge, reason="separate burials found")
         self.assertEqual(self.r.find_external("wikitree", "Harrow-9", statuses=("current",)), [b])
 
+    def test_merge_where_the_survivor_already_holds_the_id_as_a_redirect(self) -> None:
+        a, b = self.fx.person("Isobel Harrow"), self.fx.person("Isobel Harrow")
+        with self.fx.write() as tx:
+            self.r.map_external(tx, a, "wikitree", "Harrow-2")
+            self.r.map_external(tx, a, "wikitree", "Harrow-7", status="redirect")
+            self.r.map_external(tx, b, "wikitree", "Harrow-7")
+            merge = self.r.merge_people(tx, survivor_id=a, retired_id=b, reason="the tree merged them")
+        self.assertEqual(self.r.find_external("wikitree", "Harrow-7", statuses=("current",)), [])
+        self.assertEqual(self.r.find_external("wikitree", "Harrow-7", statuses=("redirect",)), [a])
+        with self.fx.write() as tx:
+            self.r.undo_merge(tx, merge, reason="test")
+        self.assertEqual(self.r.find_external("wikitree", "Harrow-7", statuses=("current",)), [b])
+
 
 class Packaging(unittest.TestCase):
     def test_migrations_are_packaged_and_create_a_current_database(self) -> None:
