@@ -270,6 +270,7 @@ def add_parsers(commands: Any) -> None:
     a_add.add_argument("--access", choices=ACCESS, default="private")
     a_add.add_argument("--captured-on")
     a_add.add_argument("--provenance")
+    a_add.add_argument("--supersedes", metavar="ASSET", help="the earlier version this file replaces (same path for a file kept in place)")
     a_sub.add_parser("verify")
 
     approval = commands.add_parser("approval", help="record or list publication approvals")
@@ -420,6 +421,7 @@ def run(args: argparse.Namespace) -> int:
             files = verify_assets(project)
             report = {"integrity": list(integrity.values())[0], "broken_references": len(broken),
                       "missing_files": files["missing"][:20], "changed_files": files["changed"][:20],
+                      "superseded_in_place": len(files["superseded"]),
                       "unreferenced_managed_files": len(files["orphans"]),
                       "review_needed": len(research.review_queue())}
             _print(report)
@@ -649,7 +651,8 @@ def run(args: argparse.Namespace) -> int:
             prepared = prepare_managed(project, args.file) if args.root == "managed" else None
             with write() as tx:
                 asset = register_asset(project, tx, args.file, root=args.root, kind=args.kind, access=args.access,
-                                       captured_on=args.captured_on, provenance=args.provenance, prepared=prepared)
+                                       captured_on=args.captured_on, provenance=args.provenance, prepared=prepared,
+                                       supersedes_id=args.supersedes)
                 for target in args.about:
                     tx.upsert_link(asset["id"], target, "evidence_file")
             print(asset["id"])

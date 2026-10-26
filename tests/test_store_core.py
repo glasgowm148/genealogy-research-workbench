@@ -134,6 +134,25 @@ class Atomicity(unittest.TestCase):
         evidence.write_text("edited bytes", encoding="utf-8")
         self.assertEqual(len(verify_assets(self.fx.project)["changed"]), 1)
 
+    def test_a_file_kept_in_place_and_registered_again_is_superseded_not_changed(self) -> None:
+        evidence = self.fx.directory / "evidence" / "gazetteer.json"
+        evidence.parent.mkdir()
+        evidence.write_text("first version", encoding="utf-8")
+        self.fx.project.settings.asset_roots["evidence"] = "evidence"
+        with self.fx.write() as tx:
+            first = register_asset(self.fx.project, tx, evidence, root="evidence")
+        evidence.write_text("second version", encoding="utf-8")
+        with self.fx.write() as tx:
+            second = register_asset(self.fx.project, tx, evidence, root="evidence", supersedes_id=first["id"])
+        evidence.write_text("third version", encoding="utf-8")
+        with self.fx.write() as tx:
+            register_asset(self.fx.project, tx, evidence, root="evidence", supersedes_id=second["id"])
+        report = verify_assets(self.fx.project)
+        self.assertEqual((report["changed"], len(report["superseded"])), ([], 2))
+        evidence.write_text("an unregistered edit", encoding="utf-8")
+        report = verify_assets(self.fx.project)
+        self.assertEqual((len(report["changed"]), report["superseded"]), (3, []))
+
 
 class Concurrency(unittest.TestCase):
     def setUp(self) -> None:

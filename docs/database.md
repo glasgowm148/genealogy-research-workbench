@@ -192,7 +192,7 @@ genealogy --project DIR finding add ID TEXT …;  search add ID TEXT --result R 
 genealogy --project DIR question add TEXT [--about ID] [--resume-when W]
 genealogy --project DIR hypothesis add TEXT [--kind identity] [--about ID]
 genealogy --project DIR note add [TEXT | --file F] [--about ID]
-genealogy --project DIR asset add FILE [--root NAME] [--about ID];  asset verify
+genealogy --project DIR asset add FILE [--root NAME] [--about ID] [--supersedes ASSET];  asset verify
 genealogy --project DIR approval add FILE PUBLIC-PATH --authority WHO;  approval list
 genealogy --project DIR proposal check|diff|apply FILE
 genealogy --project DIR wikitree capture FILE --captured-on DATE [--accept-baseline]

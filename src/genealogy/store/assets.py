@@ -125,10 +125,29 @@ def asset_file(project: Project, asset: dict[str, Any]) -> Path:
 
 
 def verify_assets(project: Project, *, orphans: bool = True) -> dict[str, list[dict[str, Any]]]:
-    """Check every referenced file exists with its recorded hash."""
+    """Check every referenced file exists with its recorded hash.
+
+    A file kept in place that was replaced by a newer registered version
+    (``supersedes_id``) at the same path is reported as superseded, not
+    changed, when the path now holds that successor's bytes.
+    """
     missing: list[dict[str, Any]] = []
     changed: list[dict[str, Any]] = []
+    superseded: list[dict[str, Any]] = []
     known: set[Path] = set()
+    successors: dict[str, list[dict[str, Any]]] = {}
+    for row in project.store.all("SELECT * FROM asset WHERE supersedes_id IS NOT NULL"):
+        successors.setdefault(row["supersedes_id"], []).append(row)
+
+    def latest_hashes(asset_id: str, root: str, path: str) -> set[str]:
+        found, pending = set(), [asset_id]
+        while pending:
+            for row in successors.get(pending.pop(), []):
+                if row["root"] == root and row["path"] == path:
+                    found.add(row["sha256"])
+                    pending.append(row["id"])
+        return found
+
     for asset in project.store.all("SELECT * FROM asset ORDER BY id"):
         try:
             path = asset_file(project, asset)
@@ -139,12 +158,14 @@ def verify_assets(project: Project, *, orphans: bool = True) -> dict[str, list[d
         if not path.is_file():
             missing.append({"id": asset["id"], "root": asset["root"], "path": asset["path"]})
         elif path.stat().st_size != asset["size"] or sha256_file(path) != asset["sha256"]:
-            changed.append({"id": asset["id"], "root": asset["root"], "path": asset["path"],
-                            "immutable": bool(asset["immutable"])})
+            row = {"id": asset["id"], "root": asset["root"], "path": asset["path"],
+                   "immutable": bool(asset["immutable"])}
+            later = latest_hashes(asset["id"], asset["root"], asset["path"])
+            (superseded if later and sha256_file(path) in later else changed).append(row)
     unreferenced: list[dict[str, Any]] = []
     managed = project.root(MANAGED_ROOT)
     if orphans and managed.is_dir():
         for path in sorted(managed.rglob("*")):
             if path.is_file() and path.resolve() not in known:
                 unreferenced.append({"path": path.relative_to(managed).as_posix()})
-    return {"missing": missing, "changed": changed, "orphans": unreferenced}
+    return {"missing": missing, "changed": changed, "superseded": superseded, "orphans": unreferenced}
