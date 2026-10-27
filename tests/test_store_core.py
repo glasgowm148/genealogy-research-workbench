@@ -156,6 +156,62 @@ class Atomicity(unittest.TestCase):
         self.assertEqual((len(report["changed"]), report["superseded"]), (3, []))
 
 
+    def test_reintroduced_content_and_later_versions_require_registration(self) -> None:
+        evidence = self.fx.directory / "evidence" / "gazetteer.json"
+        evidence.parent.mkdir()
+        self.fx.project.settings.asset_roots["evidence"] = "evidence"
+        store = self.fx.project.store
+
+        def register(text, previous=None):
+            evidence.write_text(text, encoding="utf-8")
+            with self.fx.write() as tx:
+                return register_asset(self.fx.project, tx, evidence, root="evidence", supersedes_id=previous)
+
+        first = register("first")
+        second = register("second", first["id"])
+        self.assertEqual(second["id"], register("second", second["id"])["id"])
+        self.assertEqual([], store.all("SELECT * FROM note WHERE kind='asset_registration'"))
+        self.assertEqual(first["id"], register("first", second["id"])["id"])
+        self.assertEqual(2, store.one("SELECT count(*) n FROM asset")["n"])
+        self.assertEqual([], verify_assets(self.fx.project)["changed"])
+        self.assertEqual(first["id"], register("first", second["id"])["id"])
+        notes = store.all("SELECT * FROM note WHERE kind='asset_registration'")
+        self.assertEqual(1, len(notes))
+        self.assertEqual("private", notes[0]["access"])
+        # The caller still uses B as the terminal content-chain head.
+        third = register("third", second["id"])
+        self.assertEqual([], verify_assets(self.fx.project)["changed"])
+        # Unregistered historical bytes must fail, even for the matching row.
+        for text in ("first", "second", "unregistered"):
+            evidence.write_text(text, encoding="utf-8")
+            self.assertEqual(3, len(verify_assets(self.fx.project)["changed"]))
+        register("second", third["id"])
+        self.assertEqual([], verify_assets(self.fx.project)["changed"])
+        register("first", third["id"])
+        self.assertEqual([], verify_assets(self.fx.project)["changed"])
+        self.assertEqual(3, store.one("SELECT count(*) n FROM asset")["n"])
+
+    def test_interrupted_reintroduction_rolls_back_registration(self) -> None:
+        evidence = self.fx.directory / "evidence" / "gazetteer.json"
+        evidence.parent.mkdir()
+        self.fx.project.settings.asset_roots["evidence"] = "evidence"
+        evidence.write_text("first", encoding="utf-8")
+        with self.fx.write() as tx:
+            first = register_asset(self.fx.project, tx, evidence, root="evidence")
+        evidence.write_text("second", encoding="utf-8")
+        with self.fx.write() as tx:
+            second = register_asset(self.fx.project, tx, evidence, root="evidence", supersedes_id=first["id"])
+        evidence.write_text("first", encoding="utf-8")
+        with self.assertRaises(RuntimeError):
+            with self.fx.write() as tx:
+                register_asset(self.fx.project, tx, evidence, root="evidence", supersedes_id=second["id"])
+                raise RuntimeError("interrupted")
+        self.assertEqual([], self.fx.project.store.all("SELECT * FROM note WHERE kind='asset_registration'"))
+        self.assertTrue(verify_assets(self.fx.project)["changed"])
+        evidence.write_text("second", encoding="utf-8")
+        self.assertEqual([], verify_assets(self.fx.project)["changed"])
+
+
 class Concurrency(unittest.TestCase):
     def setUp(self) -> None:
         self.fx = Fixture()

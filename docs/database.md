@@ -111,6 +111,13 @@ untracked `genealogy.local.toml`. Captures are immutable: `genealogy db check`
 reports any whose bytes changed, and a changed file loses any exact-file
 publication approval because approvals match the SHA-256.
 
+An in-place file may explicitly return to previously registered content. Its
+unique content row is reused, while an audited private `asset_registration`
+note identifies the current content and links the prior registration. Later
+registrations advance this observation; verification rejects unregistered
+changes, including rollbacks to another historical hash. Original content rows
+and exact-file publication approvals are unchanged.
+
 ## Publication
 
 `genealogy.store.projection.public_case` is the single public projection;

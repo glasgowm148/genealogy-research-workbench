@@ -109,15 +109,36 @@ def register_asset(project: Project, tx: Tx, source: Path, *, root: str = MANAGE
         relative = locate_in_root(project, root, source)
         sha = sha256_file(source)
         size = source.stat().st_size
+    # Asset rows identify unique content; private operational notes record
+    # explicit reuse of earlier bytes without making a supersession cycle.
+    observation = None
+    previous = None
+    if root != MANAGED_ROOT:
+        observation = tx.store.one(
+            "SELECT n.asset_id FROM note n JOIN asset a ON a.id=n.asset_id "
+            "JOIN audit_log l ON l.table_name='note' AND l.row_id=n.id AND l.action='insert' "
+            "WHERE n.kind='asset_registration' AND a.root=? AND a.path=? ORDER BY l.seq DESC LIMIT 1",
+            (root, relative),
+        )
+        previous = observation or tx.store.one(
+            "SELECT id AS asset_id FROM asset WHERE root=? AND path=? ORDER BY rowid DESC LIMIT 1",
+            (root, relative),
+        )
     existing = tx.store.one("SELECT * FROM asset WHERE root=? AND path=? AND sha256=?", (root, relative, sha))
-    if existing:
-        return existing
-    media_type = mimetypes.guess_type(source.name)[0]
-    return tx.insert("asset", {
-        "id": asset_id or new_id("asset"), "sha256": sha, "size": size, "media_type": media_type, "root": root,
+    stored = existing or tx.insert("asset", {
+        "id": asset_id or new_id("asset"), "sha256": sha, "size": size,
+        "media_type": mimetypes.guess_type(source.name)[0], "root": root,
         "path": relative, "kind": kind, "immutable": 1 if immutable else 0, "original_name": source.name,
         "captured_on": captured_on, "provenance": provenance, "access": access, "supersedes_id": supersedes_id,
     })
+    if previous and previous["asset_id"] != stored["id"] and (existing or observation):
+        from .services import Research
+        Research(tx.store).add_note(
+            tx, kind="asset_registration", asset_id=stored["id"], access="private",
+            text=f"Registered current bytes at {root}:{relative}. " + (provenance or ""),
+            links=[(previous["asset_id"], "previous_asset")],
+        )
+    return stored
 
 
 def asset_file(project: Project, asset: dict[str, Any]) -> Path:
@@ -129,13 +150,23 @@ def verify_assets(project: Project, *, orphans: bool = True) -> dict[str, list[d
 
     A file kept in place that was replaced by a newer registered version
     (``supersedes_id``) at the same path is reported as superseded, not
-    changed, when the path now holds that successor's bytes.
+    changed, when the path now holds that successor's bytes. Returning to
+    earlier registered content is an audited private registration note; after
+    that, the latest explicit registration governs the expected bytes.
     """
     missing: list[dict[str, Any]] = []
     changed: list[dict[str, Any]] = []
     superseded: list[dict[str, Any]] = []
     known: set[Path] = set()
+    file_state: dict[Path, tuple[int, str]] = {}
     successors: dict[str, list[dict[str, Any]]] = {}
+    registrations: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in project.store.all(
+        "SELECT a.* FROM note n JOIN asset a ON a.id=n.asset_id "
+        "JOIN audit_log l ON l.table_name='note' AND l.row_id=n.id AND l.action='insert' "
+        "WHERE n.kind='asset_registration' ORDER BY l.seq"
+    ):
+        registrations[(row["root"], row["path"])] = row
     for row in project.store.all("SELECT * FROM asset WHERE supersedes_id IS NOT NULL"):
         successors.setdefault(row["supersedes_id"], []).append(row)
 
@@ -157,11 +188,23 @@ def verify_assets(project: Project, *, orphans: bool = True) -> dict[str, list[d
         known.add(path.resolve())
         if not path.is_file():
             missing.append({"id": asset["id"], "root": asset["root"], "path": asset["path"]})
-        elif path.stat().st_size != asset["size"] or sha256_file(path) != asset["sha256"]:
+        else:
+            if path not in file_state:
+                file_state[path] = (path.stat().st_size, sha256_file(path))
+            size, digest = file_state[path]
             row = {"id": asset["id"], "root": asset["root"], "path": asset["path"],
                    "immutable": bool(asset["immutable"])}
-            later = latest_hashes(asset["id"], asset["root"], asset["path"])
-            (superseded if later and sha256_file(path) in later else changed).append(row)
+            current = registrations.get((asset["root"], asset["path"]))
+            if current:
+                # This observation is authoritative even if an unregistered
+                # rollback happens to match another historical asset's hash.
+                if (size, digest) != (current["size"], current["sha256"]):
+                    changed.append(row)
+                elif (size, digest) != (asset["size"], asset["sha256"]):
+                    superseded.append(row)
+            elif (size, digest) != (asset["size"], asset["sha256"]):
+                later = latest_hashes(asset["id"], asset["root"], asset["path"])
+                (superseded if digest in later else changed).append(row)
     unreferenced: list[dict[str, Any]] = []
     managed = project.root(MANAGED_ROOT)
     if orphans and managed.is_dir():
