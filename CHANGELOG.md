@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.10.3 — 28 October 2026
 
+- Merging two people no longer fails with a constraint error when both took the same role in one event, shared a link or were linked to each other: those rows stay on the retired person, whom the public projection omits. A self-merge, a merge of two people with a relationship claim between them, undoing a merge twice and undoing a split are refused. The upload wizard removes the staged project, with the uploaded tree, when an import fails unexpectedly, and answers with an error instead of dropping the connection. Version 0.10.3.
 - Merging two people no longer fails when the survivor already holds one of the retired person's external ids (for example as a redirect after a tree merge): that id stays on the retired person, no longer current, and `undo_merge` restores it. Version 0.10.2.
 - A file kept in place that is registered again with `supersedes_id` (`genealogy asset add --supersedes ASSET`) no longer fails `genealogy db check` as changed: while the path holds a later version's bytes, earlier versions are counted as `superseded_in_place`. An unregistered edit is still reported as changed. Version 0.10.1.
 - **Database schema version 2.** Items an import kept for review (`legacy_item`) can be resolved: `genealogy legacy list` shows the open ones and `genealogy legacy resolve` records what was decided and why, with optimistic revision checks, one item or a file of decisions in one transaction. The items themselves are never altered. `genealogy db status` reports `legacy_items_open`. `genealogy db migrate` upgrades a version 1 database after backing it up (owner-only, never overwriting an earlier pre-migration backup); native exports now record the schema they were written with, and a version 1 export imports and is migrated forward. Version 0.10.0.
