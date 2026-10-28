@@ -69,10 +69,10 @@ You need **Python 3.11 or later** and Git. No database server, account or API ke
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install "git+https://github.com/glasgowm148/genealogy-research-workbench@main"
+python -m pip install genealogy-research-workbench
 ```
 
-The version on [PyPI](https://pypi.org/project/genealogy-research-workbench/) is 0.6.0, which predates the research database, so install from GitHub until a new release is published.
+To try unreleased changes, install from GitHub instead: `python -m pip install "git+https://github.com/glasgowm148/genealogy-research-workbench@main"`.
 
 On Windows, activate with `.venv\Scripts\activate` instead. To work on the toolkit itself, or to run the fictional demo, clone this repository and see [installation](docs/development.md#install-and-test). New here? [Your first site](docs/first-site.md) walks through every step.
 

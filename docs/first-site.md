@@ -19,10 +19,8 @@ You need Python 3.11 or later.
 ```sh
 python3 -m venv ~/genealogy-env
 source ~/genealogy-env/bin/activate
-python -m pip install "git+https://github.com/glasgowm148/genealogy-research-workbench@main"
+python -m pip install genealogy-research-workbench
 ```
-
-(PyPI's 0.6.0 predates the research database; install from GitHub until a newer release is published.)
 
 On Windows, activate with `%USERPROFILE%\genealogy-env\Scripts\activate`. The import package is called `genealogy`. An unrelated PyPI project named `genealogy` uses the same module name, so don't install both in one environment.
 
