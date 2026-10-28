@@ -398,6 +398,32 @@ class ResearchSemantics(unittest.TestCase):
             self.r.undo_merge(tx, merge, reason="test")
         self.assertEqual(self.r.find_external("wikitree", "Harrow-7", statuses=("current",)), [b])
 
+    def test_merge_of_duplicates_sharing_an_event_role_and_links(self) -> None:
+        a, b, c = self.fx.person("Jean Harrow"), self.fx.person("Jean Harrow"), self.fx.person("Rob Harrow")
+        with self.fx.write() as tx:
+            event = self.r.add_event(tx, kind="baptism", participants=[(a, "child"), (b, "child"), (c, "father")])
+            self.r.link(tx, a, c)
+            self.r.link(tx, b, c)
+            self.r.link(tx, a, b, role="possible_duplicate")
+            merge = self.r.merge_people(tx, survivor_id=a, retired_id=b, reason="one baptism, entered twice")
+        self.assertEqual(self.fx.project.store.all("SELECT person_id FROM event_participant WHERE event_id=? AND role='child' "
+                                           "ORDER BY person_id", (event,)),
+                         [{"person_id": p} for p in sorted((a, b))])
+        with self.fx.write() as tx:
+            self.r.undo_merge(tx, merge, reason="two children of the same name")
+        self.assertEqual(len(self.fx.project.store.all("SELECT 1 FROM link WHERE to_id=?", (c,))), 2)
+        with self.assertRaises(ConstraintError), self.fx.write() as tx:
+            self.r.undo_merge(tx, merge, reason="again")
+
+    def test_merge_refuses_self_and_people_claimed_as_relatives(self) -> None:
+        a, b = self.fx.person("Agnes Harrow"), self.fx.person("Agnes Harrow")
+        with self.assertRaises(ConstraintError), self.fx.write() as tx:
+            self.r.merge_people(tx, survivor_id=a, retired_id=a, reason="typo")
+        with self.fx.write() as tx:
+            self.r.relationship_claim(tx, child_id=a, relative_id=b, role="mother")
+        with self.assertRaises(ConstraintError), self.fx.write() as tx:
+            self.r.merge_people(tx, survivor_id=a, retired_id=b, reason="same name")
+
 
 class Packaging(unittest.TestCase):
     def test_migrations_are_packaged_and_create_a_current_database(self) -> None:

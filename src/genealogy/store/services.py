@@ -774,14 +774,28 @@ class Research:
         ``former`` mappings of the survivor, and each moved reference is listed
         in ``entity_merge.moved_json``.
         """
+        if survivor_id == retired_id:
+            raise ConstraintError("a person cannot be merged into themself")
         self.store.require("person", survivor_id)
         retired = self.store.require("person", retired_id)
+        between = self.store.one(
+            "SELECT id FROM claim WHERE kind='relationship' AND ((subject_person_id=? AND object_person_id=?) "
+            "OR (subject_person_id=? AND object_person_id=?))", (survivor_id, retired_id, retired_id, survivor_id))
+        if between:
+            raise ConstraintError(f"relationship claim {between['id']} links {survivor_id} and {retired_id}; "
+                                  "resolve it before merging them as one person")
         from .schema import TABLE_KEYS
         moved: list[dict[str, Any]] = []
         for table, column in self.PERSON_REFERENCES:
             keys = TABLE_KEYS[table]
             for row in self.store.all(f"SELECT * FROM {table} WHERE {column}=?", (retired_id,)):
                 where = " AND ".join(f"{key}=?" for key in keys)
+                if self._merge_would_duplicate(table, column, row, survivor_id):
+                    # The survivor already has this participation or link (or the link joins the two
+                    # people): it stays on the retired person, which the projection omits.
+                    moved.append({"table": table, "column": column, "key": {k: row[k] for k in keys},
+                                  "kept_on_retired": True})
+                    continue
                 if table == "external_id" and self.store.one(
                         "SELECT 1 FROM external_id WHERE entity_id=? AND system=? AND value=?",
                         (survivor_id, row["system"], row["value"])):
@@ -810,13 +824,30 @@ class Research:
         tx.update("person", retired_id, {"label": f"merged into {survivor_id}"})
         return merge_id
 
+    def _merge_would_duplicate(self, table: str, column: str, row: dict[str, Any], survivor_id: str) -> bool:
+        """Whether moving ``row`` to the survivor would break a key the survivor already holds."""
+        if table == "event_participant":
+            return bool(self.store.one("SELECT 1 FROM event_participant WHERE event_id=? AND person_id=? AND role=?",
+                                       (row["event_id"], survivor_id, row["role"])))
+        if table == "link":
+            from_id, to_id = (survivor_id, row["to_id"]) if column == "from_id" else (row["from_id"], survivor_id)
+            return from_id == to_id or bool(self.store.one(
+                "SELECT 1 FROM link WHERE from_id=? AND to_id=? AND role=?", (from_id, to_id, row["role"])))
+        return False
+
     def undo_merge(self, tx: Tx, merge_id: str, *, reason: str) -> None:
         merge = self.store.require("entity_merge", merge_id)
+        if merge["kind"] != "merge":
+            raise ConstraintError(f"{merge_id} is a {merge['kind']}, not a merge")
+        if any((split["reason"] or "").startswith(f"undo {merge_id}:")
+               for split in self.store.all("SELECT reason FROM entity_merge WHERE kind='split'")):
+            raise ConstraintError(f"{merge_id} has already been undone")
         retired_id = json.loads(merge["retired_ids"])[0]
         moved = json.loads(merge["moved_json"])
         for item in moved["rows"]:
             if item.get("kept_on_retired"):
-                tx.conn.execute("UPDATE external_id SET status=? WHERE id=?", (item["status"], item["key"]["id"]))
+                if item.get("status"):
+                    tx.conn.execute("UPDATE external_id SET status=? WHERE id=?", (item["status"], item["key"]["id"]))
                 continue
             where = " AND ".join(f"{key}=?" for key in item["key"])
             tx.conn.execute(f"UPDATE {item['table']} SET {item['column']}=? WHERE {where}",

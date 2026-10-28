@@ -156,6 +156,11 @@ class UploadHandler(BaseHTTPRequestHandler):
             if staging is not None:
                 shutil.rmtree(staging, ignore_errors=True)
             self.json_reply(400, {"error": str(error)[:1200]})
+        except Exception:
+            # Never leave a half-built preview (with the uploaded tree) behind, and always answer the form.
+            if staging is not None:
+                shutil.rmtree(staging, ignore_errors=True)
+            self.json_reply(500, {"error": "The import failed unexpectedly; nothing was kept."})
 
 
 def serve(directory: Path, port: int = 8000) -> None:

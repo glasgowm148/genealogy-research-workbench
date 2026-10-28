@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from unittest import mock
 
 from genealogy.server import UploadServer
 
@@ -70,6 +71,14 @@ class UploadServerTests(unittest.TestCase):
         for filename in ("../evil.ged", "%2fetc%2fdata.ged", "C:%5ctree.ged", "secret.txt"):
             self.assertEqual(400, self.upload(**{"X-Filename": filename})[0])
         self.assertEqual(403, self.request("GET", "/", headers={"Host": "attacker.invalid"})[0])
+        self.assertFalse(self.server.previews)
+
+    def test_unexpected_import_failure_answers_and_keeps_nothing(self):
+        with mock.patch("genealogy.store.operations.import_genealogy_file", side_effect=KeyError("boom")):
+            status, raw = self.upload()
+        self.assertEqual(500, status)
+        self.assertIn("error", json.loads(raw))
+        self.assertEqual([], list((self.root / "private" / "previews").iterdir()))
         self.assertFalse(self.server.previews)
 
     def test_oversize_and_invalid_upload_leave_no_preview(self):
