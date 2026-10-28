@@ -93,7 +93,7 @@ The release workflow uses [trusted publishing](https://docs.pypi.org/trusted-pub
 2. In the GitHub repository settings, create an environment named `pypi`. Optionally require approval before publishing.
 3. Publish a release. The workflow runs from the tagged commit, so the first release that can reach PyPI is 0.4.0; earlier tags do not contain it. Re-running a failed workflow run for a 0.4.0 or later release also works once the setup is complete.
 
-Releases 0.4.0 to 0.6.0 and 0.10.3 onwards are on [PyPI](https://pypi.org/project/genealogy-research-workbench/); 0.7 to 0.10.2 were tagged only. The import package is called `genealogy`. An unrelated PyPI project named `genealogy` installs a module with the same name, so install only one of them in a given environment.
+Releases 0.4.0 to 0.6.0 and 0.10.3 onwards are on [PyPI](https://pypi.org/project/genealogy-research-workbench/); the versions in between were never published. The import package is called `genealogy`. An unrelated PyPI project named `genealogy` installs a module with the same name, so install only one of them in a given environment.
 
 The Glasgow consumer uses a Git submodule pinned to a toolkit commit, with a compatible package-version declaration. Its source tree is not a separately maintained toolkit fork. For local development, install the standalone checkout in the consumer’s environment with `pip install -e /path/to/genealogy-research-workbench`; commit/review changes upstream before updating the consumer’s pin.
 
